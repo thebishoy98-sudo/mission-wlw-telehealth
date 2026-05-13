@@ -44,6 +44,10 @@ export const patientDb = {
     const patients = patientDb.getAll();
     return patients.find((p) => p.id === id) || null;
   },
+  getByEmail: (email: string): Types.Patient | null => {
+    const patients = patientDb.getAll();
+    return patients.find((p) => p.email.toLowerCase() === email.toLowerCase()) || null;
+  },
   create: (patient: Types.Patient): Types.Patient => {
     const patients = patientDb.getAll();
     patients.push(patient);
@@ -102,6 +106,9 @@ export const orderDb = {
   },
   getByPatient: (patientId: string): Types.Order[] => {
     return orderDb.getAll().filter((o) => o.patientId === patientId);
+  },
+  getByStatus: (status: Types.OrderStatus): Types.Order[] => {
+    return orderDb.getAll().filter((o) => o.status === status);
   },
   create: (order: Types.Order): Types.Order => {
     const orders = orderDb.getAll();

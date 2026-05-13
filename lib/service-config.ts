@@ -1,0 +1,44 @@
+/**
+ * Service configuration — controls mock vs real integrations.
+ *
+ * Set environment variables to switch to real APIs:
+ *   USE_REAL_PRACTICEQ=true
+ *   USE_REAL_QUICKBOOKS=true
+ *   USE_REAL_LIFEFILE=true
+ *   USE_REAL_SPRUCE=true
+ *
+ * Or set USE_REAL_INTEGRATIONS=true to enable all at once.
+ */
+
+const all = process.env.USE_REAL_INTEGRATIONS === "true";
+
+export const serviceConfig = {
+  practiceq: {
+    useMock: !(all || process.env.USE_REAL_PRACTICEQ === "true"),
+    apiKey: process.env.PRACTICEQ_API_KEY ?? "",
+    baseUrl: process.env.PRACTICEQ_BASE_URL ?? "https://api.practiceq.com/v2",
+  },
+  quickbooks: {
+    useMock: !(all || process.env.USE_REAL_QUICKBOOKS === "true"),
+    clientId: process.env.QB_CLIENT_ID ?? "",
+    clientSecret: process.env.QB_CLIENT_SECRET ?? "",
+    realmId: process.env.QB_REALM_ID ?? "",
+    refreshToken: process.env.QB_REFRESH_TOKEN ?? "",
+  },
+  lifefile: {
+    useMock: !(all || process.env.USE_REAL_LIFEFILE === "true"),
+    vendorId: process.env.LIFEFILE_VENDOR_ID ?? "",
+    locationId: process.env.LIFEFILE_LOCATION_ID ?? "",
+    apiNetworkId: process.env.LIFEFILE_API_NETWORK_ID ?? "",
+    apiKey: process.env.LIFEFILE_API_KEY ?? "",
+    baseUrl: process.env.LIFEFILE_BASE_URL ?? "https://api.lifefile.com/v1",
+  },
+  spruce: {
+    useMock: !(all || process.env.USE_REAL_SPRUCE === "true"),
+    apiKey: process.env.SPRUCE_API_KEY ?? "",
+    fromNumber: process.env.SPRUCE_FROM_NUMBER ?? "",
+    baseUrl: process.env.SPRUCE_BASE_URL ?? "https://api.sprucehealth.com/v1",
+  },
+};
+
+export type ServiceConfig = typeof serviceConfig;
