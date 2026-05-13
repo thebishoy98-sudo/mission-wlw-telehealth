@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: Calibri, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    max-width: 750px;
+    margin: 40px auto;
+    padding: 40px;
+  }
+  h1 {
+    font-size: 22pt;
+    color: #0d9488;
+    border-bottom: 3px solid #0d9488;
+    padding-bottom: 10px;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 11pt;
+    color: #555;
+    margin-bottom: 30px;
+  }
+  h2 {
+    font-size: 15pt;
+    color: #0d9488;
+    margin-top: 36px;
+    margin-bottom: 4px;
+    border-left: 4px solid #0d9488;
+    padding-left: 10px;
+  }
+  h3 {
+    font-size: 12pt;
+    color: #1a1a1a;
+    margin-top: 20px;
+    margin-bottom: 4px;
+  }
+  .platform-block {
+    background: #f8fffe;
+    border: 1px solid #ccfbf1;
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin: 14px 0 20px 0;
+  }
+  .platform-name {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #0f766e;
+    margin-bottom: 4px;
+  }
+  .platform-role {
+    font-size: 10pt;
+    color: #555;
+    font-style: italic;
+    margin-bottom: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 10.5pt;
+  }
+  th {
+    background: #0d9488;
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td {
+    background: #f9fafb;
+  }
+  .action-box {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+  }
+  .action-box strong {
+    display: block;
+    color: #92400e;
+    margin-bottom: 6px;
+    font-size: 10.5pt;
+  }
+  .action-box ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .action-box li {
+    margin-bottom: 4px;
+  }
+  .demo-note {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    font-size: 10pt;
+    color: #1e40af;
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    margin: 10px 0;
+    gap: 14px;
+  }
+  .step-num {
+    background: #0d9488;
+    color: white;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 10pt;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  ul li {
+    margin-bottom: 5px;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .footer {
+    margin-top: 50px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 12px;
+    font-size: 9pt;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+
+<h1>Platform Integration Guide</h1>
+<div class="subtitle">Telehealth Demo &mdash; What Each Tool Does &amp; What You Need to Go Live</div>
+
+<p>This document explains, in plain language, each platform we connect to in your telehealth ordering system. For the demo, everything is simulated (no real accounts needed). When you are ready to go live with real patients, this guide tells you exactly what you need to set up for each one.</p>
+
+<hr>
+
+<h2>How the System Works &mdash; Big Picture</h2>
+
+<p>When a patient places an order, the system automatically does five things in sequence:</p>
+
+<table>
+  <tr>
+    <th>Step</th>
+    <th>What Happens</th>
+    <th>Platform Used</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>Patient fills out intake form and pays online</td>
+    <td>Your Website</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Provider reviews the order and approves or declines</td>
+    <td>Provider Dashboard</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Patient record is created in the medical records system</td>
+    <td>PracticeQ</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Invoice is created and payment is captured</td>
+    <td>QuickBooks</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Prescription order is sent to the pharmacy</td>
+    <td>Life File</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>Patient receives a text message update</td>
+    <td>Spruce Health</td>
+  </tr>
+</table>
+
+<div class="demo-note">
+  <strong>Demo Note:</strong> In the demo, all of these steps are simulated. You will see them run with a live progress animation, but no real data is sent anywhere. Nothing costs money or requires accounts to demo.
+</div>
+
+<div class="page-break"></div>
+
+<h2>Platform 1: PracticeQ</h2>
+
+<div class="platform-block">
+  <div class="platform-name">PracticeQ</div>
+  <div class="platform-role">Patient Intake &amp; Electronic Health Records (EHR)</div>
+
+  <h3>What is it?</h3>
+  <p>PracticeQ is a HIPAA-compliant medical intake and records platform. Think of it as a digital filing cabinet for your patients. Every time a patient submits their intake form on your website, their information (name, medical history, questionnaire answers, signed consent) gets automatically filed into PracticeQ so the provider can access it.</p>
+
+  <h3>What does it do in your system?</h3>
+  <ul>
+    <li>Receives the patient&rsquo;s intake packet when the provider approves an order</li>
+    <li>Stores the patient profile, questionnaire answers, and signed consent document</li>
+    <li>Makes the patient record available to your provider for clinical documentation</li>
+  </ul>
+
+  <h3>In the demo vs. real life</h3>
+  <table>
+    <tr><th>Demo</th><th>Real Life</th></tr>
+    <tr>
+      <td>A fake "intake submitted" confirmation appears in the logs</td>
+      <td>A real patient record is created inside your PracticeQ account</td>
+    </tr>
+  </table>
+</div>
+
+<div class="action-box">
+  <strong>What you need to go live with PracticeQ:</strong>
+  <ul>
+    <li>A PracticeQ account (paid plan) &mdash; visit practicq.com to sign up</li>
+    <li>An API key from your PracticeQ account settings</li>
+    <li>Your developer gives that API key to the website to connect them</li>
+  </ul>
+</div>
+
+<h2>Platform 2: QuickBooks</h2>
+
+<div class="platform-block">
+  <div class="platform-name">QuickBooks Online</div>
+  <div class="platform-role">Accounting &amp; Payment Capture</div>
+
+  <h3>What is it?</h3>
+  <p>QuickBooks is the accounting software you likely already know. Your website connects to QuickBooks Online so that every patient order automatically creates an invoice and records the payment &mdash; no manual data entry needed.</p>
+
+  <h3>What does it do in your system?</h3>
+  <ul>
+    <li>Creates a new invoice in QuickBooks the moment a provider approves an order</li>
+    <li>Records the payment as captured (the patient already paid at checkout)</li>
+    <li>Keeps your books accurate without any manual entry</li>
+    <li>Provides revenue data for your admin dashboard charts</li>
+  </ul>
+
+  <h3>In the demo vs. real life</h3>
+  <table>
+    <tr><th>Demo</th><th>Real Life</th></tr>
+    <tr>
+      <td>Fake invoice numbers appear in the integration logs</td>
+      <td>Real invoices are created inside your QuickBooks Online account</td>
+    </tr>
+  </table>
+</div>
+
+<div class="action-box">
+  <strong>What you need to go live with QuickBooks:</strong>
+  <ul>
+    <li>A QuickBooks Online account (any paid plan)</li>
+    <li>Connect the app via Intuit&rsquo;s OAuth login (your developer handles this setup &mdash; it&rsquo;s a one-time button click by you)</li>
+    <li>No API key needed &mdash; you just log in to QuickBooks and authorize the connection</li>
+  </ul>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Platform 3: Life File</h2>
+
+<div class="platform-block">
+  <div class="platform-name">Life File</div>
+  <div class="platform-role">Compounding Pharmacy Fulfillment</div>
+
+  <h3>What is it?</h3>
+  <p>Life File is the compounding pharmacy that fills your prescriptions (e.g., Tirzepatide). When an order is approved, your system automatically sends the prescription order to Life File so they can compound and ship the medication directly to the patient.</p>
+
+  <h3>What does it do in your system?</h3>
+  <ul>
+    <li>Receives the prescription details (medication, dosage, patient address) automatically</li>
+    <li>Creates a pharmacy order so Life File knows to fulfill and ship it</li>
+    <li>Returns a tracking/order reference number that is saved in your records</li>
+  </ul>
+
+  <h3>In the demo vs. real life</h3>
+  <table>
+    <tr><th>Demo</th><th>Real Life</th></tr>
+    <tr>
+      <td>A fake pharmacy order ID is generated and shown in the logs</td>
+      <td>A real order is placed with Life File and they ship the medication</td>
+    </tr>
+  </table>
+</div>
+
+<div class="action-box">
+  <strong>What you need to go live with Life File:</strong>
+  <ul>
+    <li>An active account and pharmacy agreement with Life File</li>
+    <li>Life File provides you with an API key and your account ID</li>
+    <li>Your developer plugs those credentials into the website</li>
+    <li>Life File may require a setup call to walk through their ordering requirements</li>
+  </ul>
+</div>
+
+<h2>Platform 4: Spruce Health</h2>
+
+<div class="platform-block">
+  <div class="platform-name">Spruce Health</div>
+  <div class="platform-role">HIPAA-Compliant Patient Text Messaging (SMS)</div>
+
+  <h3>What is it?</h3>
+  <p>Spruce Health is a HIPAA-compliant messaging platform for healthcare providers. It is used to send text messages to your patients at key moments in their order journey &mdash; without you having to send anything manually.</p>
+
+  <h3>What messages does it send?</h3>
+  <ul>
+    <li><strong>Order Approved:</strong> "Great news! Your order has been approved and sent to the pharmacy."</li>
+    <li><strong>Order Rejected:</strong> "We were unable to approve your order. Please contact us for more information."</li>
+    <li><strong>Reorder Reminder:</strong> Automatically sent 30 days after approval to remind the patient to reorder</li>
+  </ul>
+
+  <h3>In the demo vs. real life</h3>
+  <table>
+    <tr><th>Demo</th><th>Real Life</th></tr>
+    <tr>
+      <td>Fake SMS entries appear in the patient&rsquo;s message log</td>
+      <td>Real text messages are sent to the patient&rsquo;s phone number</td>
+    </tr>
+  </table>
+</div>
+
+<div class="action-box">
+  <strong>What you need to go live with Spruce Health:</strong>
+  <ul>
+    <li>A Spruce Health account (they have plans for solo providers and small practices)</li>
+    <li>A dedicated business phone number through Spruce (they set this up for you)</li>
+    <li>An API key from your Spruce account</li>
+    <li>Your developer connects the API key so messages send automatically</li>
+  </ul>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Payments &mdash; How the Patient Pays</h2>
+
+<div class="platform-block">
+  <div class="platform-name">Stripe (Recommended) or Square</div>
+  <div class="platform-role">Credit Card Processing at Checkout</div>
+
+  <h3>What is it?</h3>
+  <p>A payment processor handles the credit card transaction when the patient checks out. The demo currently simulates this step. For real payments you need a Stripe or Square account.</p>
+
+  <h3>How it works in your system:</h3>
+  <ul>
+    <li>Patient enters their card at checkout</li>
+    <li>Payment is <em>authorized</em> (held) but not charged yet</li>
+    <li>When the provider approves the order, the payment is <em>captured</em> (charged)</li>
+    <li>If the order is rejected, the authorization is released and the patient is not charged</li>
+  </ul>
+
+  <h3>In the demo vs. real life</h3>
+  <table>
+    <tr><th>Demo</th><th>Real Life</th></tr>
+    <tr>
+      <td>Any card number is accepted, nothing is charged</td>
+      <td>Real cards are charged through Stripe or Square</td>
+    </tr>
+  </table>
+</div>
+
+<div class="action-box">
+  <strong>What you need to go live with payments:</strong>
+  <ul>
+    <li>A Stripe account at stripe.com (free to sign up, they take a small % per transaction)</li>
+    <li>A publishable key and secret key from your Stripe dashboard</li>
+    <li>Your developer plugs these in &mdash; the payment form is already built</li>
+  </ul>
+</div>
+
+<h2>Summary &mdash; What You Need to Go Live</h2>
+
+<table>
+  <tr>
+    <th>Platform</th>
+    <th>What You Do</th>
+    <th>What Your Developer Does</th>
+  </tr>
+  <tr>
+    <td><strong>PracticeQ</strong></td>
+    <td>Sign up, go to settings, copy your API key</td>
+    <td>Paste key into the website config</td>
+  </tr>
+  <tr>
+    <td><strong>QuickBooks</strong></td>
+    <td>Have a QBO account, click "Connect" button once</td>
+    <td>Set up the OAuth connection page</td>
+  </tr>
+  <tr>
+    <td><strong>Life File</strong></td>
+    <td>Call Life File, get your account API credentials</td>
+    <td>Paste credentials into the website config</td>
+  </tr>
+  <tr>
+    <td><strong>Spruce Health</strong></td>
+    <td>Sign up, get a phone number, copy API key</td>
+    <td>Paste key into the website config</td>
+  </tr>
+  <tr>
+    <td><strong>Stripe</strong></td>
+    <td>Sign up at stripe.com, copy your API keys</td>
+    <td>Paste keys into the website config</td>
+  </tr>
+</table>
+
+<div class="demo-note">
+  <strong>Good news:</strong> All the code to connect to each of these platforms is already written in the demo. Your developer does not need to build anything from scratch &mdash; they just need to plug in the credentials for each service and flip the demo mode off. Estimated developer time: 4&ndash;8 hours total.
+</div>
+
+<h2>For the Demo &mdash; What to Show</h2>
+
+<p>Here is the recommended flow to walk someone through the demo:</p>
+
+<table>
+  <tr><th>Step</th><th>Where to Go</th><th>What to Show</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Homepage</td>
+    <td>Landing page, product selection</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>/start</td>
+    <td>Patient fills out the 6-step intake form and pays</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>/provider/dashboard</td>
+    <td>Provider sees the new order in their queue</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Provider &rsaquo; Patient Detail</td>
+    <td>Click Approve &mdash; watch the 5-step pipeline fire in real time</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>/status</td>
+    <td>Patient checks their order status and sees SMS history</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>/admin</td>
+    <td>Revenue charts, all orders, integration logs</td>
+  </tr>
+</table>
+
+<div class="footer">
+  Telehealth Platform &mdash; Integration Guide &mdash; Confidential &mdash; For internal use only
+</div>
+
+</body>
+</html>

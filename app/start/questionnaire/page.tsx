@@ -1,0 +1,174 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import * as db from "@/lib/db";
+import * as Types from "@/types";
+import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { AlertTriangle, XCircle } from "lucide-react";
+
+export default function Questionnaire() {
+  const router = useRouter();
+  const [questions, setQuestions] = useState<Types.Question[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [ineligibleQuestion, setIneligibleQuestion] = useState<Types.Question | null>(null);
+
+  useEffect(() => {
+    const all = db.questionDb.getAll();
+    setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
+    setAnswers(getIntakeState().questionnaireAnswers || {});
+  }, []);
+
+  const setAnswer = (id: string, val: string) => {
+    setAnswers((prev) => ({ ...prev, [id]: val }));
+    // Clear ineligibility if answer changes
+    setIneligibleQuestion(null);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Check eligibility: find any disqualifying answer
+    const disqualifier = questions.find(
+      (q) => q.disqualifying && answers[q.id] === q.disqualifying
+    );
+
+    if (disqualifier) {
+      setIneligibleQuestion(disqualifier);
+      // Scroll to top to show the message
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    saveIntakeState({ questionnaireAnswers: answers });
+    router.push("/start/consent");
+  };
+
+  if (ineligibleQuestion) {
+    return (
+      <div className="space-y-5">
+        <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-8 text-center">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
+            <XCircle className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            We&apos;re unable to process your request
+          </h2>
+          <p className="text-gray-500 text-base leading-relaxed mb-6 max-w-md mx-auto">
+            Based on your response to <strong className="text-gray-700">&ldquo;{ineligibleQuestion.text}&rdquo;</strong>, you are not eligible for GLP-1 treatment at this time.
+          </p>
+
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-5 text-left mb-8 max-w-md mx-auto">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900 text-sm mb-1">Why we cannot proceed</p>
+                <p className="text-amber-700 text-sm leading-relaxed">
+                  GLP-1 medications such as Tirzepatide are contraindicated for patients with a personal or family history of thyroid cancer, MEN 2, or who are currently pregnant or breastfeeding. Your safety is our priority.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-400 mb-6">
+            Please consult with your primary care physician about alternative treatment options. Your answers were not saved and no charge was applied.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIneligibleQuestion(null);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              Go Back &amp; Review Answers
+            </Button>
+            <Button variant="ghost" onClick={() => router.push("/")}>
+              Return to Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-7">
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Health Questionnaire</h2>
+        <p className="text-gray-500 text-sm mb-8">
+          Please answer honestly — this helps our providers determine if treatment is right for you.
+        </p>
+
+        {questions.length === 0 ? (
+          <div className="text-center py-10">
+            <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">Loading questions...</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {questions.map((question, idx) => (
+              <div key={question.id} className="border-b border-gray-50 pb-7 last:border-0 last:pb-0">
+                <label className="block text-sm font-semibold text-gray-800 mb-3">
+                  <span className="text-teal-400 mr-1.5">{idx + 1}.</span>
+                  {question.text}
+                  {question.required && <span className="text-red-400 ml-1">*</span>}
+                </label>
+
+                {question.type === "text" && (
+                  <Input value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} />
+                )}
+                {question.type === "textarea" && (
+                  <Textarea value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} rows={3} />
+                )}
+                {question.type === "radio" && (
+                  <div className="space-y-2">
+                    {question.options?.map((option) => (
+                      <label key={option} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        answers[question.id] === option && question.disqualifying === option
+                          ? "border-red-300 bg-red-50"
+                          : "border-gray-100 hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50"
+                      }`}>
+                        <input
+                          type="radio"
+                          name={question.id}
+                          value={option}
+                          checked={answers[question.id] === option}
+                          onChange={(e) => setAnswer(question.id, e.target.value)}
+                          className="accent-teal-600"
+                        />
+                        <span className="text-sm text-gray-700">{option}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {question.type === "checkbox" && (
+                  <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all w-fit">
+                    <input
+                      type="checkbox"
+                      checked={answers[question.id] === "yes"}
+                      onChange={(e) => setAnswer(question.id, e.target.checked ? "yes" : "no")}
+                      className="accent-teal-600"
+                    />
+                    <span className="text-sm text-gray-700">Yes</span>
+                  </label>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/info")}>
+          Back
+        </Button>
+        <Button fullWidth type="submit">Continue →</Button>
+      </div>
+    </form>
+  );
+}
