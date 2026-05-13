@@ -29,16 +29,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy dev preview to Vercel
-        id: deploy
-        run: |
-          URL=$(npx vercel@latest --yes --token=${{ secrets.VERCEL_TOKEN }} 2>&1 | tail -1)
-          echo "preview_url=$URL" >> $GITHUB_OUTPUT
-          echo "Deployed to: $URL"
+      - name: Deploy to Vercel (dev project — production)
+        run: npx vercel@latest --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Comment preview URL
-        if: steps.deploy.outputs.preview_url != ''
-        run: echo "Dev preview deployed to ${{ steps.deploy.outputs.preview_url }}"
+          VERCEL_PROJECT_ID: prj_ndcHmtfDVcdSNgZbjnXd9HjJY84A
