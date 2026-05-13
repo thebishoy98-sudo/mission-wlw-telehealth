@@ -1,4 +1,5 @@
 {
+  "name": "mission-wlw",
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
