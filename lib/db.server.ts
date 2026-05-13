@@ -114,7 +114,6 @@ export const orderDb = {
         approved_at        = COALESCE(${data.approvedAt ?? null}, approved_at),
         provider_notes     = COALESCE(${data.providerNotes ?? null}, provider_notes),
         rejection_reason   = COALESCE(${data.rejectionReason ?? null}, rejection_reason),
-        stripe_payment_intent_id = COALESCE(${(data as any).stripePaymentIntentId ?? null}, stripe_payment_intent_id),
         updated_at         = ${now}
       WHERE id = ${id}
     `;
@@ -148,8 +147,7 @@ export const paymentDb = {
         status         = COALESCE(${data.status ?? null}, status),
         processed_at   = COALESCE(${data.processedAt ?? null}, processed_at),
         refunded_at    = COALESCE(${data.refundedAt ?? null}, refunded_at),
-        refund_amount  = COALESCE(${data.refundAmount ?? null}, refund_amount),
-        stripe_charge_id = COALESCE(${(data as any).stripeChargeId ?? null}, stripe_charge_id)
+        refund_amount  = COALESCE(${data.refundAmount ?? null}, refund_amount)
       WHERE id = ${id}
     `;
   },
@@ -408,3 +406,47 @@ function rowToPharmacyOrder(r: any): PharmacyOrder {
     submittedAt: r.submitted_at ?? undefined, lastError: r.last_error ?? undefined,
   };
 }
+
+// ── PHI Audit Logs ────────────────────────────────────────────────────────────
+// HIPAA § 164.312(b) — INSERT ONLY. Never update or delete rows in this table.
+
+export const phiAuditDb = {
+  async create(entry: {
+    id: string; timestamp: string; action: string; resource: string;
+    resourceId: string; patientId?: string; orderId?: string;
+    actor: string; actorIp?: string; requestId?: string;
+    disclosedTo?: string; outcome: string; errorMessage?: string;
+  }): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      INSERT INTO phi_audit_logs (
+        id, timestamp, action, resource, resource_id, patient_id, order_id,
+        actor, actor_ip, request_id, disclosed_to, outcome, error_message
+      ) VALUES (
+        ${entry.id}, ${entry.timestamp}, ${entry.action}, ${entry.resource},
+        ${entry.resourceId}, ${entry.patientId ?? null}, ${entry.orderId ?? null},
+        ${entry.actor}, ${entry.actorIp ?? null}, ${entry.requestId ?? null},
+        ${entry.disclosedTo ?? null}, ${entry.outcome}, ${entry.errorMessage ?? null}
+      )
+    `;
+  },
+
+  async getByPatient(patientId: string, limit = 200) {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM phi_audit_logs
+      WHERE patient_id = ${patientId}
+      ORDER BY timestamp DESC
+      LIMIT ${limit}
+    `;
+    return rows;
+  },
+
+  async getRecent(limit = 500) {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM phi_audit_logs ORDER BY timestamp DESC LIMIT ${limit}
+    `;
+    return rows;
+  },
+};

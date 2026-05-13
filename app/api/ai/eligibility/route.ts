@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { generateId } from "@/lib/utils";
+import { logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
 
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest) {
 
   const patient = db.patientDb.getById(order.patientId);
   const answers = db.answerDb.getByOrder(orderId);
+
+  // HIPAA: log PHI disclosure to Anthropic AI
+  const auditCtx = actorFromHeaders(req.headers);
+  logPhiDisclosure(order.patientId, orderId, "anthropic", auditCtx.actor ?? "system");
   const questions = db.questionDb.getAll();
 
   // Build questionnaire summary for Claude

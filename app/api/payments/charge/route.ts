@@ -27,6 +27,7 @@ import * as lifefile from "@/services/lifefile";
 import * as spruce from "@/services/spruce";
 import { checkEligibility } from "@/lib/eligibility";
 import { generateId } from "@/lib/utils";
+import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import type { Payment } from "@/types";
 
 export async function POST(req: NextRequest) {
@@ -80,6 +81,16 @@ export async function POST(req: NextRequest) {
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
+
+    const auditCtx = actorFromHeaders(req.headers);
+
+    // Audit: PHI accessed for payment processing
+    logPhiAccess({
+      action: "payment", resource: "patient", resourceId: patient.id,
+      patientId: patient.id, orderId,
+      actor: auditCtx.actor, actorIp: auditCtx.actorIp, requestId: auditCtx.requestId,
+      outcome: "success",
+    });
 
     // 5. Charge via QuickBooks Payments
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
@@ -142,21 +153,26 @@ export async function POST(req: NextRequest) {
     try {
       practiceq.submitIntakePacket(updatedOrder);
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
+      logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);
     } catch (e) {
       errors.push(`PracticeQ: ${(e as Error).message}`);
+      logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor, "error", (e as Error).message);
     }
 
     // 10. Life File — pharmacy prescription order
     try {
       lifefile.createPharmacyOrder(updatedOrder);
       db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
+      logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
     } catch (e) {
       errors.push(`Life File: ${(e as Error).message}`);
+      logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", (e as Error).message);
     }
 
     // 11. Spruce SMS — "payment received, order processing"
     try {
       spruce.sendMessage(patient.id, "payment_received", { orderId });
+      logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {
       errors.push(`Spruce SMS: ${(e as Error).message}`);
     }
