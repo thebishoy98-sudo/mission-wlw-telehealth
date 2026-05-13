@@ -89,9 +89,9 @@ export default function LoginPage() {
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2.5 mb-8">
         <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center">
-          <span className="text-white font-bold text-sm">T</span>
+          <span className="text-white font-bold text-sm">M</span>
         </div>
-        <span className="text-xl font-bold text-gray-900 tracking-tight">Telehealth</span>
+        <span className="text-xl font-bold text-gray-900 tracking-tight">Mission WLW</span>
       </Link>
 
       <div className="w-full max-w-md">
