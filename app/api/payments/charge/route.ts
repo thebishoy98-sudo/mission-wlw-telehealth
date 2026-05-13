@@ -1,138 +1,167 @@
+/**
+ * Payment Route — QuickBooks Payments
+ *
+ * Flow:
+ *   1. Client tokenizes card via qbpayments.js → sends token here
+ *   2. We re-check eligibility server-side
+ *   3. Charge via QB Payments API
+ *   4. Create QB invoice + customer record (accounting)
+ *   5. Run integration chain: PracticeQ → Life File → Spruce SMS
+ *
+ * Client-side tokenization (add to your payment page):
+ *   <script src="https://js.intuit.com/v2/ui/payments.js"></script>
+ *   intuit.ipp.payments.create({
+ *     environment: "production", // or "sandbox"
+ *     appKey: process.env.NEXT_PUBLIC_QB_PAYMENTS_APP_KEY,
+ *     onSuccess: (token) => { ... POST /api/payments/charge with token }
+ *   })
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as practiceq from "@/services/practiceq";
+import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
+import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
 import * as spruce from "@/services/spruce";
 import { checkEligibility } from "@/lib/eligibility";
 import { generateId } from "@/lib/utils";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "sk_test_placeholder", {
-  apiVersion: "2026-04-22.dahlia" as any,
-});
+import type { Payment } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const { orderId, paymentMethodId, amount } = await req.json();
+    const body = await req.json();
+    const { orderId, token, cardLast4, cardBrand, amount } = body;
 
-    if (!orderId || !paymentMethodId || !amount) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!orderId || !amount) {
+      return NextResponse.json(
+        { error: "Missing required fields: orderId, amount" },
+        { status: 400 }
+      );
     }
 
-    // Load order (try server DB first, fall back to localStorage)
-    const order = (await dbServer.orderDb.getById(orderId)) ?? db.orderDb.getById(orderId);
+    // 1. Load order — try server DB first, fall back to localStorage
+    const order =
+      (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
+      db.orderDb.getById(orderId);
+
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Duplicate guard
+    // 2. Duplicate submission guard
     if (order.status !== "draft") {
       return NextResponse.json(
-        { error: "Order already processed", status: order.status },
+        { error: "Order already processed", orderStatus: order.status },
         { status: 409 }
       );
     }
 
-    // Server-side eligibility re-check
-    const answers = await dbServer.answerDb.getByOrder(orderId);
+    // 3. Server-side eligibility re-check
+    const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : db.answerDb.getByOrder(orderId);
-    const questions = await dbServer.questionDb.getAll();
+    const questions = await dbServer.questionDb.getAll().catch(() => []);
     const fallbackQuestions = questions.length ? questions : db.questionDb.getAll();
+
     const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
     if (!eligibility.eligible) {
-      return NextResponse.json({ error: "Patient not eligible", reason: eligibility.reason }, { status: 422 });
+      return NextResponse.json(
+        { error: "Patient not eligible for this medication", reason: eligibility.reason },
+        { status: 422 }
+      );
     }
 
-    // Get or create Stripe customer
-    const patient = (await dbServer.patientDb.getById(order.patientId)) ?? db.patientDb.getById(order.patientId);
+    // 4. Load patient
+    const patient =
+      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+      db.patientDb.getById(order.patientId);
+
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    let stripeCustomerId = (patient as any).stripeCustomerId as string | undefined;
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: patient.email,
-        name: `${patient.firstName} ${patient.lastName}`,
-        phone: patient.phone,
-        metadata: { patientId: patient.id },
+    // 5. Charge via QuickBooks Payments
+    let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
+    try {
+      chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
+        token,          // qbpayments.js token (preferred)
+        cardLast4,
+        cardBrand,
       });
-      stripeCustomerId = customer.id;
-      // Save back
-      db.patientDb.update(patient.id, { updatedAt: new Date().toISOString() });
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: err.message ?? "Payment failed" },
+        { status: 402 }
+      );
     }
 
-    // Create and confirm PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,                  // already in cents
-      currency: "usd",
-      customer: stripeCustomerId,
-      payment_method: paymentMethodId,
-      confirm: true,
-      automatic_payment_methods: { enabled: true, allow_redirects: "never" },
-      metadata: { orderId, patientId: patient.id },
-      description: `Mission WLW — Order ${orderId}`,
-    });
-
-    if (paymentIntent.status === "requires_action") {
-      return NextResponse.json({
-        requiresAction: true,
-        clientSecret: paymentIntent.client_secret,
-      });
-    }
-
-    if (paymentIntent.status !== "succeeded") {
-      return NextResponse.json({ error: "Payment failed", status: paymentIntent.status }, { status: 402 });
-    }
-
-    // Record payment
-    const paymentRecord = {
+    // 6. Record payment locally
+    const payment: Payment = {
       id: generateId(),
       orderId,
       patientId: patient.id,
       amount,
-      currency: "USD" as const,
-      status: "completed" as const,
-      paymentMethod: "credit_card" as const,
-      cardLast4: (paymentIntent.payment_method as any)?.card?.last4 ?? "0000",
-      cardBrand: (paymentIntent.payment_method as any)?.card?.brand ?? "unknown",
-      transactionId: paymentIntent.id,
+      currency: "USD",
+      status: "completed",
+      paymentMethod: "credit_card",
+      cardLast4: chargeResult.cardLast4,
+      cardBrand: chargeResult.cardBrand,
+      transactionId: chargeResult.chargeId,
       createdAt: new Date().toISOString(),
       processedAt: new Date().toISOString(),
     };
-    db.paymentDb.create(paymentRecord);
-    await dbServer.paymentDb.create(paymentRecord).catch(() => {});
 
-    // Update order
-    const updates = {
+    db.paymentDb.create(payment);
+    await dbServer.paymentDb.create(payment).catch(() => {});
+
+    // 7. Update order status
+    const orderUpdates = {
       status: "sent_to_pharmacy" as const,
       paymentStatus: "completed" as const,
       submittedAt: new Date().toISOString(),
     };
-    db.orderDb.update(orderId, updates);
-    await dbServer.orderDb.update(orderId, updates).catch(() => {});
+    db.orderDb.update(orderId, orderUpdates);
+    await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
 
     const updatedOrder = db.orderDb.getById(orderId)!;
-
-    // Run integration chain (non-fatal errors)
     const errors: string[] = [];
 
-    try { practiceq.submitIntakePacket(updatedOrder); } catch (e) {
-      errors.push(`PracticeQ: ${(e as Error).message}`);
-    }
-    try { quickbooks.createCustomerRecord(patient); quickbooks.createInvoice(updatedOrder, paymentRecord); } catch (e) {
-      errors.push(`QuickBooks: ${(e as Error).message}`);
-    }
-    try { lifefile.createPharmacyOrder(updatedOrder); } catch (e) {
-      errors.push(`LifeFile: ${(e as Error).message}`);
-    }
-    try { spruce.sendMessage(patient.id, "payment_received", { orderId }); } catch (e) {
-      errors.push(`Spruce: ${(e as Error).message}`);
+    // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
+    try {
+      quickbooks.createCustomerRecord(patient);
+      quickbooks.createInvoice(updatedOrder, payment);
+      quickbooks.recordPayment(payment.transactionId, payment.amount);
+      db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
+    } catch (e) {
+      errors.push(`QuickBooks accounting: ${(e as Error).message}`);
+      db.orderDb.update(orderId, { quickbooksStatus: "error" });
     }
 
-    // Auto provider review
+    // 9. PracticeQ — intake packet for provider chart
+    try {
+      practiceq.submitIntakePacket(updatedOrder);
+      db.orderDb.update(orderId, { practiceQStatus: "submitted" });
+    } catch (e) {
+      errors.push(`PracticeQ: ${(e as Error).message}`);
+    }
+
+    // 10. Life File — pharmacy prescription order
+    try {
+      lifefile.createPharmacyOrder(updatedOrder);
+      db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
+    } catch (e) {
+      errors.push(`Life File: ${(e as Error).message}`);
+    }
+
+    // 11. Spruce SMS — "payment received, order processing"
+    try {
+      spruce.sendMessage(patient.id, "payment_received", { orderId });
+    } catch (e) {
+      errors.push(`Spruce SMS: ${(e as Error).message}`);
+    }
+
+    // 12. Auto provider review record
     const reviewRecord = {
       id: generateId(),
       orderId,
@@ -145,17 +174,23 @@ export async function POST(req: NextRequest) {
     db.providerReviewDb.create(reviewRecord);
     await dbServer.providerReviewDb.create(reviewRecord).catch(() => {});
 
+    // 13. Trigger AI eligibility pre-screen in background (non-blocking)
+    if (process.env.ANTHROPIC_API_KEY) {
+      fetch(`${req.nextUrl.origin}/api/ai/eligibility`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      }).catch(() => {}); // fire and forget
+    }
+
     return NextResponse.json({
       success: true,
       orderId,
-      paymentIntentId: paymentIntent.id,
+      chargeId: chargeResult.chargeId,
       warnings: errors.length ? errors : undefined,
     });
   } catch (err: any) {
-    if (err.type === "StripeCardError") {
-      return NextResponse.json({ error: err.message }, { status: 402 });
-    }
-    console.error("Payment error:", err);
+    console.error("Payment charge error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

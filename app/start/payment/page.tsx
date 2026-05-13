@@ -8,11 +8,7 @@ import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { formatCurrency } from "@/lib/utils";
-import { Lock, CreditCard, CheckCircle } from "lucide-react";
-import * as practiceqService from "@/services/practiceq";
-import * as lifefileService from "@/services/lifefile";
-import * as quickbooksService from "@/services/quickbooks";
-import * as spruceService from "@/services/spruce";
+import { Lock, CreditCard } from "lucide-react";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -40,13 +36,11 @@ export default function Payment() {
     if (!cardLast4) return;
     setProcessing(true);
 
-    // PRODUCTION: Replace this with a call to your API route:
-    //   POST /api/payments/charge  { token, amount, orderId }
-    // The QB JS SDK tokenizes the card in the browser first.
-    setProcessingStep("Processing payment...");
-    await delay(1200);
+    setProcessingStep("Setting up your account...");
+    await delay(400);
 
-    // Create patient
+    // Create patient + order in localStorage for demo
+    // In production, this is handled server-side in /api/payments/charge
     const patient = db.patientDb.create({
       id: `patient_${Date.now()}`,
       firstName: intakeState.firstName,
@@ -160,51 +154,38 @@ export default function Payment() {
       notes: "Automatically processed — patient passed eligibility screening.",
     });
 
-    // ── AUTO-PROCESS: No explicit provider approval needed ──────────────────
-    // Eligible patients go straight to pharmacy without waiting for manual review.
-
-    setProcessingStep("Submitting to PracticeQ...");
+    // ── Call API route → QB Payments → integration chain ───────────────────
+    // In production, qbpayments.js tokenizes the card before this call.
+    // The API route handles: QB charge → QB invoice → PracticeQ → Pharmacy → SMS
+    setProcessingStep("Charging via QuickBooks Payments...");
     await delay(600);
-    try { practiceqService.submitIntakePacket(order); } catch {}
-    db.orderDb.update(order.id, { practiceQStatus: "submitted" });
 
-    setProcessingStep("Creating invoice...");
-    await delay(500);
     try {
-      const invoiceId = quickbooksService.createInvoice(order, payment);
-      quickbooksService.recordPayment(invoiceId, payment.amount);
-      db.paymentDb.update(payment.id, { status: "completed", processedAt: new Date().toISOString() });
-      db.orderDb.update(order.id, { quickbooksStatus: "invoiced" });
-    } catch {}
-
-    setProcessingStep("Sending to pharmacy...");
-    await delay(700);
-    try {
-      lifefileService.createPharmacyOrder(order);
-      db.orderDb.update(order.id, { pharmacyStatus: "submitted", status: "sent_to_pharmacy" });
-    } catch {}
-
-    setProcessingStep("Sending confirmation SMS...");
-    await delay(400);
-    try {
-      spruceService.sendMessage(patient.id, "order_approved", {
-        patientName: patient.firstName,
-        orderId: order.id,
+      const res = await fetch("/api/payments/charge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          // token: qbToken,  // production: token from qbpayments.js
+          cardLast4,
+          cardBrand: "Visa",
+          amount: total,
+        }),
       });
-      spruceService.scheduleReorderReminder(order.id, 30);
-    } catch {}
+      const result = await res.json();
+      if (!res.ok) {
+        db.integrationLogDb.create({
+          id: `log_${Date.now()}`, timestamp: new Date().toISOString(),
+          integrationName: "quickbooks", action: "Payment API error",
+          orderId: order.id, patientId: patient.id,
+          status: "error", details: { error: result.error },
+        });
+        // Continue anyway in demo mode — payment page already created local records
+      }
+    } catch { /* API route unavailable in dev, demo continues */ }
 
-    // Final log
-    db.integrationLogDb.create({
-      id: `log_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      integrationName: "system",
-      action: "Order auto-processed — PracticeQ, QuickBooks, Pharmacy, Spruce notified",
-      orderId: order.id,
-      patientId: patient.id,
-      status: "success",
-      details: { autoProcessed: true },
-    });
+    setProcessingStep("Finalizing order...");
+    await delay(500);
 
     saveIntakeState({ orderId: order.id, patientId: patient.id, paymentProcessed: true });
     setProcessing(false);
@@ -242,9 +223,9 @@ export default function Payment() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-7">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
-          <div className="flex items-center gap-1 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-            Secure &amp; encrypted
+            <span>Secured by QuickBooks Payments</span>
           </div>
         </div>
 
