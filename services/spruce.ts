@@ -22,12 +22,22 @@ export const sendMessage = (
   const patient = patientOverride ?? db.patientDb.getById(patientId);
   const template = db.messageTemplateDb.getByKey(templateKey);
 
-  if (!patient || !template) {
-    throw new Error("Patient or template not found");
+  if (!patient) {
+    throw new Error("Patient not found");
   }
 
+  // Fallback templates for server-side (template DB not seeded server-side)
+  const DEFAULT_TEMPLATES: Record<string, string> = {
+    payment_received: "Your payment was received. Your order is being processed.",
+    order_shipped: "Your order has shipped! Tracking: {{trackingNumber}}",
+    order_delivered: "Your order has been delivered.",
+    provider_approved: "Your prescription has been approved.",
+    needs_more_info: "We need more info to process your order. Please check your email.",
+  };
+  const messageBody = template?.body ?? DEFAULT_TEMPLATES[templateKey] ?? `Notification: ${templateKey}`;
+
   // Interpolate variables into message
-  let messageText = template.body;
+  let messageText = messageBody;
   Object.entries(variables).forEach(([key, value]) => {
     messageText = messageText.replace(`{{${key}}}`, value);
   });
@@ -79,12 +89,21 @@ export const scheduleMessage = (
   const patient = db.patientDb.getById(patientId);
   const template = db.messageTemplateDb.getByKey(templateKey);
 
-  if (!patient || !template) {
-    throw new Error("Patient or template not found");
+  if (!patient) {
+    throw new Error("Patient not found");
   }
 
+  const DEFAULT_TEMPLATES: Record<string, string> = {
+    payment_received: "Your payment was received. Your order is being processed.",
+    order_shipped: "Your order has shipped! Tracking: {{trackingNumber}}",
+    order_delivered: "Your order has been delivered.",
+    provider_approved: "Your prescription has been approved.",
+    needs_more_info: "We need more info to process your order. Please check your email.",
+  };
+  const messageBody = template?.body ?? DEFAULT_TEMPLATES[templateKey] ?? `Notification: ${templateKey}`;
+
   // Interpolate variables
-  let messageText = template.body;
+  let messageText = messageBody;
   Object.entries(variables).forEach(([key, value]) => {
     messageText = messageText.replace(`{{${key}}}`, value);
   });
