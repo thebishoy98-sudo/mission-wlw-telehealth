@@ -82,7 +82,7 @@ interface QBChargeResponse {
 export async function chargeCard(
   orderId: string,
   patientId: string,
-  amountCents: number,
+  amountDollars: number,
   paymentDetails: {
     token?: string;       // preferred: tokenized card from qbpayments.js
     cardNumber?: string;  // raw card (sandbox/server-to-server only)
@@ -96,7 +96,7 @@ export async function chargeCard(
     billingAddress?: { street1: string; city: string; state: string; zipCode: string; country: string };
   }
 ): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
-  const amountDollars = (amountCents / 100).toFixed(2);
+  const amountFormatted = amountDollars.toFixed(2);
 
   // ── Mock mode (no QB credentials) ─────────────────────────────────────────
   if (!process.env.QB_CLIENT_ID) {
@@ -117,7 +117,7 @@ export async function chargeCard(
   const requestId = generateId(); // idempotency key
 
   const payload: QBChargeRequest = {
-    amount: amountDollars,
+    amount: amountFormatted,
     currency: "USD",
     capture: true,
     context: { mobile: false, isEcommerce: true, reconnect: false },
@@ -208,13 +208,13 @@ export async function voidCharge(chargeId: string): Promise<void> {
  */
 export async function refundCharge(
   chargeId: string,
-  amountCents?: number
+  amountDollarsRefund?: number
 ): Promise<void> {
   if (!process.env.QB_CLIENT_ID) return; // mock mode
 
   const accessToken = await getQBAccessToken();
-  const body = amountCents
-    ? JSON.stringify({ amount: (amountCents / 100).toFixed(2), currency: "USD" })
+  const body = amountDollarsRefund
+    ? JSON.stringify({ amount: amountDollarsRefund.toFixed(2), currency: "USD" })
     : undefined;
 
   await fetch(`${PAYMENTS_BASE_URL}/charges/${chargeId}/refunds`, {

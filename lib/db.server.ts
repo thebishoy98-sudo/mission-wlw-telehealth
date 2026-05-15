@@ -35,13 +35,14 @@ export const productDb = {
 
   async upsert(p: Product): Promise<void> {
     if (!isDbAvailable()) return;
+    // Use slug as conflict target since IDs are generated client-side and may differ
     await sql`
       INSERT INTO products (id, name, slug, description, long_description, starting_price, image, doses, eligibility_note, is_active, faqs, created_at)
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
         ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}, ${p.eligibilityNote},
         ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}, ${p.createdAt})
-      ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name, slug = EXCLUDED.slug, description = EXCLUDED.description,
+      ON CONFLICT (slug) DO UPDATE SET
+        id = EXCLUDED.id, name = EXCLUDED.name, description = EXCLUDED.description,
         starting_price = EXCLUDED.starting_price, doses = EXCLUDED.doses, is_active = EXCLUDED.is_active
     `;
   },

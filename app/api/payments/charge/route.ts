@@ -47,19 +47,19 @@ export async function POST(req: NextRequest) {
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
       db.orderDb.getById(orderId);
 
+    // Upsert product FIRST (order has FK dependency on products table)
+    if (productData) {
+      try {
+        await dbServer.productDb.upsert(productData);
+      } catch { /* ignore */ }
+    }
+
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
     if (!order && orderData) {
       try {
         await dbServer.orderDb.create(orderData);
       } catch { /* may already exist */ }
       order = orderData;
-    }
-
-    // Upsert product into Postgres so services can find it
-    if (productData) {
-      try {
-        await dbServer.productDb.upsert(productData);
-      } catch { /* ignore */ }
     }
 
     if (!order) {
