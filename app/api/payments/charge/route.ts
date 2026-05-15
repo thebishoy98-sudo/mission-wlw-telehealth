@@ -156,7 +156,8 @@ export async function POST(req: NextRequest) {
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
 
-    const updatedOrder = db.orderDb.getById(orderId)!;
+    // Build updatedOrder from known data (localStorage not available server-side)
+    const updatedOrder = { ...order, ...orderUpdates };
     const errors: string[] = [];
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
