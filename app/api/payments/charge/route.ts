@@ -33,7 +33,7 @@ import type { Payment } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -53,6 +53,13 @@ export async function POST(req: NextRequest) {
         await dbServer.orderDb.create(orderData);
       } catch { /* may already exist */ }
       order = orderData;
+    }
+
+    // Upsert product into Postgres so services can find it
+    if (productData) {
+      try {
+        await dbServer.productDb.upsert(productData);
+      } catch { /* ignore */ }
     }
 
     if (!order) {

@@ -180,6 +180,7 @@ export default function Payment() {
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },
+        productData: product ?? undefined,
       }),
     });
 

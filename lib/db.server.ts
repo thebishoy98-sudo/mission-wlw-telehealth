@@ -18,6 +18,35 @@ import type {
   QuickBooksRecord, SpruceMessage, MessageTemplate, IntegrationLog,
 } from "@/types";
 
+// ── Products ──────────────────────────────────────────────────────────────────
+
+export const productDb = {
+  async getById(id: string): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToProduct(rows[0]) : null;
+  },
+
+  async getAll(): Promise<Product[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`SELECT * FROM products WHERE is_active = true ORDER BY name ASC`;
+    return rows.map(rowToProduct);
+  },
+
+  async upsert(p: Product): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      INSERT INTO products (id, name, slug, description, long_description, starting_price, image, doses, eligibility_note, is_active, faqs, created_at)
+      VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
+        ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}, ${p.eligibilityNote},
+        ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}, ${p.createdAt})
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name, slug = EXCLUDED.slug, description = EXCLUDED.description,
+        starting_price = EXCLUDED.starting_price, doses = EXCLUDED.doses, is_active = EXCLUDED.is_active
+    `;
+  },
+};
+
 const isDbAvailable = () => !!process.env.POSTGRES_URL;
 
 // ── Patients ──────────────────────────────────────────────────────────────────
@@ -351,6 +380,23 @@ export const aiConversationDb = {
 };
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
+
+function rowToProduct(r: any): Product {
+  return {
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: r.description,
+    longDescription: r.long_description ?? undefined,
+    startingPrice: r.starting_price,
+    image: r.image,
+    doses: r.doses ?? [],
+    eligibilityNote: r.eligibility_note ?? "",
+    isActive: r.is_active,
+    faqs: r.faqs ?? [],
+    createdAt: r.created_at ?? new Date().toISOString(),
+  };
+}
 
 function rowToPatient(r: any): Patient {
   return {
