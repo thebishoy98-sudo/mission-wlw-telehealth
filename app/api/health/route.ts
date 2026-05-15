@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { serviceConfig } from "@/lib/service-config";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return NextResponse.json({
     status: "ok",
