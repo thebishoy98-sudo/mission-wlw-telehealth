@@ -34,7 +34,11 @@ export const sendMessage = (
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
   };
-  const messageBody = template?.body ?? DEFAULT_TEMPLATES[templateKey] ?? `Notification: ${templateKey}`;
+  const fallbackBody = DEFAULT_TEMPLATES[templateKey];
+  if (!template && !fallbackBody) {
+    throw new Error("Patient or template not found");
+  }
+  const messageBody = template?.body ?? fallbackBody!;
 
   // Interpolate variables into message
   let messageText = messageBody;
@@ -100,7 +104,11 @@ export const scheduleMessage = (
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
   };
-  const messageBody = template?.body ?? DEFAULT_TEMPLATES[templateKey] ?? `Notification: ${templateKey}`;
+  const fallbackBody2 = DEFAULT_TEMPLATES[templateKey];
+  if (!template && !fallbackBody2) {
+    throw new Error("Patient or template not found");
+  }
+  const messageBody = template?.body ?? fallbackBody2!;
 
   // Interpolate variables
   let messageText = messageBody;
