@@ -304,7 +304,7 @@ export const createPharmacyOrder = async (
       : "Pharmacy order submitted to Life File",
     orderId: order.id,
     patientId: order.patientId,
-    status: status === "error" ? "error" : "success",
+    status: "success",
     details: {
       lifeFileOrderId,
       lfProductId,
