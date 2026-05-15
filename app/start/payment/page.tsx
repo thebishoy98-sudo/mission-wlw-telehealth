@@ -152,6 +152,34 @@ export default function Payment() {
         cardLast4,
         cardBrand: "Visa",
         amount: total,
+        // Send full patient + order data so server can create in Postgres
+        // (localStorage is not accessible server-side)
+        patientData: {
+          id: patient.id,
+          firstName: intakeState.firstName,
+          lastName: intakeState.lastName,
+          dateOfBirth: intakeState.dateOfBirth,
+          gender: intakeState.gender,
+          phone: intakeState.phone,
+          email: intakeState.email,
+          address: intakeState.address,
+          shippingAddress: intakeState.shippingAddress || intakeState.address,
+          createdAt: patient.createdAt,
+          updatedAt: patient.updatedAt,
+        },
+        orderData: {
+          id: order.id,
+          patientId: patient.id,
+          productId: intakeState.productId,
+          doseId: intakeState.doseId,
+          status: "draft",
+          paymentStatus: "pending",
+          pharmacyStatus: "draft",
+          practiceQStatus: "pending",
+          quickbooksStatus: "pending",
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+        },
       }),
     });
 

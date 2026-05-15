@@ -33,7 +33,7 @@ import type { Payment } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -42,10 +42,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Load order — try server DB first, fall back to localStorage
-    const order =
+    // 1. Load order — try server DB first, fall back to localStorage, then inline data
+    let order =
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
       db.orderDb.getById(orderId);
+
+    // If not found anywhere, create from submitted data (localStorage not accessible server-side)
+    if (!order && orderData) {
+      try {
+        await dbServer.orderDb.create(orderData);
+      } catch { /* may already exist */ }
+      order = orderData;
+    }
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -73,10 +81,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Load patient
-    const patient =
+    // 4. Load patient — create from submitted data if not in server DB
+    let patient =
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
+
+    if (!patient && patientData) {
+      try {
+        await dbServer.patientDb.create(patientData);
+      } catch { /* may already exist */ }
+      patient = patientData;
+    }
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
