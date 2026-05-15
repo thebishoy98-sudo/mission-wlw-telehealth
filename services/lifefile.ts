@@ -16,6 +16,7 @@
 
 import * as Types from "@/types";
 import * as db from "@/lib/db";
+import * as dbServer from "@/lib/db.server";
 import { serviceConfig } from "@/lib/service-config";
 import { generateId } from "@/lib/utils";
 
@@ -110,8 +111,12 @@ async function lfFetch(
 export const createPharmacyOrder = async (
   order: Types.Order
 ): Promise<Types.PharmacyOrder> => {
-  const patient = db.patientDb.getById(order.patientId);
-  const product = db.productDb.getById(order.productId);
+  const patient =
+    db.patientDb.getById(order.patientId) ??
+    await dbServer.patientDb.getById(order.patientId).catch(() => null);
+  const product =
+    db.productDb.getById(order.productId) ??
+    await dbServer.productDb.getById(order.productId).catch(() => null);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) {
