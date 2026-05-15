@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      lifefile.createPharmacyOrder(updatedOrder);
+      await lifefile.createPharmacyOrder(updatedOrder);
       db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
     } catch (e) {
       errors.push(`Life File: ${(e as Error).message}`);

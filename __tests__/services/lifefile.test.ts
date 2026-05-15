@@ -1,6 +1,5 @@
 import * as lifefile from "@/services/lifefile";
 import * as db from "@/lib/db";
-import type { Order, Patient, Product } from "@/types";
 
 const seed = () => {
   db.patientDb.create({
@@ -48,9 +47,9 @@ const seed = () => {
 describe("lifefile.createPharmacyOrder", () => {
   beforeEach(seed);
 
-  it("creates a pharmacy order with correct structure", () => {
+  it("creates a pharmacy order with correct structure", async () => {
     const order = db.orderDb.getById("o1")!;
-    const pharmacyOrder = lifefile.createPharmacyOrder(order);
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order);
 
     expect(pharmacyOrder.orderId).toBe("o1");
     expect(pharmacyOrder.patientId).toBe("p1");
@@ -60,46 +59,46 @@ describe("lifefile.createPharmacyOrder", () => {
     expect(pharmacyOrder.payload.order.rxs[0].drugStrength).toBe("2.5mg");
   });
 
-  it("saves pharmacy order to pharmacyOrderDb", () => {
+  it("saves pharmacy order to pharmacyOrderDb", async () => {
     const order = db.orderDb.getById("o1")!;
-    lifefile.createPharmacyOrder(order);
+    await lifefile.createPharmacyOrder(order);
     expect(db.pharmacyOrderDb.getByOrder("o1")).not.toBeNull();
   });
 
-  it("creates an integration log", () => {
+  it("creates an integration log", async () => {
     const order = db.orderDb.getById("o1")!;
-    lifefile.createPharmacyOrder(order);
+    await lifefile.createPharmacyOrder(order);
     const logs = db.integrationLogDb.getAll();
     const lifefileLog = logs.find((l) => l.integrationName === "lifefile");
     expect(lifefileLog).toBeDefined();
     expect(lifefileLog?.status).toBe("success");
   });
 
-  it("throws when patient not found", () => {
+  it("throws when patient not found", async () => {
     const badOrder = { ...db.orderDb.getById("o1")!, patientId: "bad" };
-    expect(() => lifefile.createPharmacyOrder(badOrder)).toThrow("Invalid order data");
+    await expect(lifefile.createPharmacyOrder(badOrder)).rejects.toThrow("Invalid order data");
   });
 
-  it("throws when product not found", () => {
+  it("throws when product not found", async () => {
     const badOrder = { ...db.orderDb.getById("o1")!, productId: "bad" };
-    expect(() => lifefile.createPharmacyOrder(badOrder)).toThrow("Invalid order data");
+    await expect(lifefile.createPharmacyOrder(badOrder)).rejects.toThrow("Invalid order data");
   });
 });
 
 describe("lifefile.getOrderStatus", () => {
   beforeEach(seed);
 
-  it("returns draft status for unknown lifeFileOrderId", () => {
-    const result = lifefile.getOrderStatus("nonexistent_lf_id");
+  it("returns draft status for unknown lifeFileOrderId", async () => {
+    const result = await lifefile.getOrderStatus("nonexistent_lf_id");
     expect(result.status).toBe("draft");
     expect(result.details.error).toBeDefined();
   });
 
-  it("returns status after pharmacy order created", () => {
+  it("returns status after pharmacy order created", async () => {
     const order = db.orderDb.getById("o1")!;
-    const pharmacyOrder = lifefile.createPharmacyOrder(order);
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order);
     const lifeFileId = pharmacyOrder.lifeFileOrderId!;
-    const result = lifefile.getOrderStatus(lifeFileId);
+    const result = await lifefile.getOrderStatus(lifeFileId);
     expect(result.status).toBe("submitted");
   });
 });
@@ -107,10 +106,10 @@ describe("lifefile.getOrderStatus", () => {
 describe("lifefile.addTrackingNumber", () => {
   beforeEach(seed);
 
-  it("adds tracking number to existing pharmacy order", () => {
+  it("adds tracking number to existing pharmacy order", async () => {
     const order = db.orderDb.getById("o1")!;
-    lifefile.createPharmacyOrder(order);
-    lifefile.addTrackingNumber("o1", "1Z999AA10123456784");
+    await lifefile.createPharmacyOrder(order);
+    await lifefile.addTrackingNumber("o1", "1Z999AA10123456784");
     const pharmacyOrder = db.pharmacyOrderDb.getByOrder("o1");
     expect(pharmacyOrder?.trackingNumber).toBe("1Z999AA10123456784");
     expect(pharmacyOrder?.status).toBe("shipped");

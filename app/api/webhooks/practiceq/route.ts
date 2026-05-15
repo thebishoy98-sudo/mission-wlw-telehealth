@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       // Trigger pharmacy order if not already sent
       const order = db.orderDb.getById(orderId);
       if (order && db.pharmacyOrderDb.getByOrder(orderId) === null) {
-        try { lifefile.createPharmacyOrder(order); } catch {}
+        try { await lifefile.createPharmacyOrder(order); } catch {}
       }
 
       try { spruce.sendMessage(patientId, "approved", { orderId }); } catch {}

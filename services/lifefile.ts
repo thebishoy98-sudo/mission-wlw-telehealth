@@ -1,206 +1,423 @@
 /**
- * Mock Life File Pharmacy Integration Service
+ * Life File Pharmacy Integration Service
  *
- * In production, replace with actual Life File API:
- * const API_BASE_URL = "https://api.lifefilehealth.com/v1"
- * Use X-Vendor-ID, X-Location-ID, X-API-Network-ID headers
- * Use Basic Auth with actual credentials
+ * Spec: Life File API v1.240910.0
+ *
+ * Auth    : HTTP Basic (LIFEFILE_API_USERNAME / LIFEFILE_API_PASSWORD)
+ * Headers : X-Vendor-ID, X-Location-ID, X-API-Network-ID (all int32)
+ *
+ * Endpoints used:
+ *   POST /order                          — create order
+ *   PUT  /order/{orderId}/status         — update status
+ *   PUT  /order/{orderId}/shipping       — update shipping address/service
+ *
+ * Set USE_REAL_LIFEFILE=true in env to switch from mock to live calls.
  */
 
 import * as Types from "@/types";
 import * as db from "@/lib/db";
-import { generateId, formatDate } from "@/lib/utils";
+import { serviceConfig } from "@/lib/service-config";
+import { generateId } from "@/lib/utils";
 
-const API_BASE_URL = "https://mock.lifefile.api/v1"; // Placeholder - replace in production
-const VENDOR_ID = "VENDOR_DEMO_12345"; // Placeholder - replace with real vendor ID
-const LOCATION_ID = "LOC_DEMO_67890"; // Placeholder - replace with real location ID
-const API_NETWORK_ID = "NET_DEMO_11111"; // Placeholder - replace with real network ID
-const API_USERNAME = "demo_user"; // Placeholder - replace with real credentials
-const API_PASSWORD = "demo_password"; // Placeholder - replace with real credentials
+// ── Sandbox product ID map (slug / partial name → LF lfProductID) ─────────────
+const LF_PRODUCT_MAP: Record<string, number> = {
+  tirzepatide: 305492221,     // Acetaminophen 500mg — closest sandbox match
+  semaglutide: 305492220,     // Acarbose 50mg
+  "benzocaine-lidocaine-tetracaine": 305157968,
+  "baclofen-dexamethasone-flurbiprofen": 305492218,
+  acyclovir: 305492222,
+  acetaminophen: 305492221,
+  acarbose: 305492220,
+};
 
-export const createPharmacyOrder = (order: Types.Order): Types.PharmacyOrder => {
+// Default sandbox shipping service: 999 = Delivery
+const DEFAULT_SHIPPING_SERVICE_ID = 999;
+
+// Sandbox order status codes
+export const LF_STATUS_CODES = {
+  STATUS_A: "b29c4",  // 11472 Sandbox Status A
+  STATUS_B: "b28b9",  // 11472 Sandbox Status B
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function cfg() {
+  return serviceConfig.lifefile;
+}
+
+function basicAuth(username: string, password: string) {
+  return "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+}
+
+function mapGender(gender: string): "m" | "f" | "u" {
+  if (gender === "male") return "m";
+  if (gender === "female") return "f";
+  return "u";
+}
+
+function formatPhone(phone: string): string {
+  // Life File format: (987) 654-3210 — try to reformat if digits-only input
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return phone.slice(0, 16);
+}
+
+function getLfProductId(product: Types.Product): number {
+  const slug = product.slug?.toLowerCase() ?? "";
+  if (LF_PRODUCT_MAP[slug]) return LF_PRODUCT_MAP[slug];
+  const name = product.name.toLowerCase();
+  for (const [key, id] of Object.entries(LF_PRODUCT_MAP)) {
+    if (name.includes(key)) return id;
+  }
+  return 305492221; // default sandbox fallback
+}
+
+// Life File response envelope: { type: "success"|"error", message: string, data: {} }
+interface LfResponse {
+  type: "success" | "error";
+  message: string;
+  data: Record<string, unknown>;
+}
+
+async function lfFetch(
+  path: string,
+  options: RequestInit = {}
+): Promise<{ httpOk: boolean; httpStatus: number; body: LfResponse }> {
+  const c = cfg();
+  const url = `${c.baseUrl}${path}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: basicAuth(c.username, c.password),
+    "X-Vendor-ID": c.vendorId,
+    "X-Location-ID": c.locationId,
+    "X-API-Network-ID": c.apiNetworkId,
+    ...(options.headers as Record<string, string> | undefined),
+  };
+
+  const res = await fetch(url, { ...options, headers });
+  let body: LfResponse = { type: "error", message: "empty response", data: {} };
+  try {
+    body = await res.json() as LfResponse;
+  } catch { /* leave default */ }
+
+  return { httpOk: res.ok, httpStatus: res.status, body };
+}
+
+// ── createPharmacyOrder ───────────────────────────────────────────────────────
+
+export const createPharmacyOrder = async (
+  order: Types.Order
+): Promise<Types.PharmacyOrder> => {
   const patient = db.patientDb.getById(order.patientId);
   const product = db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) {
-    throw new Error("Invalid order data");
+    throw new Error("Invalid order data — missing patient, product or dose");
   }
 
-  // Build Life File style payload
-  const lifeFilePayload: Types.PharmacyOrder["payload"] = {
+  const c = cfg();
+  const lfProductId = getLfProductId(product);
+  const ship = patient.shippingAddress;
+
+  // Build Life File POST /order payload per spec
+  const payload = {
     message: {
-      id: generateId(),
+      id: Math.floor(Math.random() * 2_000_000_000), // integer per spec
       sentTime: new Date().toISOString(),
     },
     order: {
       general: {
-        referenceId: order.id,
-        memo: `${product.name} ${dose.label}`,
+        memo: `${product.name} ${dose.label}`.slice(0, 120),
+        referenceId: order.id.slice(0, 200),
       },
       prescriber: {
-        npi: "1234567890",
-        name: "Dr. Sample Provider",
-        phone: "555-000-0001",
+        npi: c.prescriberNpi || "1234567890",
+        lastName: c.prescriberLastName || "Provider",
+        firstName: c.prescriberFirstName || "Sample",
+        phone: c.prescriberPhone || "(555) 000-0001",
       },
       practice: {
-        npi: "0987654321",
-        name: "Sample Medical Practice",
-        phone: "555-000-0002",
+        id: parseInt(c.practiceId, 10),
       },
-      patient: patient,
-      shipping: patient.shippingAddress,
-      billing: patient.address,
+      patient: {
+        firstName: patient.firstName.slice(0, 30),
+        lastName: patient.lastName.slice(0, 30),
+        gender: mapGender(patient.gender),
+        dateOfBirth: patient.dateOfBirth, // already yyyy-mm-dd
+        address1: patient.address.street1.slice(0, 60),
+        ...(patient.address.street2 ? { address2: patient.address.street2.slice(0, 60) } : {}),
+        city: patient.address.city.slice(0, 30),
+        state: patient.address.state.slice(0, 2),
+        zip: patient.address.zipCode.slice(0, 10),
+        country: (patient.address.country ?? "US").slice(0, 2),
+        phoneMobile: formatPhone(patient.phone),
+        email: patient.email.slice(0, 100),
+      },
+      shipping: {
+        recipientType: "patient" as const,
+        recipientLastName: patient.lastName.slice(0, 30),
+        recipientFirstName: patient.firstName.slice(0, 30),
+        recipientPhone: formatPhone(patient.phone),
+        recipientEmail: patient.email.slice(0, 100),
+        addressLine1: ship.street1.slice(0, 60),
+        ...(ship.street2 ? { addressLine2: ship.street2.slice(0, 60) } : {}),
+        city: ship.city.slice(0, 100),
+        state: ship.state.slice(0, 2),
+        zipCode: ship.zipCode.slice(0, 10),
+        country: (ship.country ?? "US").slice(0, 2),
+        service: c.shippingServiceId || DEFAULT_SHIPPING_SERVICE_ID,
+      },
+      billing: {
+        payorType: "pat" as const,
+      },
       rxs: [
         {
-          drugName: product.name,
-          drugStrength: dose.strength,
-          quantity: dose.quantity,
-          directions: "Inject once weekly",
+          rxType: "new" as const,
+          drugName: product.name.slice(0, 254),
+          drugStrength: dose.strength.slice(0, 254),
+          drugForm: dose.label.slice(0, 255),
+          lfProductID: lfProductId,
+          quantity: String(dose.quantity),
+          quantityUnits: "each",
+          directions: "As directed by prescriber",
           refills: 11,
+          dateWritten: new Date().toISOString().split("T")[0],
           daysSupply: 84,
-          dateWritten: new Date().toISOString(),
+          scheduleCode: "L" as const, // sandbox schedule code
         },
       ],
     },
   };
 
-  // Create pharmacy order record
+  let lifeFileOrderId = `LF_${generateId()}`;
+  let status: Types.PharmacyStatus = "submitted";
+  let lastError: string | undefined;
+
+  if (!c.useMock) {
+    try {
+      const { httpOk, httpStatus, body } = await lfFetch("/order", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (!httpOk || body.type === "error") {
+        throw new Error(
+          `Life File API ${httpStatus}: ${body.message || JSON.stringify(body)}`
+        );
+      }
+
+      // Life File may return the new order ID in data
+      const returned = String(
+        body.data?.orderId ?? body.data?.id ?? body.data?.order_id ?? ""
+      );
+      if (returned) lifeFileOrderId = returned;
+    } catch (err) {
+      status = "error";
+      lastError = (err as Error).message;
+    }
+  }
+
   const pharmacyOrder: Types.PharmacyOrder = {
     id: generateId(),
     orderId: order.id,
     patientId: order.patientId,
-    lifeFileOrderId: `LF_${generateId()}`,
-    status: "submitted",
-    payload: lifeFilePayload,
+    lifeFileOrderId,
+    status,
+    payload: {
+      message: { id: generateId(), sentTime: new Date().toISOString() },
+      order: {
+        general: {
+          referenceId: order.id,
+          memo: `${product.name} ${dose.label}`,
+        },
+        prescriber: {
+          npi: payload.order.prescriber.npi,
+          name: `${payload.order.prescriber.firstName} ${payload.order.prescriber.lastName}`,
+          phone: payload.order.prescriber.phone,
+        },
+        practice: {
+          npi: String(payload.order.practice.id),
+          name: "11472 SANDBOX PRACTICE - 251",
+          phone: "",
+        },
+        patient,
+        shipping: ship,
+        billing: patient.address,
+        rxs: payload.order.rxs.map((rx) => ({
+          drugName: rx.drugName,
+          drugStrength: rx.drugStrength,
+          quantity: parseInt(rx.quantity, 10),
+          directions: rx.directions,
+          refills: rx.refills,
+          daysSupply: rx.daysSupply,
+          dateWritten: rx.dateWritten,
+        })),
+      },
+    },
     submittedAt: new Date().toISOString(),
+    ...(lastError ? { lastError } : {}),
   };
 
   const saved = db.pharmacyOrderDb.create(pharmacyOrder);
 
-  // Log the action
   db.integrationLogDb.create({
     id: generateId(),
     timestamp: new Date().toISOString(),
     integrationName: "lifefile",
-    action: "Pharmacy order created",
+    action: c.useMock
+      ? "Pharmacy order created (mock)"
+      : "Pharmacy order submitted to Life File",
     orderId: order.id,
     patientId: order.patientId,
-    status: "success",
+    status: status === "error" ? "error" : "success",
     details: {
-      lifeFileOrderId: saved.lifeFileOrderId,
-      rxs: lifeFilePayload.order.rxs.map((rx) => ({
-        drugName: rx.drugName,
-        quantity: rx.quantity,
-      })),
+      lifeFileOrderId,
+      lfProductId,
+      mock: c.useMock,
       patient: `${patient.firstName} ${patient.lastName}`,
-      // In production:
-      // apiEndpoint: `${API_BASE_URL}/order`,
-      // headers: {
-      //   "X-Vendor-ID": VENDOR_ID,
-      //   "X-Location-ID": LOCATION_ID,
-      //   "X-API-Network-ID": API_NETWORK_ID,
-      //   "Authorization": `Basic ${btoa(API_USERNAME + ':' + API_PASSWORD)}`
-      // },
-      // responseId: "resp_lf_12345"
     },
+    ...(lastError ? { error: lastError } : {}),
   });
 
   return saved;
 };
 
-export const updateOrderStatus = (
+// ── updateOrderStatus ─────────────────────────────────────────────────────────
+// Called inbound (e.g. from webhook) or by admin to push a status update.
+// PUT /order/{orderId}/status  — body: { status: string }
+
+export const updateOrderStatus = async (
   orderId: string,
   status: Types.PharmacyStatus
-): Types.PharmacyOrder | null => {
+): Promise<Types.PharmacyOrder | null> => {
   const pharmacyOrder = db.pharmacyOrderDb.getByOrder(orderId);
+  if (!pharmacyOrder) return null;
 
-  if (!pharmacyOrder) {
-    return null;
+  const c = cfg();
+  const lfId = pharmacyOrder.lifeFileOrderId;
+
+  if (!c.useMock && lfId && !lfId.startsWith("LF_")) {
+    // Only call API if we have a real numeric Life File order ID
+    try {
+      const { body } = await lfFetch(`/order/${lfId}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      });
+      if (body.type === "error") {
+        // Log but don't fail — status update is best-effort from our side
+      }
+    } catch { /* log silently */ }
   }
 
-  // Update status
-  const updated = db.pharmacyOrderDb.update(pharmacyOrder.id, {
-    status: status,
-  });
-
-  // Update main order too
+  const updated = db.pharmacyOrderDb.update(pharmacyOrder.id, { status });
   db.orderDb.update(orderId, { pharmacyStatus: status });
 
-  // Log the action
   db.integrationLogDb.create({
     id: generateId(),
     timestamp: new Date().toISOString(),
     integrationName: "lifefile",
     action: "Pharmacy order status updated",
-    orderId: orderId,
+    orderId,
     patientId: pharmacyOrder.patientId,
     status: "success",
-    details: {
-      lifeFileOrderId: pharmacyOrder.lifeFileOrderId,
-      newStatus: status,
-      // In production:
-      // apiEndpoint: `${API_BASE_URL}/order/${pharmacyOrder.lifeFileOrderId}/status`,
-      // method: "PUT"
-    },
+    details: { lifeFileOrderId: lfId, newStatus: status, mock: c.useMock },
   });
 
   return updated;
 };
 
-export const addTrackingNumber = (
+// ── addTrackingNumber ─────────────────────────────────────────────────────────
+// Called from the inbound Life File webhook when a shipment is created.
+// Tracking is pushed TO us — we don't send it to Life File.
+
+export const addTrackingNumber = async (
   orderId: string,
   trackingNumber: string
-): Types.PharmacyOrder | null => {
+): Promise<Types.PharmacyOrder | null> => {
   const pharmacyOrder = db.pharmacyOrderDb.getByOrder(orderId);
+  if (!pharmacyOrder) return null;
 
-  if (!pharmacyOrder) {
-    return null;
-  }
-
-  // Update with tracking
   const updated = db.pharmacyOrderDb.update(pharmacyOrder.id, {
-    trackingNumber: trackingNumber,
+    trackingNumber,
     status: "shipped",
     shippedAt: new Date().toISOString(),
   });
 
-  // Update main order
   db.orderDb.update(orderId, { pharmacyStatus: "shipped" });
 
-  // Log the action
   db.integrationLogDb.create({
     id: generateId(),
     timestamp: new Date().toISOString(),
     integrationName: "lifefile",
-    action: "Tracking number added",
-    orderId: orderId,
+    action: "Tracking number recorded",
+    orderId,
     patientId: pharmacyOrder.patientId,
     status: "success",
-    details: {
-      lifeFileOrderId: pharmacyOrder.lifeFileOrderId,
-      trackingNumber: trackingNumber,
-      carrier: "UPS",
-      // In production:
-      // apiEndpoint: `${API_BASE_URL}/order/${pharmacyOrder.lifeFileOrderId}/shipping`,
-      // method: "PUT"
-    },
+    details: { lifeFileOrderId: pharmacyOrder.lifeFileOrderId, trackingNumber },
   });
 
   return updated;
 };
 
-export const getOrderStatus = (
+// ── updateShipping ────────────────────────────────────────────────────────────
+// PUT /order/{orderId}/shipping — update recipient/address after order is placed.
+
+export const updateShipping = async (
+  orderId: string,
+  address: Types.Address,
+  patient: Pick<Types.Patient, "firstName" | "lastName" | "phone" | "email">
+): Promise<boolean> => {
+  const pharmacyOrder = db.pharmacyOrderDb.getByOrder(orderId);
+  if (!pharmacyOrder) return false;
+
+  const c = cfg();
+  const lfId = pharmacyOrder.lifeFileOrderId;
+
+  if (!c.useMock && lfId && !lfId.startsWith("LF_")) {
+    try {
+      const { body } = await lfFetch(`/order/${lfId}/shipping`, {
+        method: "PUT",
+        body: JSON.stringify({
+          shipping: {
+            recipientType: "patient",
+            recipientLastName: patient.lastName.slice(0, 30),
+            recipientFirstName: patient.firstName.slice(0, 30),
+            recipientPhone: formatPhone(patient.phone),
+            recipientEmail: patient.email.slice(0, 100),
+            addressLine1: address.street1.slice(0, 60),
+            ...(address.street2 ? { addressLine2: address.street2.slice(0, 60) } : {}),
+            city: address.city.slice(0, 100),
+            state: address.state.slice(0, 2),
+            zipCode: address.zipCode.slice(0, 10),
+            country: (address.country ?? "US").slice(0, 2),
+            service: DEFAULT_SHIPPING_SERVICE_ID,
+          },
+        }),
+      });
+      return body.type === "success";
+    } catch {
+      return false;
+    }
+  }
+
+  return true; // mock — always succeeds
+};
+
+// ── getOrderStatus ────────────────────────────────────────────────────────────
+// Note: Life File API has no GET /order endpoint per spec.
+// Status is tracked locally and updated via inbound webhooks.
+
+export const getOrderStatus = async (
   lifeFileOrderId: string
-): { status: Types.PharmacyStatus; details: Record<string, any> } => {
+): Promise<{ status: Types.PharmacyStatus; details: Record<string, unknown> }> => {
   const orders = db.pharmacyOrderDb.getAll();
   const order = orders.find((o) => o.lifeFileOrderId === lifeFileOrderId);
 
   if (!order) {
-    return {
-      status: "draft",
-      details: { error: "Order not found" },
-    };
+    return { status: "draft", details: { error: "Order not found" } };
   }
 
   return {
@@ -213,44 +430,3 @@ export const getOrderStatus = (
     },
   };
 };
-
-/**
- * PRODUCTION NOTES:
- *
- * Replace with actual Life File API implementation:
- *
- * export const createPharmacyOrder = async (order: Types.Order) => {
- *   const response = await fetch(`${API_BASE_URL}/order`, {
- *     method: "POST",
- *     headers: {
- *       "X-Vendor-ID": VENDOR_ID,
- *       "X-Location-ID": LOCATION_ID,
- *       "X-API-Network-ID": API_NETWORK_ID,
- *       "Authorization": `Basic ${btoa(API_USERNAME + ':' + API_PASSWORD)}`,
- *       "Content-Type": "application/json",
- *     },
- *     body: JSON.stringify(lifeFilePayload),
- *   });
- *
- *   if (!response.ok) {
- *     throw new Error(`Life File API error: ${response.statusText}`);
- *   }
- *
- *   const result = await response.json();
- *   // Save result with real Life File order ID...
- *   return result;
- * };
- *
- * export const updateOrderStatus = async (lifeFileOrderId, status) => {
- *   const response = await fetch(
- *     `${API_BASE_URL}/order/${lifeFileOrderId}/status`,
- *     {
- *       method: "PUT",
- *       headers: { ... },
- *       body: JSON.stringify({ status }),
- *     }
- *   );
- *
- *   return await response.json();
- * };
- */
