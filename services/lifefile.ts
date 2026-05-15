@@ -109,12 +109,15 @@ async function lfFetch(
 // ── createPharmacyOrder ───────────────────────────────────────────────────────
 
 export const createPharmacyOrder = async (
-  order: Types.Order
+  order: Types.Order,
+  overrides?: { patient?: Types.Patient | null; product?: Types.Product | null }
 ): Promise<Types.PharmacyOrder> => {
   const patient =
+    overrides?.patient ??
     db.patientDb.getById(order.patientId) ??
     await dbServer.patientDb.getById(order.patientId).catch(() => null);
   const product =
+    overrides?.product ??
     db.productDb.getById(order.productId) ??
     await dbServer.productDb.getById(order.productId).catch(() => null);
   const dose = product?.doses.find((d) => d.id === order.doseId);

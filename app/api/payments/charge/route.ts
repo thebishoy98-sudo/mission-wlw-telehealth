@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
 
     // 10. Life File — pharmacy prescription order
     try {
-      await lifefile.createPharmacyOrder(updatedOrder);
+      await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
       db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
