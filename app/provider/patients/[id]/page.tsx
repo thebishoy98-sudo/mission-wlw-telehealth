@@ -123,8 +123,8 @@ export default function PatientDetail() {
     await stepDelay(700);
     try {
       if (payment) {
-        const invoiceId = quickbooksService.createInvoice(selectedOrder, payment);
-        quickbooksService.recordPayment(invoiceId, payment.amount);
+        const invoiceId = await quickbooksService.createInvoice(selectedOrder, payment);
+        await quickbooksService.recordPayment(invoiceId, payment.amount);
         db.paymentDb.update(payment.id, { status: "completed", processedAt: new Date().toISOString() });
         db.orderDb.update(selectedOrder.id, { quickbooksStatus: "invoiced", paymentStatus: "completed" });
       }

@@ -85,8 +85,8 @@ export async function POST(req: NextRequest) {
     try {
       const patient = db.patientDb.getById(order.patientId);
       if (patient) {
-        quickbooks.createCustomerRecord(patient);
-        quickbooks.createInvoice(updatedOrder, payment);
+        await quickbooks.createCustomerRecord(patient);
+        await quickbooks.createInvoice(updatedOrder, payment);
         db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
       }
     } catch (e) {

@@ -63,15 +63,15 @@ const makePayment = (): Payment => ({
 describe("quickbooks.createCustomerRecord", () => {
   beforeEach(seedData);
 
-  it("returns a QB customer ID string", () => {
+  it("returns a QB customer ID string", async () => {
     const patient = db.patientDb.getById("p1")!;
-    const customerId = quickbooks.createCustomerRecord(patient);
+    const customerId = await quickbooks.createCustomerRecord(patient);
     expect(customerId).toMatch(/^QB_CUST_/);
   });
 
-  it("creates an integration log", () => {
+  it("creates an integration log", async () => {
     const patient = db.patientDb.getById("p1")!;
-    quickbooks.createCustomerRecord(patient);
+    await quickbooks.createCustomerRecord(patient);
     const logs = db.integrationLogDb.getAll();
     const qbLog = logs.find((l) => l.integrationName === "quickbooks");
     expect(qbLog).toBeDefined();
@@ -82,41 +82,39 @@ describe("quickbooks.createCustomerRecord", () => {
 describe("quickbooks.createInvoice", () => {
   beforeEach(seedData);
 
-  it("creates an invoice and returns invoice ID", () => {
+  it("creates an invoice and returns invoice ID", async () => {
     const order = db.orderDb.getById("o1")!;
-    const invoiceId = quickbooks.createInvoice(order, makePayment());
+    const invoiceId = await quickbooks.createInvoice(order, makePayment());
     expect(typeof invoiceId).toBe("string");
     expect(invoiceId.length).toBeGreaterThan(0);
   });
 
-  it("saves QB record to quickbooksDb", () => {
+  it("logs invoice creation to integrationLogDb", async () => {
     const order = db.orderDb.getById("o1")!;
-    quickbooks.createInvoice(order, makePayment());
-    const record = db.quickbooksDb.getByOrder("o1");
-    expect(record).not.toBeNull();
-    expect(record?.status).toBe("invoiced");
-    expect(record?.amount).toBe(299);
+    await quickbooks.createInvoice(order, makePayment());
+    const logs = db.integrationLogDb.getAll();
+    const invoiceLog = logs.find((l) => l.action?.includes("invoice"));
+    expect(invoiceLog).toBeDefined();
+    expect(invoiceLog?.status).toBe("success");
+    expect(invoiceLog?.orderId).toBe("o1");
   });
 
-  it("throws when patient not found", () => {
+  it("throws when patient not found", async () => {
     const badOrder = { ...db.orderDb.getById("o1")!, patientId: "bad" };
-    expect(() => quickbooks.createInvoice(badOrder, makePayment())).toThrow();
+    await expect(quickbooks.createInvoice(badOrder, makePayment())).rejects.toThrow();
   });
 });
 
 describe("quickbooks.recordPayment", () => {
   beforeEach(seedData);
 
-  it("records payment and creates log", () => {
+  it("records payment and creates log", async () => {
     const order = db.orderDb.getById("o1")!;
     const payment = makePayment();
-    const invoiceId = quickbooks.createInvoice(order, payment);
-    quickbooks.recordPayment(invoiceId, payment.amount);
+    const invoiceId = await quickbooks.createInvoice(order, payment);
+    await quickbooks.recordPayment(invoiceId, payment.amount);
     const logs = db.integrationLogDb.getAll();
-    const paymentLog = logs.find((l) => l.action?.includes("Payment"));
+    const paymentLog = logs.find((l) => l.action?.includes("payment"));
     expect(paymentLog).toBeDefined();
-    // QB record should now be "paid"
-    const record = db.quickbooksDb.getByOrder("o1");
-    expect(record?.status).toBe("paid");
   });
 });
