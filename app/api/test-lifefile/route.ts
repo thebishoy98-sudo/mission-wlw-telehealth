@@ -33,7 +33,7 @@ export async function GET() {
       },
       body: JSON.stringify(testPayload),
     });
-    const body = await res.json().catch(() => ({ raw: await res.text() }));
+    const body = await res.json().catch(async () => ({ raw: await res.text() }));
     return NextResponse.json({
       httpStatus: res.status,
       httpOk: res.ok,
