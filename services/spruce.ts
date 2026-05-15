@@ -16,9 +16,10 @@ const API_KEY = "sk_live_spruce_mock_12345"; // Placeholder - use real API key i
 export const sendMessage = (
   patientId: string,
   templateKey: string,
-  variables: Record<string, string> = {}
+  variables: Record<string, string> = {},
+  patientOverride?: Types.Patient | null
 ): Types.SpruceMessage => {
-  const patient = db.patientDb.getById(patientId);
+  const patient = patientOverride ?? db.patientDb.getById(patientId);
   const template = db.messageTemplateDb.getByKey(templateKey);
 
   if (!patient || !template) {

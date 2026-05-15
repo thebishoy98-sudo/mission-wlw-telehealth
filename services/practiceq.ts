@@ -13,10 +13,13 @@ import { generateId } from "@/lib/utils";
 const API_BASE_URL = "https://mock.practiceq.api/v2"; // Placeholder - replace in production
 const API_KEY = "sk_live_mock_key_12345"; // Placeholder - replace with real key
 
-export const submitIntakePacket = (order: Types.Order): Types.PracticeQPacket => {
+export const submitIntakePacket = (
+  order: Types.Order,
+  overrides?: { patient?: Types.Patient | null; product?: Types.Product | null }
+): Types.PracticeQPacket => {
   // Gather order data
-  const patient = db.patientDb.getById(order.patientId);
-  const product = db.productDb.getById(order.productId);
+  const patient = overrides?.patient ?? db.patientDb.getById(order.patientId);
+  const product = overrides?.product ?? db.productDb.getById(order.productId);
   const answers = db.answerDb.getByOrder(order.id);
   const consent = db.consentDb.getByOrder(order.id);
   const uploads = db.uploadDb.getByOrder(order.id);

@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
 
     // 9. PracticeQ — intake packet for provider chart
     try {
-      await practiceq.submitIntakePacket(updatedOrder);
+      await practiceq.submitIntakePacket(updatedOrder, { patient, product: productData ?? null });
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
 
     // 11. Spruce SMS — "payment received, order processing"
     try {
-      await spruce.sendMessage(patient.id, "payment_received", { orderId });
+      await spruce.sendMessage(patient.id, "payment_received", { orderId }, patient);
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {
       errors.push(`Spruce SMS: ${(e as Error).message}`);
