@@ -33,7 +33,7 @@ import type { Payment } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardLast4, cardBrand, amount } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -96,9 +96,15 @@ export async function POST(req: NextRequest) {
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
     try {
       chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
-        token,          // qbpayments.js token (preferred)
+        token,
+        cardNumber,
+        expMonth,
+        expYear,
+        cvc,
+        cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
         cardLast4,
         cardBrand,
+        billingAddress: patient.address,
       });
     } catch (err: any) {
       return NextResponse.json(
@@ -140,19 +146,22 @@ export async function POST(req: NextRequest) {
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     try {
-      quickbooks.createCustomerRecord(patient);
-      quickbooks.createInvoice(updatedOrder, payment);
-      quickbooks.recordPayment(payment.transactionId, payment.amount);
+      await quickbooks.createCustomerRecord(patient);
+      const invoiceId = await quickbooks.createInvoice(updatedOrder, payment);
+      await quickbooks.recordPayment(invoiceId, payment.amount);
       db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
+      await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
     } catch (e) {
       errors.push(`QuickBooks accounting: ${(e as Error).message}`);
       db.orderDb.update(orderId, { quickbooksStatus: "error" });
+      await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
     }
 
     // 9. PracticeQ — intake packet for provider chart
     try {
-      practiceq.submitIntakePacket(updatedOrder);
+      await practiceq.submitIntakePacket(updatedOrder);
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);
     } catch (e) {
       errors.push(`PracticeQ: ${(e as Error).message}`);
@@ -161,8 +170,9 @@ export async function POST(req: NextRequest) {
 
     // 10. Life File — pharmacy prescription order
     try {
-      lifefile.createPharmacyOrder(updatedOrder);
+      await lifefile.createPharmacyOrder(updatedOrder);
       db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
+      await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
     } catch (e) {
       errors.push(`Life File: ${(e as Error).message}`);
@@ -171,7 +181,7 @@ export async function POST(req: NextRequest) {
 
     // 11. Spruce SMS — "payment received, order processing"
     try {
-      spruce.sendMessage(patient.id, "payment_received", { orderId });
+      await spruce.sendMessage(patient.id, "payment_received", { orderId });
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {
       errors.push(`Spruce SMS: ${(e as Error).message}`);

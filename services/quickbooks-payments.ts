@@ -16,9 +16,13 @@
 
 import * as db from "@/lib/db";
 import { generateId } from "@/lib/utils";
+import { getQBAccessToken } from "@/lib/qb-oauth";
 
 const PAYMENTS_BASE_URL =
-  process.env.QB_PAYMENTS_BASE_URL ?? "https://api.intuit.com/quickbooks/v4/payments";
+  process.env.QB_PAYMENTS_BASE_URL ??
+  (process.env.QB_REALM_ID === "9341457089968240"
+    ? "https://sandbox.api.intuit.com/quickbooks/v4/payments"
+    : "https://api.intuit.com/quickbooks/v4/payments");
 
 interface QBChargeRequest {
   amount: string; // e.g. "299.00"
@@ -66,39 +70,6 @@ interface QBChargeResponse {
   updated: string;
 }
 
-/**
- * Get a fresh OAuth access token for the Payments API.
- * Reuses the same refresh token as QuickBooks accounting.
- */
-async function getAccessToken(): Promise<string> {
-  const { QB_CLIENT_ID, QB_CLIENT_SECRET, QB_REFRESH_TOKEN } = process.env;
-
-  if (!QB_CLIENT_ID || !QB_CLIENT_SECRET || !QB_REFRESH_TOKEN) {
-    throw new Error("QuickBooks OAuth credentials not configured (QB_CLIENT_ID, QB_CLIENT_SECRET, QB_REFRESH_TOKEN)");
-  }
-
-  const credentials = Buffer.from(`${QB_CLIENT_ID}:${QB_CLIENT_SECRET}`).toString("base64");
-
-  const res = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Authorization": `Basic ${credentials}`,
-      "Accept": "application/json",
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: QB_REFRESH_TOKEN,
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`QB OAuth token refresh failed: ${res.status} ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  return data.access_token;
-}
 
 /**
  * Charge a card using the QuickBooks Payments API.
@@ -114,9 +85,15 @@ export async function chargeCard(
   amountCents: number,
   paymentDetails: {
     token?: string;       // preferred: tokenized card from qbpayments.js
+    cardNumber?: string;  // raw card (sandbox/server-to-server only)
+    expMonth?: string;
+    expYear?: string;
+    cvc?: string;
+    cardName?: string;
     cardLast4?: string;
     cardBrand?: string;
     customerIdRef?: string;
+    billingAddress?: { street1: string; city: string; state: string; zipCode: string; country: string };
   }
 ): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
   const amountDollars = (amountCents / 100).toFixed(2);
@@ -136,7 +113,7 @@ export async function chargeCard(
   }
 
   // ── Real QB Payments API ───────────────────────────────────────────────────
-  const accessToken = await getAccessToken();
+  const accessToken = await getQBAccessToken();
   const requestId = generateId(); // idempotency key
 
   const payload: QBChargeRequest = {
@@ -147,6 +124,27 @@ export async function chargeCard(
     customerIdRef: paymentDetails.customerIdRef,
     ...(paymentDetails.token
       ? { token: paymentDetails.token }
+      : paymentDetails.cardNumber
+      ? {
+          card: {
+            number: paymentDetails.cardNumber,
+            expMonth: paymentDetails.expMonth ?? "",
+            expYear: paymentDetails.expYear ?? "",
+            cvc: paymentDetails.cvc ?? "",
+            name: paymentDetails.cardName ?? "",
+            ...(paymentDetails.billingAddress
+              ? {
+                  address: {
+                    streetAddress: paymentDetails.billingAddress.street1,
+                    city: paymentDetails.billingAddress.city,
+                    region: paymentDetails.billingAddress.state,
+                    country: paymentDetails.billingAddress.country ?? "US",
+                    postalCode: paymentDetails.billingAddress.zipCode,
+                  },
+                }
+              : {}),
+          },
+        }
       : {}),
   };
 
@@ -198,7 +196,7 @@ export async function chargeCard(
 export async function voidCharge(chargeId: string): Promise<void> {
   if (!process.env.QB_CLIENT_ID) return; // mock mode
 
-  const accessToken = await getAccessToken();
+  const accessToken = await getQBAccessToken();
   await fetch(`${PAYMENTS_BASE_URL}/charges/${chargeId}/void`, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Request-Id": generateId() },
@@ -214,7 +212,7 @@ export async function refundCharge(
 ): Promise<void> {
   if (!process.env.QB_CLIENT_ID) return; // mock mode
 
-  const accessToken = await getAccessToken();
+  const accessToken = await getQBAccessToken();
   const body = amountCents
     ? JSON.stringify({ amount: (amountCents / 100).toFixed(2), currency: "USD" })
     : undefined;

@@ -17,9 +17,12 @@ export default function Payment() {
   const [intakeState] = useState(getIntakeState());
   const [product, setProduct] = useState<Types.Product | null>(null);
   const [dose, setDose] = useState<Types.DoseOption | null>(null);
-  const [cardLast4, setCardLast4] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
+  const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
     if (intakeState.productId) {
@@ -33,7 +36,9 @@ export default function Payment() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cardLast4) return;
+    const digits = cardNumber.replace(/\s/g, "");
+    if (digits.length < 15 || !cardExpiry || cardCvc.length < 3) return;
+    setPaymentError("");
     setProcessing(true);
 
     setProcessingStep("Setting up your account...");
@@ -57,37 +62,25 @@ export default function Payment() {
 
     const amount = dose?.price || product?.startingPrice || 0;
 
-    // Create order — starts as pending_review for provider audit, will be auto-processed below
+    // Create order as draft — the charge API transitions it through statuses
     const order = db.orderDb.create({
       id: `order_${Date.now()}`,
       patientId: patient.id,
       productId: intakeState.productId,
       doseId: intakeState.doseId,
-      status: "pending_review",
-      paymentStatus: "completed",
+      status: "draft",
+      paymentStatus: "pending",
       pharmacyStatus: "draft",
       practiceQStatus: "pending",
-      quickbooksStatus: "created",
+      quickbooksStatus: "pending",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      submittedAt: new Date().toISOString(),
     });
 
-    // Save payment as captured
-    const payment = db.paymentDb.create({
-      id: `payment_${Date.now()}`,
-      orderId: order.id,
-      patientId: patient.id,
-      amount,
-      currency: "USD",
-      status: "completed",
-      paymentMethod: "credit_card",
-      cardLast4,
-      cardBrand: "Visa",
-      transactionId: `txn_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      processedAt: new Date().toISOString(),
-    });
+    // Payment record will be created by the charge API after real charge succeeds
+    const cardDigits = cardNumber.replace(/\s/g, "");
+    const cardLast4 = cardDigits.slice(-4);
+    const [expMonth, expYear] = cardExpiry.split("/").map((s) => s.trim());
 
     // Save questionnaire answers
     const qaAnswers = intakeState.questionnaireAnswers || {};
@@ -143,46 +136,33 @@ export default function Payment() {
       });
     }
 
-    // Create provider review record (for audit trail — provider can still view/mark chart)
-    db.providerReviewDb.create({
-      id: `review_${Date.now()}`,
-      orderId: order.id,
-      patientId: patient.id,
-      status: "approved",
-      reviewedAt: new Date().toISOString(),
-      reviewedBy: "Auto-processed",
-      notes: "Automatically processed — patient passed eligibility screening.",
+    // ── Call API route → QB Payments charge → integration chain ────────────
+    setProcessingStep("Charging card via QuickBooks Payments...");
+
+    const res = await fetch("/api/payments/charge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: order.id,
+        cardNumber: cardDigits,
+        expMonth,
+        expYear: expYear?.length === 2 ? `20${expYear}` : expYear,
+        cvc: cardCvc,
+        cardName: `${intakeState.firstName} ${intakeState.lastName}`,
+        cardLast4,
+        cardBrand: "Visa",
+        amount: total,
+      }),
     });
 
-    // ── Call API route → QB Payments → integration chain ───────────────────
-    // In production, qbpayments.js tokenizes the card before this call.
-    // The API route handles: QB charge → QB invoice → PracticeQ → Pharmacy → SMS
-    setProcessingStep("Charging via QuickBooks Payments...");
-    await delay(600);
-
-    try {
-      const res = await fetch("/api/payments/charge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: order.id,
-          // token: qbToken,  // production: token from qbpayments.js
-          cardLast4,
-          cardBrand: "Visa",
-          amount: total,
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) {
-        db.integrationLogDb.create({
-          id: `log_${Date.now()}`, timestamp: new Date().toISOString(),
-          integrationName: "quickbooks", action: "Payment API error",
-          orderId: order.id, patientId: patient.id,
-          status: "error", details: { error: result.error },
-        });
-        // Continue anyway in demo mode — payment page already created local records
-      }
-    } catch { /* API route unavailable in dev, demo continues */ }
+    const result = await res.json();
+    if (!res.ok) {
+      setPaymentError(result.error ?? "Payment failed. Please check your card details.");
+      setProcessing(false);
+      // Clean up the draft order so patient can retry
+      db.orderDb.update(order.id, { status: "cancelled" as any });
+      return;
+    }
 
     setProcessingStep("Finalizing order...");
     await delay(500);
@@ -246,15 +226,11 @@ export default function Payment() {
                 type="text"
                 placeholder="4242 4242 4242 4242"
                 maxLength={19}
+                value={cardNumber}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "");
                   const formatted = digits.replace(/(.{4})/g, "$1 ").trim();
-                  e.target.value = formatted;
-                  if (digits.length >= 4) {
-                    setCardLast4(digits.slice(-4));
-                  } else {
-                    setCardLast4("");
-                  }
+                  setCardNumber(formatted);
                 }}
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent font-mono text-sm tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400"
               />
@@ -262,9 +238,39 @@ export default function Payment() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Expiry (MM/YY)" placeholder="12/26" />
-            <Input label="CVV" placeholder="•••" type="password" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Expiry (MM/YY)</label>
+              <input
+                type="text"
+                placeholder="12/26"
+                maxLength={5}
+                value={cardExpiry}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/\D/g, "");
+                  if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
+                  setCardExpiry(v);
+                }}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">CVV</label>
+              <input
+                type="password"
+                placeholder="•••"
+                maxLength={4}
+                value={cardCvc}
+                onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+              />
+            </div>
           </div>
+
+          {paymentError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {paymentError}
+            </div>
+          )}
         </div>
       </div>
 
@@ -286,7 +292,7 @@ export default function Payment() {
         <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/uploads")} disabled={processing}>
           Back
         </Button>
-        <Button fullWidth type="submit" disabled={processing || !cardLast4}>
+        <Button fullWidth type="submit" disabled={processing || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
           {processing ? "Processing..." : `Pay ${formatCurrency(total)}`}
         </Button>
       </div>
