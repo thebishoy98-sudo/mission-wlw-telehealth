@@ -225,6 +225,30 @@ export const createPharmacyOrder = async (
     } catch (err) {
       status = "error";
       lastError = (err as Error).message;
+      // Save the failed record then re-throw so callers can report the error
+      const failedOrder: Types.PharmacyOrder = {
+        id: generateId(),
+        orderId: order.id,
+        patientId: order.patientId,
+        lifeFileOrderId,
+        status,
+        payload: {} as Types.PharmacyOrder["payload"],
+        submittedAt: new Date().toISOString(),
+        lastError,
+      };
+      db.pharmacyOrderDb.create(failedOrder);
+      db.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "lifefile",
+        action: "Pharmacy order submission failed",
+        orderId: order.id,
+        patientId: order.patientId,
+        status: "error",
+        details: { lifeFileOrderId, mock: false },
+        error: lastError,
+      });
+      throw err;
     }
   }
 
