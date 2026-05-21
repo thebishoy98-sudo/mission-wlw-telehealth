@@ -6,7 +6,6 @@
  */
 
 import { serviceConfig } from "@/lib/service-config";
-import * as dbServer from "@/lib/db.server";
 import * as db from "@/lib/db";
 import { generateId, formatCurrency } from "@/lib/utils";
 import { getQBAccessToken } from "@/lib/qb-oauth";
@@ -58,7 +57,8 @@ async function logIntegration(
     details,
   };
   db.integrationLogDb.create(entry);
-  await dbServer.integrationLogDb.create(entry).catch(() => {});
+  const dbServer = typeof window === "undefined" ? await eval('import("@/lib/db.server")') : null;
+  await dbServer?.integrationLogDb.create(entry).catch(() => {});
 }
 
 export async function createCustomerRecord(patient: Patient): Promise<string> {
@@ -103,14 +103,15 @@ export async function createInvoice(
   overrides?: { patient?: Patient | null; product?: any | null; qbCustomerId?: string }
 ): Promise<string> {
   const config = serviceConfig.quickbooks;
+  const dbServer = typeof window === "undefined" ? await eval('import("@/lib/db.server")') : null;
 
   const patient =
     overrides?.patient ??
-    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+    (await dbServer?.patientDb.getById(order.patientId).catch(() => null)) ??
     db.patientDb.getById(order.patientId);
   const product =
     overrides?.product ??
-    (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
+    (await dbServer?.productDb.getById(order.productId).catch(() => null)) ??
     db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 

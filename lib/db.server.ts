@@ -11,6 +11,7 @@
  *   4. Run: npm run db:migrate
  */
 
+import { Client } from "pg";
 import type {
   Patient, Order, Payment, Product, Question, QuestionnaireAnswer,
   ConsentRecord, Upload, ProviderReview, PharmacyOrder, PracticeQPacket,
@@ -53,7 +54,6 @@ async function sql(strings: TemplateStringsArray, ...values: any[]) {
   const text = strings.reduce((query, chunk, index) => {
     return `${query}${index > 0 ? `$${index}` : ""}${chunk}`;
   }, "");
-  const { Client } = eval("require")("pg");
   const client = new Client({
     connectionString: process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL,
     ssl: { rejectUnauthorized: false },
