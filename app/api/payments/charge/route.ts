@@ -169,8 +169,12 @@ export async function POST(req: NextRequest) {
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     try {
-      await quickbooks.createCustomerRecord(patient);
-      const invoiceId = await quickbooks.createInvoice(updatedOrder, payment);
+      const qbCustomerId = await quickbooks.createCustomerRecord(patient);
+      const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
+        patient,
+        product: productData ?? null,
+        qbCustomerId,
+      });
       await quickbooks.recordPayment(invoiceId, payment.amount);
       db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
       await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});

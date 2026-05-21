@@ -97,13 +97,19 @@ export async function createCustomerRecord(patient: Patient): Promise<string> {
   return customerId;
 }
 
-export async function createInvoice(order: Order, payment: Payment): Promise<string> {
+export async function createInvoice(
+  order: Order,
+  payment: Payment,
+  overrides?: { patient?: Patient | null; product?: any | null; qbCustomerId?: string }
+): Promise<string> {
   const config = serviceConfig.quickbooks;
 
   const patient =
+    overrides?.patient ??
     (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
     db.patientDb.getById(order.patientId);
   const product =
+    overrides?.product ??
     (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
     db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
@@ -126,7 +132,7 @@ export async function createInvoice(order: Order, payment: Payment): Promise<str
         },
       ],
       CustomerRef: {
-        value: patient.id,
+        value: overrides?.qbCustomerId ?? patient.id,
         name: `${patient.firstName} ${patient.lastName}`,
       },
       TxnDate: new Date().toISOString().split("T")[0],
