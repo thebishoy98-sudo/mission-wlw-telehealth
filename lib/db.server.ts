@@ -11,7 +11,6 @@
  *   4. Run: npm run db:migrate
  */
 
-import { sql } from "@vercel/postgres";
 import type {
   Patient, Order, Payment, Product, Question, QuestionnaireAnswer,
   ConsentRecord, Upload, ProviderReview, PharmacyOrder, PracticeQPacket,
@@ -48,7 +47,25 @@ export const productDb = {
   },
 };
 
-const isDbAvailable = () => !!process.env.POSTGRES_URL;
+const isDbAvailable = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
+
+async function sql(strings: TemplateStringsArray, ...values: any[]) {
+  const text = strings.reduce((query, chunk, index) => {
+    return `${query}${index > 0 ? `$${index}` : ""}${chunk}`;
+  }, "");
+  const { Client } = eval("require")("pg");
+  const client = new Client({
+    connectionString: process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+
+  await client.connect();
+  try {
+    return await client.query(text, values);
+  } finally {
+    await client.end();
+  }
+}
 
 // ── Patients ──────────────────────────────────────────────────────────────────
 
