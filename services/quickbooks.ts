@@ -116,7 +116,7 @@ export async function createInvoice(
 
   if (!patient || !product || !dose) throw new Error("Invalid order data for QB invoice");
 
-  const amountDollars = payment.amount; // amount stored in dollars
+  const amountDollars = payment.amount / 100; // payment amount is stored in cents
 
   if (!config.useMock) {
     const result = await qboPost("/invoice", {
@@ -126,8 +126,8 @@ export async function createInvoice(
           DetailType: "SalesItemLineDetail",
           Description: `${product.name} - ${dose.label}`,
           SalesItemLineDetail: {
-            Qty: dose.quantity,
-            UnitPrice: dose.price,
+            Qty: 1,
+            UnitPrice: amountDollars,
           },
         },
       ],
