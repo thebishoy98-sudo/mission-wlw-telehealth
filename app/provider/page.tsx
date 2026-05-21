@@ -11,6 +11,7 @@ import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
 import { ClipboardCheck, Eye } from "lucide-react";
+import { getIdentityGate } from "@/lib/identity";
 
 function ProviderDashboardContent() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
@@ -51,6 +52,27 @@ function ProviderDashboardContent() {
     });
     reload();
     setApprovingAll(false);
+  };
+
+  const handleManualIdentityApproval = (order: Types.Order) => {
+    db.orderDb.update(order.id, {
+      identityStatus: "manual_approved",
+      identityReason: "Manually approved by provider",
+      identityReviewedAt: new Date().toISOString(),
+      identityReviewedBy: "provider",
+      status: "approved",
+      approvedAt: new Date().toISOString(),
+    });
+    const review = db.providerReviewDb.getByOrder(order.id);
+    if (review) {
+      db.providerReviewDb.update(review.id, {
+        identityReviewRequired: false,
+        status: "approved",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: "provider",
+      });
+    }
+    reload();
   };
 
   return (
@@ -127,14 +149,26 @@ function ProviderDashboardContent() {
                               Not yet reviewed
                             </span>
                           )}
+                          {!getIdentityGate(order).canDispatch && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
+                              Identity review
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600 mt-0.5">
                           Order {order.id.slice(-6)} • {formatDateTime(order.createdAt)}
                         </p>
                       </div>
-                      <Link href={`/provider/patients/${order.patientId}`}>
-                        <Button size="sm">Review Chart</Button>
-                      </Link>
+                      <div className="flex gap-2">
+                        {!getIdentityGate(order).canDispatch && (
+                          <Button size="sm" variant="outline" onClick={() => handleManualIdentityApproval(order)}>
+                            Approve Identity
+                          </Button>
+                        )}
+                        <Link href={`/provider/patients/${order.patientId}`}>
+                          <Button size="sm">Review Chart</Button>
+                        </Link>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

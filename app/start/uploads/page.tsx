@@ -12,6 +12,8 @@ export default function Uploads() {
   const [licenseUploaded, setLicenseUploaded] = useState(false);
   const [selfieUploaded, setSelfieUploaded] = useState(false);
   const [licensePreview, setLicensePreview] = useState<string>("");
+  const [licenseImageData, setLicenseImageData] = useState<string>("");
+  const [selfieFrameData, setSelfieFrameData] = useState<string>("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -19,15 +21,32 @@ export default function Uploads() {
   const handleLicenseUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      setLicensePreview(e.target?.result as string);
+      const dataUrl = e.target?.result as string;
+      setLicensePreview(dataUrl);
+      setLicenseImageData(dataUrl);
       setLicenseUploaded(true);
     };
     reader.readAsDataURL(file);
   };
 
   const handleVideoUpload = (file: File) => {
-    // Accept any video file for demo
-    setSelfieUploaded(true);
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.src = url;
+    video.muted = true;
+    video.playsInline = true;
+    video.onloadeddata = () => {
+      video.currentTime = Math.min(1, video.duration || 1);
+    };
+    video.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setSelfieFrameData(canvas.toDataURL("image/jpeg", 0.85));
+      setSelfieUploaded(true);
+      URL.revokeObjectURL(url);
+    };
   };
 
   const startMockRecording = () => {
@@ -47,10 +66,16 @@ export default function Uploads() {
     if (timerRef.current) clearInterval(timerRef.current);
     setRecording(false);
     setSelfieUploaded(true);
+    setSelfieFrameData("");
   };
 
   const handleContinue = () => {
-    saveIntakeState({ licenseUploaded: true, selfieUploaded: true });
+    saveIntakeState({
+      licenseUploaded,
+      selfieUploaded,
+      licenseImageData,
+      selfieFrameData,
+    });
     router.push("/start/payment");
   };
 

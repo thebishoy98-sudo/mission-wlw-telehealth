@@ -117,7 +117,7 @@ export default function Payment() {
         filename: "drivers_license.jpg",
         fileSize: 245000,
         mimeType: "image/jpeg",
-        base64Data: "",
+        base64Data: intakeState.licenseImageData ?? "",
         uploadedAt: new Date().toISOString(),
         status: "uploaded",
       });
@@ -132,7 +132,7 @@ export default function Payment() {
         mimeType: "video/mp4",
         uploadedAt: new Date().toISOString(),
         status: "uploaded",
-        base64Data: "",
+        base64Data: intakeState.selfieFrameData ?? "",
       });
     }
 
@@ -152,6 +152,10 @@ export default function Payment() {
         cardLast4,
         cardBrand: "Visa",
         amount: total,
+        identityUploads: {
+          licenseImageData: intakeState.licenseImageData,
+          selfieFrameData: intakeState.selfieFrameData,
+        },
         // Send full patient + order data so server can create in Postgres
         // (localStorage is not accessible server-side)
         patientData: {
@@ -177,6 +181,7 @@ export default function Payment() {
           pharmacyStatus: "draft",
           practiceQStatus: "pending",
           quickbooksStatus: "pending",
+          identityStatus: "missing",
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },

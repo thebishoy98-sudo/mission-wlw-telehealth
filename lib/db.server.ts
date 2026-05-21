@@ -101,6 +101,12 @@ export const orderDb = {
     return rows[0] ? rowToOrder(rows[0]) : null;
   },
 
+  async getByIdentityUploadToken(token: string): Promise<Order | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM orders WHERE identity_upload_token = ${token} LIMIT 1`;
+    return rows[0] ? rowToOrder(rows[0]) : null;
+  },
+
   async getByPatient(patientId: string): Promise<Order[]> {
     const { rows } = await sql`
       SELECT * FROM orders WHERE patient_id = ${patientId} ORDER BY created_at DESC
@@ -123,10 +129,14 @@ export const orderDb = {
   async create(o: Order): Promise<Order> {
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
-        pharmacy_status, practice_q_status, quickbooks_status, created_at, updated_at)
+        pharmacy_status, practice_q_status, quickbooks_status, identity_status,
+        identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
+        identity_upload_token, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus},
-        ${o.createdAt}, ${o.updatedAt})
+        ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
+        ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null},
+        ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
   },
@@ -144,10 +154,40 @@ export const orderDb = {
         approved_at        = COALESCE(${data.approvedAt ?? null}, approved_at),
         provider_notes     = COALESCE(${data.providerNotes ?? null}, provider_notes),
         rejection_reason   = COALESCE(${data.rejectionReason ?? null}, rejection_reason),
+        identity_status    = COALESCE(${data.identityStatus ?? null}, identity_status),
+        identity_reason    = COALESCE(${data.identityReason ?? null}, identity_reason),
+        identity_reviewed_at = COALESCE(${data.identityReviewedAt ?? null}, identity_reviewed_at),
+        identity_reviewed_by = COALESCE(${data.identityReviewedBy ?? null}, identity_reviewed_by),
+        identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
+        identity_upload_token = COALESCE(${data.identityUploadToken ?? null}, identity_upload_token),
         updated_at         = ${now}
       WHERE id = ${id}
     `;
     return this.getById(id);
+  },
+};
+
+// ── Uploads ───────────────────────────────────────────────────────────────────
+
+export const uploadDb = {
+  async getByOrder(orderId: string): Promise<Upload[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM uploads WHERE order_id = ${orderId} ORDER BY uploaded_at ASC
+    `;
+    return rows.map(rowToUpload);
+  },
+
+  async create(upload: Upload): Promise<Upload> {
+    await sql`
+      INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
+        storage_url, base64_data, uploaded_at, status, verification_notes)
+      VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
+        ${upload.fileSize}, ${upload.mimeType}, ${""}, ${upload.base64Data ?? ""},
+        ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return upload;
   },
 };
 
@@ -241,12 +281,14 @@ export const providerReviewDb = {
     await sql`
       INSERT INTO provider_reviews (id, order_id, patient_id, status, reviewed_at,
         reviewed_by, notes, rejection_reason, chart_viewed_at, chart_viewed_by,
-        ai_summary, ai_flags, created_at)
+        ai_summary, ai_flags, identity_ai_result, identity_review_required, created_at)
       VALUES (${r.id}, ${r.orderId}, ${r.patientId}, ${r.status},
         ${r.reviewedAt ?? null}, ${r.reviewedBy ?? null}, ${r.notes ?? null},
         ${r.rejectionReason ?? null}, ${r.chartViewedAt ?? null},
         ${r.chartViewedBy ?? null}, ${(r as any).aiSummary ?? null},
-        ${JSON.stringify((r as any).aiFlags ?? [])}, ${new Date().toISOString()})
+        ${JSON.stringify((r as any).aiFlags ?? [])},
+        ${r.identityAiResult ? JSON.stringify(r.identityAiResult) : null},
+        ${r.identityReviewRequired ?? false}, ${new Date().toISOString()})
     `;
     return r;
   },
@@ -262,7 +304,9 @@ export const providerReviewDb = {
         chart_viewed_at  = COALESCE(${data.chartViewedAt ?? null}, chart_viewed_at),
         chart_viewed_by  = COALESCE(${data.chartViewedBy ?? null}, chart_viewed_by),
         ai_summary       = COALESCE(${data.aiSummary ?? null}, ai_summary),
-        ai_flags         = COALESCE(${data.aiFlags ? JSON.stringify(data.aiFlags) : null}::jsonb, ai_flags)
+        ai_flags         = COALESCE(${data.aiFlags ? JSON.stringify(data.aiFlags) : null}::jsonb, ai_flags),
+        identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
+        identity_review_required = COALESCE(${data.identityReviewRequired ?? null}, identity_review_required)
       WHERE id = ${id}
     `;
     return this.getByOrder(id);
@@ -417,7 +461,28 @@ function rowToOrder(r: any): Order {
     submittedAt: r.submitted_at ?? undefined, approvedAt: r.approved_at ?? undefined,
     providerNotes: r.provider_notes ?? undefined,
     rejectionReason: r.rejection_reason ?? undefined,
+    identityStatus: r.identity_status ?? undefined,
+    identityReason: r.identity_reason ?? undefined,
+    identityReviewedAt: r.identity_reviewed_at ?? undefined,
+    identityReviewedBy: r.identity_reviewed_by ?? undefined,
+    identityAiResult: r.identity_ai_result ?? undefined,
+    identityUploadToken: r.identity_upload_token ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+
+function rowToUpload(r: any): Upload {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    type: r.type,
+    filename: r.filename,
+    fileSize: r.file_size,
+    mimeType: r.mime_type,
+    base64Data: r.base64_data ?? "",
+    uploadedAt: r.uploaded_at,
+    status: r.status,
+    verificationNotes: r.verification_notes ?? undefined,
   };
 }
 
@@ -440,6 +505,8 @@ function rowToReview(r: any): ProviderReview {
     rejectionReason: r.rejection_reason ?? undefined,
     chartViewedAt: r.chart_viewed_at ?? undefined,
     chartViewedBy: r.chart_viewed_by ?? undefined,
+    identityAiResult: r.identity_ai_result ?? undefined,
+    identityReviewRequired: r.identity_review_required ?? undefined,
   };
 }
 

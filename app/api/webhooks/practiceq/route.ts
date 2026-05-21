@@ -20,6 +20,7 @@ import * as dbServer from "@/lib/db.server";
 import * as spruce from "@/services/spruce";
 import * as lifefile from "@/services/lifefile";
 import { generateId } from "@/lib/utils";
+import { getIdentityGate } from "@/lib/identity";
 
 export async function POST(req: NextRequest) {
   // Verify API key header
@@ -60,8 +61,16 @@ export async function POST(req: NextRequest) {
 
     case "intake.approved": {
       db.practiceqDb.update(packet.id, { status: "completed" });
-      db.orderDb.update(orderId, { status: "sent_to_pharmacy", practiceQStatus: "completed" });
-      await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", practiceQStatus: "completed" }).catch(() => {});
+      const approvalUpdate = {
+        status: "sent_to_pharmacy" as const,
+        practiceQStatus: "completed" as const,
+        identityStatus: "manual_approved" as const,
+        identityReason: "Chart approved in PracticeQ/provider portal.",
+        identityReviewedAt: new Date().toISOString(),
+        identityReviewedBy: "provider-via-practiceq",
+      };
+      db.orderDb.update(orderId, approvalUpdate);
+      await dbServer.orderDb.update(orderId, approvalUpdate).catch(() => {});
 
       const review = db.providerReviewDb.getByOrder(orderId);
       if (review) {
@@ -73,7 +82,7 @@ export async function POST(req: NextRequest) {
 
       // Trigger pharmacy order if not already sent
       const order = db.orderDb.getById(orderId);
-      if (order && db.pharmacyOrderDb.getByOrder(orderId) === null) {
+      if (order && getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(orderId) === null) {
         try { await lifefile.createPharmacyOrder(order); } catch {}
       }
 

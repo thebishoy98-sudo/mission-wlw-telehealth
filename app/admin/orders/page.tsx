@@ -14,6 +14,7 @@ import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "
 import * as lifefileService from "@/services/lifefile";
 import * as spruceService from "@/services/spruce";
 import { Toast } from "@/components/ui/Toast";
+import { getIdentityGate } from "@/lib/identity";
 
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
@@ -37,9 +38,14 @@ export default function OrdersManagement() {
     setPatients(patientMap);
   }, []);
 
-  const handleSendToPharmacy = (order: Types.Order) => {
+  const handleSendToPharmacy = async (order: Types.Order) => {
     try {
-      const pharmacy = lifefileService.createPharmacyOrder(order);
+      const gate = getIdentityGate(order);
+      if (!gate.canDispatch) {
+        setToast({ message: "Identity must be verified or manually approved before pharmacy dispatch.", type: "error" });
+        return;
+      }
+      await lifefileService.createPharmacyOrder(order);
       db.orderDb.update(order.id, { pharmacyStatus: "submitted" });
 
       // Send notification
@@ -119,6 +125,9 @@ export default function OrdersManagement() {
                         <th className="px-6 py-3 text-left text-sm font-semibold">
                           Pharmacy
                         </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Identity
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -154,6 +163,11 @@ export default function OrdersManagement() {
                                 {getStatusLabel(order.pharmacyStatus)}
                               </Badge>
                             </td>
+                            <td className="px-6 py-4 text-sm">
+                              <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                                {order.identityStatus ?? "missing"}
+                              </Badge>
+                            </td>
                           </tr>
                         );
                       })}
@@ -182,8 +196,35 @@ export default function OrdersManagement() {
                       <strong>Created:</strong>{" "}
                       {formatDateTime(selectedOrder.createdAt)}
                     </p>
+                    <p>
+                      <strong>Identity:</strong>{" "}
+                      {selectedOrder.identityStatus ?? "missing"}
+                    </p>
+                    {selectedOrder.identityReason && (
+                      <p className="text-gray-600">{selectedOrder.identityReason}</p>
+                    )}
 
-                    {selectedOrder.status === "approved" && selectedOrder.pharmacyStatus === "draft" && (
+                    {!getIdentityGate(selectedOrder).canDispatch && (
+                      <Button
+                        fullWidth
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => {
+                          db.orderDb.update(selectedOrder.id, {
+                            identityStatus: "manual_approved",
+                            identityReason: "Manually approved by admin",
+                            identityReviewedAt: new Date().toISOString(),
+                            identityReviewedBy: "admin",
+                          });
+                          setSelectedOrder({ ...selectedOrder, identityStatus: "manual_approved", identityReason: "Manually approved by admin" });
+                          setOrders((prev) => prev.map((order) => order.id === selectedOrder.id ? { ...order, identityStatus: "manual_approved", identityReason: "Manually approved by admin" } : order));
+                        }}
+                      >
+                        Manually Approve Identity
+                      </Button>
+                    )}
+
+                    {(selectedOrder.status === "approved" || selectedOrder.status === "pending_review") && selectedOrder.pharmacyStatus === "draft" && (
                       <Button
                         fullWidth
                         className="mt-4"

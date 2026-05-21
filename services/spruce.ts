@@ -1,17 +1,68 @@
 /**
- * Mock Spruce SMS Integration Service
- *
- * In production, replace with actual Spruce API:
- * const API_BASE_URL = "https://api.spruce.health/v1"
- * Use Bearer token authentication
+ * Spruce SMS Integration Service
  */
 
 import * as Types from "@/types";
 import * as db from "@/lib/db";
 import { generateId } from "@/lib/utils";
 
-const API_BASE_URL = "https://mock.spruce.api/v1"; // Placeholder - replace in production
-const API_KEY = "sk_live_spruce_mock_12345"; // Placeholder - use real API key in production
+const API_BASE_URL = "https://api.sprucehealth.com/v1";
+
+const getSpruceAuthToken = () => {
+  if (process.env.SPRUCE_AUTH_TOKEN) return process.env.SPRUCE_AUTH_TOKEN;
+  if (!process.env.SPRUCE_ACCESS_ID || !process.env.SPRUCE_API_KEY) return "";
+  return Buffer.from(`${process.env.SPRUCE_ACCESS_ID}:${process.env.SPRUCE_API_KEY}`).toString("base64");
+};
+
+const sendViaSpruceApi = async (phoneNumber: string, messageText: string, idempotencyKey: string) => {
+  if (typeof window !== "undefined" || process.env.USE_REAL_SPRUCE !== "true") return null;
+  const token = getSpruceAuthToken();
+  if (!token) return null;
+
+  let internalEndpointId = process.env.SPRUCE_INTERNAL_ENDPOINT_ID;
+  if (!internalEndpointId) {
+    const endpointsResponse = await fetch(`${API_BASE_URL}/internalendpoints`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!endpointsResponse.ok) {
+      throw new Error(`Spruce endpoints failed: ${endpointsResponse.status}`);
+    }
+    const endpointsPayload = await endpointsResponse.json();
+    const endpoints = endpointsPayload.internalEndpoints ?? endpointsPayload.data ?? endpointsPayload.items ?? [];
+    const phoneEndpoint = endpoints.find((item: any) => item.channelType === "phone" || item.type === "phone" || item.endpoint?.channelType === "phone");
+    internalEndpointId = phoneEndpoint?.id ?? phoneEndpoint?.endpoint?.id;
+  }
+
+  if (!internalEndpointId) {
+    throw new Error("Spruce phone internal endpoint not found");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/internalendpoints/${internalEndpointId}/conversations`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "s-idempotency-key": idempotencyKey.slice(0, 255),
+    },
+    body: JSON.stringify({
+      destination: {
+        smsOrEmailEndpoint: {
+          value: phoneNumber,
+        },
+      },
+      message: {
+        body: [{ type: "text", value: messageText }],
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Spruce message failed: ${response.status} ${text}`);
+  }
+
+  return response.json().catch(() => ({}));
+};
 
 export const sendMessage = (
   patientId: string,
@@ -33,6 +84,7 @@ export const sendMessage = (
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
+    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and selfie video here: {{uploadUrl}}",
   };
   const fallbackBody = DEFAULT_TEMPLATES[templateKey];
   if (!template && !fallbackBody) {
@@ -60,6 +112,19 @@ export const sendMessage = (
   };
 
   const saved = db.spruceDb.create(message);
+  sendViaSpruceApi(patient.phone, messageText, `spruce_${message.id}`).catch((error) => {
+    db.integrationLogDb.create({
+      id: generateId(),
+      timestamp: new Date().toISOString(),
+      integrationName: "spruce",
+      action: "SMS API send failed",
+      patientId,
+      orderId: variables.orderId || undefined,
+      status: "error",
+      details: { templateKey, phone: patient.phone },
+      error: (error as Error).message,
+    });
+  });
 
   // Log the action
   db.integrationLogDb.create({
@@ -103,6 +168,7 @@ export const scheduleMessage = (
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
+    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and selfie video here: {{uploadUrl}}",
   };
   const fallbackBody2 = DEFAULT_TEMPLATES[templateKey];
   if (!template && !fallbackBody2) {

@@ -81,6 +81,22 @@ export type PharmacyStatus =
   | "delivered"
   | "error";
 
+export type IdentityStatus =
+  | "missing"
+  | "pending"
+  | "verified"
+  | "needs_review"
+  | "rejected"
+  | "manual_approved";
+
+export interface IdentityAiResult {
+  status: IdentityStatus;
+  confidence: number;
+  summary: string;
+  flags: string[];
+  checkedAt?: string;
+}
+
 export interface Order {
   id: string;
   patientId: string;
@@ -97,6 +113,12 @@ export interface Order {
   approvedAt?: string;
   providerNotes?: string;
   rejectionReason?: string;
+  identityStatus?: IdentityStatus;
+  identityReason?: string;
+  identityReviewedAt?: string;
+  identityReviewedBy?: string;
+  identityAiResult?: IdentityAiResult;
+  identityUploadToken?: string;
 }
 
 // Intake and Medical Information
@@ -325,4 +347,6 @@ export interface ProviderReview {
   chartViewedAt?: string;
   /** Name of provider who viewed the chart */
   chartViewedBy?: string;
+  identityAiResult?: IdentityAiResult;
+  identityReviewRequired?: boolean;
 }

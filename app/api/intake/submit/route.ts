@@ -5,6 +5,7 @@ import * as quickbooks from "@/services/quickbooks";
 import * as lifefile from "@/services/lifefile";
 import * as spruce from "@/services/spruce";
 import { checkEligibility } from "@/lib/eligibility";
+import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
 import type { Order, Payment } from "@/types";
 
@@ -62,10 +63,16 @@ export async function POST(req: NextRequest) {
     };
     db.paymentDb.create(payment);
 
-    // 5. Update order to submitted
+    const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
+    const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
+
+    // 5. Update order to submitted, but block pharmacy dispatch until identity is approved.
     db.orderDb.update(orderId, {
-      status: "sent_to_pharmacy",
+      status: "pending_review",
       paymentStatus: "completed",
+      identityStatus: "missing",
+      identityReason: "Patient did not submit identity verification before payment.",
+      identityUploadToken,
       submittedAt: new Date().toISOString(),
     });
 
@@ -94,16 +101,18 @@ export async function POST(req: NextRequest) {
       db.orderDb.update(orderId, { quickbooksStatus: "error" });
     }
 
-    try {
-      await lifefile.createPharmacyOrder(updatedOrder);
-      db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
-    } catch (e) {
-      errors.push(`Life File: ${(e as Error).message}`);
-      db.orderDb.update(orderId, { pharmacyStatus: "error" });
+    if (getIdentityGate(updatedOrder).canDispatch) {
+      try {
+        await lifefile.createPharmacyOrder(updatedOrder);
+        db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
+      } catch (e) {
+        errors.push(`Life File: ${(e as Error).message}`);
+        db.orderDb.update(orderId, { pharmacyStatus: "error" });
+      }
     }
 
     try {
-      spruce.sendMessage(order.patientId, "payment_received", { orderId });
+      spruce.sendMessage(order.patientId, "identity_upload_reminder", { orderId, uploadUrl: identityUploadUrl });
     } catch (e) {
       errors.push(`Spruce: ${(e as Error).message}`);
     }
@@ -113,10 +122,9 @@ export async function POST(req: NextRequest) {
       id: generateId(),
       orderId,
       patientId: order.patientId,
-      status: "approved",
-      reviewedAt: new Date().toISOString(),
-      reviewedBy: "system-auto",
-      notes: "Auto-approved: patient passed eligibility screening",
+      status: "needs_more_info",
+      notes: `Payment collected. Pharmacy dispatch blocked until identity is approved. Upload link: ${identityUploadUrl}`,
+      identityReviewRequired: true,
     });
 
     return NextResponse.json({
