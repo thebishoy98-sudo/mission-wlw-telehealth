@@ -57,8 +57,6 @@ async function logIntegration(
     details,
   };
   db.integrationLogDb.create(entry);
-  const dbServer = typeof window === "undefined" ? await eval('import("@/lib/db.server")') : null;
-  await dbServer?.integrationLogDb.create(entry).catch(() => {});
 }
 
 export async function createCustomerRecord(patient: Patient): Promise<string> {
@@ -103,15 +101,12 @@ export async function createInvoice(
   overrides?: { patient?: Patient | null; product?: any | null; qbCustomerId?: string }
 ): Promise<string> {
   const config = serviceConfig.quickbooks;
-  const dbServer = typeof window === "undefined" ? await eval('import("@/lib/db.server")') : null;
 
   const patient =
     overrides?.patient ??
-    (await dbServer?.patientDb.getById(order.patientId).catch(() => null)) ??
     db.patientDb.getById(order.patientId);
   const product =
     overrides?.product ??
-    (await dbServer?.productDb.getById(order.productId).catch(() => null)) ??
     db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 

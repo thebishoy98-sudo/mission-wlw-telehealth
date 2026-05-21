@@ -97,12 +97,18 @@ export async function POST(req: NextRequest) {
 
     if (identityStatus === "verified" && order.paymentStatus === "completed" && order.pharmacyStatus !== "submitted") {
       try {
-        await lifefile.createPharmacyOrder({ ...order, ...identityUpdate, status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
-        db.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
-        await dbServer.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
         const patient =
           (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
           db.patientDb.getById(order.patientId);
+        const product =
+          (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
+          db.productDb.getById(order.productId);
+        await lifefile.createPharmacyOrder(
+          { ...order, ...identityUpdate, status: "sent_to_pharmacy", pharmacyStatus: "submitted" },
+          { patient, product }
+        );
+        db.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
+        await dbServer.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
         if (patient) {
           await spruce.sendMessage(patient.id, "payment_received", { orderId: order.id }, patient);
         }

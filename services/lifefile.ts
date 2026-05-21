@@ -111,15 +111,12 @@ export const createPharmacyOrder = async (
   order: Types.Order,
   overrides?: { patient?: Types.Patient | null; product?: Types.Product | null }
 ): Promise<Types.PharmacyOrder> => {
-  const dbServer = typeof window === "undefined" ? await eval('import("@/lib/db.server")') : null;
   const patient =
     overrides?.patient ??
-    db.patientDb.getById(order.patientId) ??
-    await dbServer?.patientDb.getById(order.patientId).catch(() => null);
+    db.patientDb.getById(order.patientId);
   const product =
     overrides?.product ??
-    db.productDb.getById(order.productId) ??
-    await dbServer?.productDb.getById(order.productId).catch(() => null);
+    db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) {
