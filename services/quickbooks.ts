@@ -12,7 +12,11 @@ import { generateId, formatCurrency } from "@/lib/utils";
 import { getQBAccessToken } from "@/lib/qb-oauth";
 import type { Order, Patient, Payment } from "@/types";
 
-const QBO_BASE = "https://quickbooks.api.intuit.com/v3/company";
+const QBO_BASE =
+  process.env.QB_ACCOUNTING_BASE_URL ??
+  (process.env.QB_REALM_ID === "9341457089968240"
+    ? "https://sandbox-quickbooks.api.intuit.com/v3/company"
+    : "https://quickbooks.api.intuit.com/v3/company");
 
 async function qboPost(path: string, body: unknown): Promise<any> {
   const realmId = process.env.QB_REALM_ID;
