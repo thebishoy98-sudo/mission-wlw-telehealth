@@ -56,6 +56,13 @@ export async function POST(req: NextRequest) {
       } catch { /* ignore */ }
     }
 
+    // Patient must exist before the order because orders.patient_id has an FK.
+    if (patientData) {
+      try {
+        await dbServer.patientDb.create(patientData);
+      } catch { /* may already exist */ }
+    }
+
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
     if (!order && orderData) {
       try {
