@@ -39,8 +39,8 @@ export const productDb = {
     await sql`
       INSERT INTO products (id, name, slug, description, long_description, starting_price, image, doses, eligibility_note, is_active, faqs, created_at)
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
-        ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}, ${p.eligibilityNote},
-        ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}, ${p.createdAt})
+        ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}::jsonb, ${p.eligibilityNote},
+        ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
       ON CONFLICT (slug) DO UPDATE SET
         id = EXCLUDED.id, name = EXCLUDED.name, description = EXCLUDED.description,
         starting_price = EXCLUDED.starting_price, doses = EXCLUDED.doses, is_active = EXCLUDED.is_active
@@ -87,8 +87,8 @@ export const patientDb = {
       INSERT INTO patients (id, first_name, last_name, date_of_birth, gender, phone, email,
         address, shipping_address, emergency_contact, created_at, updated_at)
       VALUES (${p.id}, ${p.firstName}, ${p.lastName}, ${p.dateOfBirth}, ${p.gender},
-        ${p.phone}, ${p.email}, ${JSON.stringify(p.address)}, ${JSON.stringify(p.shippingAddress)},
-        ${JSON.stringify(p.emergencyContact ?? null)}, ${p.createdAt}, ${p.updatedAt})
+        ${p.phone}, ${p.email}, ${JSON.stringify(p.address)}::jsonb, ${JSON.stringify(p.shippingAddress)}::jsonb,
+        ${JSON.stringify(p.emergencyContact ?? null)}::jsonb, ${p.createdAt}, ${p.updatedAt})
       ON CONFLICT (id) DO NOTHING
     `;
     return p;
@@ -152,7 +152,7 @@ export const orderDb = {
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
-        ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null},
+        ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
         ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
@@ -303,8 +303,8 @@ export const providerReviewDb = {
         ${r.reviewedAt ?? null}, ${r.reviewedBy ?? null}, ${r.notes ?? null},
         ${r.rejectionReason ?? null}, ${r.chartViewedAt ?? null},
         ${r.chartViewedBy ?? null}, ${(r as any).aiSummary ?? null},
-        ${JSON.stringify((r as any).aiFlags ?? [])},
-        ${r.identityAiResult ? JSON.stringify(r.identityAiResult) : null},
+        ${JSON.stringify((r as any).aiFlags ?? [])}::jsonb,
+        ${r.identityAiResult ? JSON.stringify(r.identityAiResult) : null}::jsonb,
         ${r.identityReviewRequired ?? false}, ${new Date().toISOString()})
     `;
     return r;
@@ -353,7 +353,7 @@ export const pharmacyOrderDb = {
       INSERT INTO pharmacy_orders (id, order_id, patient_id, life_file_order_id, status,
         payload, submitted_at)
       VALUES (${o.id}, ${o.orderId}, ${o.patientId}, ${o.lifeFileOrderId ?? null},
-        ${o.status}, ${JSON.stringify(o.payload)}, ${o.submittedAt ?? new Date().toISOString()})
+        ${o.status}, ${JSON.stringify(o.payload)}::jsonb, ${o.submittedAt ?? new Date().toISOString()})
     `;
     return o;
   },
@@ -380,7 +380,7 @@ export const integrationLogDb = {
         patient_id, status, details, error)
       VALUES (${log.id}, ${log.timestamp}, ${log.integrationName}, ${log.action},
         ${log.orderId ?? null}, ${log.patientId ?? null}, ${log.status},
-        ${JSON.stringify(log.details)}, ${log.error ?? null})
+        ${JSON.stringify(log.details)}::jsonb, ${log.error ?? null})
     `;
   },
 
@@ -426,7 +426,7 @@ export const aiConversationDb = {
     await sql`
       INSERT INTO ai_conversations (id, patient_id, order_id, role, messages, created_at, updated_at)
       VALUES (${data.id}, ${data.patientId ?? null}, ${data.orderId ?? null},
-        ${data.role}, ${JSON.stringify(data.messages)}, ${now}, ${now})
+        ${data.role}, ${JSON.stringify(data.messages)}::jsonb, ${now}, ${now})
     `;
     return data;
   },
