@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
         product: productData ?? null,
         qbCustomerId,
       });
-      await quickbooks.recordPayment(invoiceId, payment.amount);
+      await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
       db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
       await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
     } catch (e) {

@@ -157,12 +157,17 @@ export async function createInvoice(
   return invoiceId;
 }
 
-export async function recordPayment(invoiceId: string, amount: number): Promise<void> {
+export async function recordPayment(
+  invoiceId: string,
+  amount: number,
+  qbCustomerId?: string
+): Promise<void> {
   const config = serviceConfig.quickbooks;
 
   if (!config.useMock) {
     await qboPost("/payment", {
       TotalAmt: amount / 100,
+      ...(qbCustomerId ? { CustomerRef: { value: qbCustomerId } } : {}),
       Line: [
         {
           Amount: amount / 100,
