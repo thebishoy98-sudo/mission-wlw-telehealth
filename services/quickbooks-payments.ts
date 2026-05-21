@@ -15,6 +15,7 @@
  */
 
 import * as db from "@/lib/db";
+import { serviceConfig } from "@/lib/service-config";
 import { generateId } from "@/lib/utils";
 import { getQBAccessToken } from "@/lib/qb-oauth";
 
@@ -77,7 +78,8 @@ interface QBChargeResponse {
  * In production, pass a `token` obtained from qbpayments.js on the client
  * (avoids handling raw card data and PCI compliance scope).
  *
- * Mock mode: returns a simulated success response when QB_CLIENT_ID is not set.
+ * Mock mode: returns a simulated success response when QuickBooks is disabled
+ * or QB_CLIENT_ID is not set.
  */
 export async function chargeCard(
   orderId: string,
@@ -98,8 +100,8 @@ export async function chargeCard(
 ): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
   const amountFormatted = amountDollars.toFixed(2);
 
-  // ── Mock mode (no QB credentials) ─────────────────────────────────────────
-  if (!process.env.QB_CLIENT_ID) {
+  // ── Mock mode ──────────────────────────────────────────────────────────────
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) {
     const mockChargeId = `qbp_mock_${generateId()}`;
     logPaymentEvent("QB Payments mock charge", orderId, patientId, {
       chargeId: mockChargeId, amount: amountDollars, mode: "mock",
@@ -194,7 +196,7 @@ export async function chargeCard(
  * Void (cancel) an uncaptured charge.
  */
 export async function voidCharge(chargeId: string): Promise<void> {
-  if (!process.env.QB_CLIENT_ID) return; // mock mode
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) return; // mock mode
 
   const accessToken = await getQBAccessToken();
   await fetch(`${PAYMENTS_BASE_URL}/charges/${chargeId}/void`, {
@@ -210,7 +212,7 @@ export async function refundCharge(
   chargeId: string,
   amountDollarsRefund?: number
 ): Promise<void> {
-  if (!process.env.QB_CLIENT_ID) return; // mock mode
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) return; // mock mode
 
   const accessToken = await getQBAccessToken();
   const body = amountDollarsRefund
