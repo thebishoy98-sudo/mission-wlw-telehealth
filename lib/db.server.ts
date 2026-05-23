@@ -27,6 +27,12 @@ export const productDb = {
     return rows[0] ? rowToProduct(rows[0]) : null;
   },
 
+  async getBySlug(slug: string): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM products WHERE slug = ${slug} LIMIT 1`;
+    return rows[0] ? rowToProduct(rows[0]) : null;
+  },
+
   async getAll(): Promise<Product[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`SELECT * FROM products WHERE is_active = true ORDER BY name ASC`;
@@ -41,9 +47,7 @@ export const productDb = {
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
         ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}::jsonb, ${p.eligibilityNote},
         ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
-      ON CONFLICT (slug) DO UPDATE SET
-        id = EXCLUDED.id, name = EXCLUDED.name, description = EXCLUDED.description,
-        starting_price = EXCLUDED.starting_price, doses = EXCLUDED.doses, is_active = EXCLUDED.is_active
+      ON CONFLICT (slug) DO NOTHING
     `;
   },
 };

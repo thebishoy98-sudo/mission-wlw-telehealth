@@ -49,10 +49,23 @@ export async function POST(req: NextRequest) {
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
       db.orderDb.getById(orderId);
 
-    // Upsert product FIRST (order has FK dependency on products table)
+    // Resolve product/dose against the server product row. Browser demo products
+    // have generated IDs, but server orders must reference stable Postgres IDs.
+    let persistedProduct = productData?.slug
+      ? await dbServer.productDb.getBySlug(productData.slug).catch(() => null)
+      : null;
     if (productData) {
-      await dbServer.productDb.upsert(productData);
+      if (!persistedProduct) {
+        await dbServer.productDb.upsert(productData);
+        persistedProduct =
+          (await dbServer.productDb.getBySlug(productData.slug).catch(() => null)) ??
+          (await dbServer.productDb.getById(productData.id).catch(() => null));
+      }
     }
+    const requestedDose = productData?.doses?.find((dose: any) => dose.id === orderData?.doseId);
+    const persistedDose = requestedDose && persistedProduct
+      ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
+      : null;
 
     // Patient must exist before the order because orders.patient_id has an FK. Repeated
     // checkout retries may reuse the same email with a new browser-generated patient id.
@@ -76,7 +89,12 @@ export async function POST(req: NextRequest) {
       }
     }
     const normalizedOrderData = orderData && persistedPatient
-      ? { ...orderData, patientId: persistedPatient.id }
+      ? {
+          ...orderData,
+          patientId: persistedPatient.id,
+          productId: persistedProduct?.id ?? orderData.productId,
+          doseId: persistedDose?.id ?? orderData.doseId,
+        }
       : orderData;
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
