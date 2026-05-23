@@ -98,7 +98,7 @@ export async function chargeCard(
     billingAddress?: { street1: string; city: string; state: string; zipCode: string; country: string };
   }
 ): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
-  const amountFormatted = (amountDollars / 100).toFixed(2);
+  const amountFormatted = amountDollars.toFixed(2);
 
   // ── Mock mode ──────────────────────────────────────────────────────────────
   if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) {
