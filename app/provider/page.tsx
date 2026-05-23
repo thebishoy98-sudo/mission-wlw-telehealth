@@ -7,72 +7,86 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
 import { ClipboardCheck, Eye } from "lucide-react";
 import { getIdentityGate } from "@/lib/identity";
+
+type DashboardData = {
+  orders: Types.Order[];
+  patients: Types.Patient[];
+  reviews: Types.ProviderReview[];
+};
 
 function ProviderDashboardContent() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
   const [reviews, setReviews] = useState<Record<string, Types.ProviderReview>>({});
   const [approvingAll, setApprovingAll] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const reload = () => {
-    const allOrders = db.orderDb.getAll();
-    setOrders(
-      allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    );
-    const patientMap: Record<string, Types.Patient> = {};
-    const reviewMap: Record<string, Types.ProviderReview> = {};
-    allOrders.forEach((order) => {
-      const patient = db.patientDb.getById(order.patientId);
-      if (patient) patientMap[order.patientId] = patient;
-      const review = db.providerReviewDb.getByOrder(order.id);
-      if (review) reviewMap[order.id] = review;
-    });
-    setPatients(patientMap);
-    setReviews(reviewMap);
+  const reload = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/provider/dashboard", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Provider dashboard failed: ${response.status}`);
+      const data = (await response.json()) as DashboardData;
+      const allOrders = [...data.orders].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setOrders(allOrders);
+      setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
+      setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { void reload(); }, []);
 
   const pendingReview = orders.filter((o) => o.status === "pending_review");
   const approved = orders.filter((o) => o.status === "approved" || o.status === "sent_to_pharmacy");
   const fulfilled = orders.filter((o) => o.status === "fulfilled" || o.status === "delivered");
 
-  const handleApproveAll = () => {
+  const handleApproveAll = async () => {
     setApprovingAll(true);
-    pendingReview.forEach((order) => {
-      db.orderDb.update(order.id, {
-        status: "approved",
-        approvedAt: new Date().toISOString(),
-      });
-    });
-    reload();
-    setApprovingAll(false);
+    try {
+      await Promise.all(
+        pendingReview
+          .filter((order) => !getIdentityGate(order).canDispatch)
+          .map((order) =>
+            fetch("/api/identity/approve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                orderId: order.id,
+                reviewedBy: "provider",
+                notes: "Identity manually approved by provider",
+              }),
+            })
+          )
+      );
+      await reload();
+    } finally {
+      setApprovingAll(false);
+    }
   };
 
-  const handleManualIdentityApproval = (order: Types.Order) => {
-    db.orderDb.update(order.id, {
-      identityStatus: "manual_approved",
-      identityReason: "Manually approved by provider",
-      identityReviewedAt: new Date().toISOString(),
-      identityReviewedBy: "provider",
-      status: "approved",
-      approvedAt: new Date().toISOString(),
-    });
-    const review = db.providerReviewDb.getByOrder(order.id);
-    if (review) {
-      db.providerReviewDb.update(review.id, {
-        identityReviewRequired: false,
-        status: "approved",
-        reviewedAt: new Date().toISOString(),
+  const handleManualIdentityApproval = async (order: Types.Order) => {
+    await fetch("/api/identity/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: order.id,
         reviewedBy: "provider",
-      });
-    }
-    reload();
+        notes: "Identity manually approved by provider",
+      }),
+    });
+    await reload();
   };
 
   return (
@@ -80,6 +94,16 @@ function ProviderDashboardContent() {
       <Navbar variant="provider" />
       <div className="container-max py-8 sm:py-12">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Provider Dashboard</h1>
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        {loading && (
+          <Card className="mb-6">
+            <CardContent className="p-6 text-gray-600">Loading real provider orders...</CardContent>
+          </Card>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">

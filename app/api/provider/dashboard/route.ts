@@ -1,0 +1,25 @@
+import { NextResponse } from "next/server";
+import * as dbServer from "@/lib/db.server";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const orders = await dbServer.orderDb.getAll();
+    const reviews = await dbServer.providerReviewDb.getAll();
+    const patients = await Promise.all(
+      Array.from(new Set(orders.map((order) => order.patientId))).map((patientId) =>
+        dbServer.patientDb.getById(patientId)
+      )
+    );
+
+    return NextResponse.json({
+      orders,
+      patients: patients.filter(Boolean),
+      reviews,
+    });
+  } catch (error) {
+    console.error("Provider dashboard load error:", error);
+    return NextResponse.json({ error: "Provider dashboard load failed" }, { status: 500 });
+  }
+}
