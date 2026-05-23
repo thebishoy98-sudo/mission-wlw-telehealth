@@ -12,6 +12,10 @@ import { Lock, CreditCard } from "lucide-react";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const usableShippingAddress = (state: ReturnType<typeof getIntakeState>) => {
+  return state.shippingAddress?.street1 ? state.shippingAddress : state.address;
+};
+
 export default function Payment() {
   const router = useRouter();
   const [intakeState] = useState(getIntakeState());
@@ -55,7 +59,7 @@ export default function Payment() {
       phone: intakeState.phone,
       email: intakeState.email,
       address: intakeState.address,
-      shippingAddress: intakeState.shippingAddress || intakeState.address,
+      shippingAddress: usableShippingAddress(intakeState),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -167,7 +171,7 @@ export default function Payment() {
           phone: intakeState.phone,
           email: intakeState.email,
           address: intakeState.address,
-          shippingAddress: intakeState.shippingAddress || intakeState.address,
+          shippingAddress: usableShippingAddress(intakeState),
           createdAt: patient.createdAt,
           updatedAt: patient.updatedAt,
         },

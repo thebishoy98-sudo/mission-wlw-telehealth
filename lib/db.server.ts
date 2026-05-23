@@ -100,8 +100,12 @@ export const patientDb = {
       UPDATE patients SET
         first_name = COALESCE(${data.firstName ?? null}, first_name),
         last_name  = COALESCE(${data.lastName ?? null}, last_name),
+        date_of_birth = COALESCE(${data.dateOfBirth ?? null}, date_of_birth),
+        gender     = COALESCE(${data.gender ?? null}, gender),
         phone      = COALESCE(${data.phone ?? null}, phone),
         email      = COALESCE(${data.email ?? null}, email),
+        address    = COALESCE(${data.address ? JSON.stringify(data.address) : null}::jsonb, address),
+        shipping_address = COALESCE(${data.shippingAddress ? JSON.stringify(data.shippingAddress) : null}::jsonb, shipping_address),
         updated_at = ${now}
       WHERE id = ${id}
     `;

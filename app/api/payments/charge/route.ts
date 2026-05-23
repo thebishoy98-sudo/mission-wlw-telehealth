@@ -51,24 +51,38 @@ export async function POST(req: NextRequest) {
 
     // Upsert product FIRST (order has FK dependency on products table)
     if (productData) {
-      try {
-        await dbServer.productDb.upsert(productData);
-      } catch { /* ignore */ }
+      await dbServer.productDb.upsert(productData);
     }
 
-    // Patient must exist before the order because orders.patient_id has an FK.
+    // Patient must exist before the order because orders.patient_id has an FK. Repeated
+    // checkout retries may reuse the same email with a new browser-generated patient id.
+    let persistedPatient = patientData?.email
+      ? await dbServer.patientDb.getByEmail(patientData.email).catch(() => null)
+      : null;
     if (patientData) {
-      try {
-        await dbServer.patientDb.create(patientData);
-      } catch { /* may already exist */ }
+      if (!persistedPatient) {
+        persistedPatient = await dbServer.patientDb.create(patientData);
+      } else {
+        await dbServer.patientDb.update(persistedPatient.id, {
+          firstName: patientData.firstName,
+          lastName: patientData.lastName,
+          dateOfBirth: patientData.dateOfBirth,
+          gender: patientData.gender,
+          phone: patientData.phone,
+          email: patientData.email,
+          address: patientData.address,
+          shippingAddress: patientData.shippingAddress?.street1 ? patientData.shippingAddress : patientData.address,
+        }).catch(() => persistedPatient);
+      }
     }
+    const normalizedOrderData = orderData && persistedPatient
+      ? { ...orderData, patientId: persistedPatient.id }
+      : orderData;
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
-    if (!order && orderData) {
-      try {
-        await dbServer.orderDb.create(orderData);
-      } catch { /* may already exist */ }
-      order = orderData;
+    if (!order && normalizedOrderData) {
+      await dbServer.orderDb.create(normalizedOrderData);
+      order = normalizedOrderData;
     }
 
     if (!order) {
