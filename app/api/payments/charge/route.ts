@@ -24,7 +24,7 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
 import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { checkEligibility } from "@/lib/eligibility";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
@@ -307,11 +307,10 @@ export async function POST(req: NextRequest) {
 
     // 11. Spruce SMS — "payment received, order processing"
     try {
-      await spruce.sendMessage(
-        patient.id,
+      await spruceServer.sendMessage(
+        patient,
         dispatchGate.canDispatch ? "payment_received" : "identity_upload_reminder",
-        { orderId, uploadUrl: identityUploadUrl },
-        patient
+        { orderId, uploadUrl: identityUploadUrl }
       );
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {

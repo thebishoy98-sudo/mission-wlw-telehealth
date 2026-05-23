@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as lifefile from "@/services/lifefile";
+import * as spruceServer from "@/services/spruce.server";
 import { getIdentityGate } from "@/lib/identity";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
 
@@ -36,6 +37,10 @@ export async function POST(req: NextRequest) {
     const update = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
     db.orderDb.update(orderId, update);
     await dbServer.orderDb.update(orderId, update).catch(() => {});
+    const patient = patientData ?? await dbServer.patientDb.getById(order.patientId).catch(() => null);
+    if (patient) {
+      await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId }).catch(() => {});
+    }
 
     const auditCtx = actorFromHeaders(req.headers);
     logPhiDisclosure(order.patientId, orderId, "lifefile", auditCtx.actor);

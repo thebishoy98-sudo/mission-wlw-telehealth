@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
@@ -75,7 +76,12 @@ export async function POST(req: NextRequest) {
 
       // Send approval SMS
       try {
-        spruce.sendMessage(order.patientId, "approved", { orderId });
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          await spruceServer.sendMessage(patient, "approved", { orderId });
+        } else {
+          spruce.sendMessage(order.patientId, "approved", { orderId });
+        }
       } catch { /* non-fatal */ }
 
       const log = {
@@ -121,7 +127,12 @@ export async function POST(req: NextRequest) {
 
       // Send rejection SMS
       try {
-        spruce.sendMessage(order.patientId, "rejected", { orderId });
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          await spruceServer.sendMessage(patient, "rejected", { orderId });
+        } else {
+          spruce.sendMessage(order.patientId, "rejected", { orderId });
+        }
       } catch { /* non-fatal */ }
 
       const log = {

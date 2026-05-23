@@ -416,6 +416,42 @@ export const integrationLogDb = {
   },
 };
 
+// ── Spruce Messages ───────────────────────────────────────────────────────────
+
+export const spruceMessageDb = {
+  async create(message: SpruceMessage): Promise<SpruceMessage> {
+    if (!isDbAvailable()) return message;
+    await sql`
+      INSERT INTO spruce_messages (id, order_id, patient_id, template_key, phone_number,
+        message_text, status, scheduled_for, sent_at, created_at)
+      VALUES (${message.id}, ${message.orderId || null}, ${message.patientId}, ${message.templateKey},
+        ${message.phoneNumber}, ${message.messageText}, ${message.status},
+        ${message.scheduledFor ?? null}, ${message.sentAt ?? null}, ${message.createdAt})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return message;
+  },
+
+  async update(id: string, data: Partial<SpruceMessage>): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE spruce_messages SET
+        status = COALESCE(${data.status ?? null}, status),
+        sent_at = COALESCE(${data.sentAt ?? null}, sent_at),
+        scheduled_for = COALESCE(${data.scheduledFor ?? null}, scheduled_for)
+      WHERE id = ${id}
+    `;
+  },
+
+  async getByOrder(orderId: string): Promise<SpruceMessage[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM spruce_messages WHERE order_id = ${orderId} ORDER BY created_at DESC
+    `;
+    return rows.map(rowToSpruceMessage);
+  },
+};
+
 // ── Message Templates ─────────────────────────────────────────────────────────
 
 export const messageTemplateDb = {
@@ -568,6 +604,21 @@ function rowToPharmacyOrder(r: any): PharmacyOrder {
     trackingNumber: r.tracking_number ?? undefined,
     shippedAt: r.shipped_at ?? undefined, deliveredAt: r.delivered_at ?? undefined,
     submittedAt: r.submitted_at ?? undefined, lastError: r.last_error ?? undefined,
+  };
+}
+
+function rowToSpruceMessage(r: any): SpruceMessage {
+  return {
+    id: r.id,
+    orderId: r.order_id ?? "",
+    patientId: r.patient_id,
+    templateKey: r.template_key,
+    phoneNumber: r.phone_number,
+    messageText: r.message_text,
+    status: r.status,
+    scheduledFor: r.scheduled_for ?? undefined,
+    sentAt: r.sent_at ?? undefined,
+    createdAt: r.created_at,
   };
 }
 
