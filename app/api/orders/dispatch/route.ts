@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await lifefile.createPharmacyOrder(order, { patient: patientData ?? null, product: productData ?? null });
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { patient: patientData ?? null, product: productData ?? null });
+    await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
     const update = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
     db.orderDb.update(orderId, update);
     await dbServer.orderDb.update(orderId, update).catch(() => {});

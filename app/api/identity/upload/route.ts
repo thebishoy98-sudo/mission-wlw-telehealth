@@ -103,10 +103,11 @@ export async function POST(req: NextRequest) {
         const product =
           (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
           db.productDb.getById(order.productId);
-        await lifefile.createPharmacyOrder(
+        const pharmacyOrder = await lifefile.createPharmacyOrder(
           { ...order, ...identityUpdate, status: "sent_to_pharmacy", pharmacyStatus: "submitted" },
           { patient, product }
         );
+        await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
         if (patient) {
