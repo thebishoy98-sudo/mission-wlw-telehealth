@@ -272,6 +272,18 @@ export const answerDb = {
   },
 };
 
+// ── Consent Records ───────────────────────────────────────────────────────────
+
+export const consentDb = {
+  async getByOrder(orderId: string): Promise<ConsentRecord | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM consent_records WHERE order_id = ${orderId} LIMIT 1
+    `;
+    return rows[0] ? rowToConsent(rows[0]) : null;
+  },
+};
+
 // ── Questions ─────────────────────────────────────────────────────────────────
 
 export const questionDb = {
@@ -519,6 +531,19 @@ function rowToPayment(r: any): Payment {
     transactionId: r.transaction_id, createdAt: r.created_at,
     processedAt: r.processed_at ?? undefined, refundedAt: r.refunded_at ?? undefined,
     refundAmount: r.refund_amount ?? undefined,
+  };
+}
+
+function rowToConsent(r: any): ConsentRecord {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    consentText: r.consent_text,
+    acknowledgments: r.acknowledgments ?? {},
+    signedName: r.signed_name,
+    signedAt: r.signed_at,
+    ipAddress: r.ip_address ?? undefined,
+    userAgent: r.user_agent ?? undefined,
   };
 }
 
