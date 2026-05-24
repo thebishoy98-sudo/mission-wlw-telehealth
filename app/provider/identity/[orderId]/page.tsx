@@ -114,8 +114,15 @@ function IdentityReviewContent() {
     );
   }
 
-  const idUpload = data.uploads.find((upload) => upload.type === "driver_license");
-  const selfieUpload = data.uploads.find((upload) => upload.type === "selfie_video");
+  const latestUpload = (type: Upload["type"]) =>
+    data.uploads
+      .filter((upload) => upload.type === type)
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
+  const idUpload = latestUpload("driver_license");
+  const selfieUpload =
+    data.uploads
+      .filter((upload) => upload.type === "selfie_video" && upload.mimeType.startsWith("video/"))
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0] ?? latestUpload("selfie_video");
   const hasIdentityVideo = !!selfieUpload?.base64Data && selfieUpload.mimeType.startsWith("video/");
   const aiResult = data.order.identityAiResult ?? data.review?.identityAiResult;
 
