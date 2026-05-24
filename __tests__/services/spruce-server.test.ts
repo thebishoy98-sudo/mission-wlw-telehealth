@@ -28,6 +28,17 @@ describe("renderSpruceTemplate", () => {
     expect(text).not.toContain("selfie video");
     expect(text).toContain("https://mission-wlw-dev.vercel.app/verify-identity/token");
   });
+
+  it("renders a distinct message when identity proof was already submitted", () => {
+    const text = renderSpruceTemplate("identity_review_received", {
+      orderId: "o1",
+    });
+
+    expect(text).toContain("identity verification were received");
+    expect(text).toContain("provider will review");
+    expect(text).not.toContain("still need identity verification");
+    expect(text).not.toContain("Upload your ID");
+  });
 });
 
 describe("buildSpruceMessageRecord", () => {

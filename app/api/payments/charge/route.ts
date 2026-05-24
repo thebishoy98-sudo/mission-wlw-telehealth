@@ -245,7 +245,8 @@ export async function POST(req: NextRequest) {
           flags: ["missing_identity_uploads"],
           checkedAt: new Date().toISOString(),
         };
-    const identityStatus = submittedUploads.length ? statusFromAiResult(identityAiResult) : "missing";
+    const hasSubmittedIdentity = submittedUploads.length > 0;
+    const identityStatus = hasSubmittedIdentity ? statusFromAiResult(identityAiResult) : "missing";
     const dispatchGate = getIdentityGate({ identityStatus });
 
     // 8. Update order status
@@ -315,7 +316,11 @@ export async function POST(req: NextRequest) {
     try {
       await spruceServer.sendMessage(
         patient,
-        dispatchGate.canDispatch ? "payment_received" : "identity_upload_reminder",
+        dispatchGate.canDispatch
+          ? "payment_received"
+          : hasSubmittedIdentity
+            ? "identity_review_received"
+            : "identity_upload_reminder",
         { orderId, uploadUrl: identityUploadUrl }
       );
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);

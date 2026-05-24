@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       JOIN patients p ON o.patient_id = p.id
       WHERE o.payment_status = 'completed'
         AND o.pharmacy_status = 'draft'
+        AND COALESCE(o.identity_status, 'missing') = 'missing'
         AND o.submitted_at IS NOT NULL
         AND o.submitted_at < NOW() - INTERVAL '20 hours'
         AND o.submitted_at > NOW() - INTERVAL '72 hours'

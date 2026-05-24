@@ -12,6 +12,7 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   order_processing: "Your pharmacy order is processing.",
   order_shipped: "Your order has shipped. Tracking: {{trackingNumber}}",
   order_delivered: "Your order has been delivered.",
+  identity_review_received: "Your payment and identity verification were received. Your provider will review everything before pharmacy dispatch.",
   identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and 10-second identity video here: {{uploadUrl}}",
   reorder_reminder: "It may be time to request your next refill. Log in to your patient portal to reorder.",
 };
