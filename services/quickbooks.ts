@@ -17,19 +17,23 @@ const QBO_BASE =
     ? "https://sandbox-quickbooks.api.intuit.com/v3/company"
     : "https://quickbooks.api.intuit.com/v3/company");
 
-async function qboPost(path: string, body: unknown): Promise<any> {
+function qboString(value: string): string {
+  return value.replace(/'/g, "\\'");
+}
+
+async function qboFetch(path: string, init: RequestInit): Promise<any> {
   const realmId = process.env.QB_REALM_ID;
   if (!realmId) throw new Error("QB_REALM_ID not configured");
 
   const token = await getQBAccessToken();
   const res = await fetch(`${QBO_BASE}/${realmId}${path}`, {
-    method: "POST",
+    ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
+      ...(init.headers ?? {}),
     },
-    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -37,6 +41,34 @@ async function qboPost(path: string, body: unknown): Promise<any> {
     throw new Error(`QBO API error ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+async function qboPost(path: string, body: unknown): Promise<any> {
+  return qboFetch(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+async function qboQuery(query: string): Promise<any> {
+  return qboFetch(`/query?query=${encodeURIComponent(query)}`, {
+    method: "GET",
+  });
+}
+
+async function findCustomerByDisplayName(displayName: string): Promise<string | null> {
+  const result = await qboQuery(
+    `select * from Customer where DisplayName = '${qboString(displayName)}' maxresults 1`
+  );
+  const customer = result.QueryResponse?.Customer?.[0];
+  return customer?.Id ? String(customer.Id) : null;
+}
+
+function getSalesItemRef() {
+  return {
+    value: process.env.QB_SERVICE_ITEM_ID ?? "1",
+    name: process.env.QB_SERVICE_ITEM_NAME ?? "Services",
+  };
 }
 
 async function logIntegration(
@@ -63,15 +95,27 @@ export async function createCustomerRecord(patient: Patient): Promise<string> {
   const config = serviceConfig.quickbooks;
 
   if (!config.useMock) {
+    const displayName = `${patient.firstName} ${patient.lastName}`;
+    const existingCustomerId = await findCustomerByDisplayName(displayName);
+    if (existingCustomerId) {
+      await logIntegration(
+        "QB customer reused",
+        { qbCustomerId: existingCustomerId, email: patient.email },
+        undefined,
+        patient.id
+      );
+      return existingCustomerId;
+    }
+
     const result = await qboPost("/customer", {
-      DisplayName: `${patient.firstName} ${patient.lastName}`,
+      DisplayName: displayName,
       PrimaryEmailAddr: { Address: patient.email },
       PrimaryPhone: { FreeFormNumber: patient.phone },
       BillAddr: {
-        Line1: (patient.address as any)?.street ?? "",
+        Line1: patient.address?.street1 ?? "",
         City: (patient.address as any)?.city ?? "",
         CountrySubDivisionCode: (patient.address as any)?.state ?? "",
-        PostalCode: (patient.address as any)?.zip ?? "",
+        PostalCode: patient.address?.zipCode ?? "",
         Country: "US",
       },
     });
@@ -122,6 +166,7 @@ export async function createInvoice(
           DetailType: "SalesItemLineDetail",
           Description: `${product.name} - ${dose.label}`,
           SalesItemLineDetail: {
+            ItemRef: getSalesItemRef(),
             Qty: 1,
             UnitPrice: amountDollars,
           },

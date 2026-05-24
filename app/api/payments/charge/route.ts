@@ -280,9 +280,21 @@ export async function POST(req: NextRequest) {
       db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
       await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
     } catch (e) {
-      errors.push(`QuickBooks accounting: ${(e as Error).message}`);
+      const errorMessage = (e as Error).message;
+      errors.push(`QuickBooks accounting: ${errorMessage}`);
       db.orderDb.update(orderId, { quickbooksStatus: "error" });
       await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "quickbooks",
+        action: "QuickBooks accounting sync failed",
+        orderId,
+        patientId: patient.id,
+        status: "error",
+        details: { amount: payment.amount, transactionId: payment.transactionId },
+        error: errorMessage,
+      }).catch(() => {});
     }
 
     // 9. PracticeQ — intake packet for provider chart
