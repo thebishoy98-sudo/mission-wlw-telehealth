@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     if ((!token && !orderId) || !idImageData || !selfieFrameData) {
       return NextResponse.json(
-        { error: "token/orderId, idImageData, and selfieFrameData are required" },
+        { error: "token/orderId, ID image, and identity video frame are required" },
         { status: 400 }
       );
     }

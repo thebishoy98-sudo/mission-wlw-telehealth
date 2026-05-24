@@ -304,7 +304,7 @@ export default function PatientDetail() {
                     {uploads.map((upload) => (
                       <div key={upload.id} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl flex-wrap gap-2">
                         <div>
-                          <p className="font-medium text-gray-900 text-sm">{upload.type === "driver_license" ? "Driver's License / ID" : "Selfie Video"}</p>
+                          <p className="font-medium text-gray-900 text-sm">{upload.type === "driver_license" ? "Driver's License / ID" : "Identity Video"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{upload.filename}</p>
                         </div>
                         <Badge variant="success">Uploaded</Badge>

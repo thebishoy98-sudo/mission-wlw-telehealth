@@ -1,17 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { CheckCircle, AlertCircle, Camera, ShieldCheck, Video } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-react";
+
+const RECORDING_SECONDS = 10;
 
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [idImageData, setIdImageData] = useState("");
-  const [selfieFrameData, setSelfieFrameData] = useState("");
+  const [identityVideoFrameData, setIdentityVideoFrameData] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [startingStripe, setStartingStripe] = useState(false);
   const [result, setResult] = useState<{ status: "success" | "error"; message: string } | null>(null);
+
+  const stopCamera = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setRecording(false);
+  };
+
+  const captureVideoFrame = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setIdentityVideoFrameData(canvas.toDataURL("image/jpeg", 0.85));
+  };
 
   const readImage = (file: File, setter: (value: string) => void) => {
     const reader = new FileReader();
@@ -32,7 +56,7 @@ export default function VerifyIdentityPage() {
       if (completed) return;
       completed = true;
       URL.revokeObjectURL(url);
-      setResult({ status: "error", message: "Could not read the selfie video. Try a shorter video in good lighting." });
+      setResult({ status: "error", message: "Could not read the identity video. Try a shorter video in good lighting." });
     };
     const finish = () => {
       if (completed) return;
@@ -41,7 +65,7 @@ export default function VerifyIdentityPage() {
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setSelfieFrameData(canvas.toDataURL("image/jpeg", 0.85));
+      setIdentityVideoFrameData(canvas.toDataURL("image/jpeg", 0.85));
       URL.revokeObjectURL(url);
     };
     const timeout = window.setTimeout(fail, 8000);
@@ -61,26 +85,29 @@ export default function VerifyIdentityPage() {
     };
   };
 
-  const startStripeIdentity = async () => {
-    setStartingStripe(true);
+  const startRecording = async () => {
     setResult(null);
+    setIdentityVideoFrameData("");
+    setRecordingSeconds(0);
     try {
-      const response = await fetch("/api/identity/stripe/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: params.token }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.session?.url) {
-        throw new Error(payload.error ?? "Guided verification is not available right now.");
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
       }
-      window.location.href = payload.session.url;
-    } catch (error) {
-      setResult({
-        status: "error",
-        message: `${(error as Error).message} Use the secure upload below instead.`,
-      });
-      setStartingStripe(false);
+      setRecording(true);
+      let seconds = 0;
+      timerRef.current = setInterval(() => {
+        seconds += 1;
+        setRecordingSeconds(seconds);
+        if (seconds >= RECORDING_SECONDS) {
+          captureVideoFrame();
+          stopCamera();
+        }
+      }, 1000);
+    } catch {
+      setResult({ status: "error", message: "Camera access was blocked. You can upload a 10-second identity video instead." });
     }
   };
 
@@ -97,7 +124,7 @@ export default function VerifyIdentityPage() {
         body: JSON.stringify({
           token: params.token,
           idImageData,
-          selfieFrameData,
+          selfieFrameData: identityVideoFrameData,
         }),
       });
       const payload = await response.json();
@@ -126,6 +153,8 @@ export default function VerifyIdentityPage() {
     }
   };
 
+  const progress = Math.min(100, (recordingSeconds / RECORDING_SECONDS) * 100);
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-2xl px-4 py-10">
@@ -140,15 +169,9 @@ export default function VerifyIdentityPage() {
           <div className="rounded-lg border border-teal-100 bg-teal-50 p-4">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-700" />
-              <div>
-                <p className="font-semibold text-teal-950">Guided verification</p>
-                <p className="mt-1 text-sm text-teal-800">
-                  Use the guided flow when available. It walks you through ID capture and selfie matching on your phone.
-                </p>
-                <Button className="mt-3" onClick={startStripeIdentity} disabled={startingStripe}>
-                  {startingStripe ? "Starting..." : "Start Guided Verification"}
-                </Button>
-              </div>
+              <p className="text-sm text-teal-900">
+                Take a clear ID photo, then record a 10-second identity video in good lighting.
+              </p>
             </div>
           </div>
 
@@ -178,31 +201,50 @@ export default function VerifyIdentityPage() {
             )}
           </label>
 
-          <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500">
-            <input
-              type="file"
-              accept="video/*"
-              capture="user"
-              className="hidden"
-              onChange={(event) => {
-                if (event.target.files?.[0]) readVideoFrame(event.target.files[0]);
-              }}
-            />
-            {selfieFrameData ? (
-              <span className="inline-flex items-center gap-2 text-green-700 font-semibold">
-                <CheckCircle className="h-5 w-5" /> Selfie video ready
-              </span>
-            ) : (
-              <span className="inline-flex flex-col items-center gap-2 text-gray-700">
-                <span className="inline-flex items-center gap-2 font-semibold">
-                  <Video className="h-5 w-5" /> Record selfie video
-                </span>
-                <span className="max-w-sm text-xs text-gray-500">
-                  Face a light source, remove sunglasses, hold still, then slowly turn your head left and right.
-                </span>
-              </span>
+          <div className="rounded-lg border border-gray-200 p-5 space-y-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">10-Second Identity Video</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Face a light source, remove sunglasses, hold still, then slowly turn your head left and right.
+              </p>
+            </div>
+            <video ref={videoRef} playsInline muted className={`w-full rounded-lg bg-gray-100 ${recording ? "block" : "hidden"}`} />
+            {recording && (
+              <div>
+                <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                  <span>Recording: {recordingSeconds} seconds</span>
+                  <span>{RECORDING_SECONDS}s</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-100">
+                  <div className="h-2 rounded-full bg-teal-600 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
             )}
-          </label>
+            {identityVideoFrameData && !recording ? (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
+                <CheckCircle className="h-5 w-5" />
+                Video recorded
+              </div>
+            ) : null}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button type="button" onClick={recording ? stopCamera : startRecording} variant={recording ? "outline" : "primary"}>
+                <Video className="h-4 w-4 mr-2" />
+                {recording ? "Stop Recording" : "Start Recording"}
+              </Button>
+              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
+                <input
+                  type="file"
+                  accept="video/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={(event) => {
+                    if (event.target.files?.[0]) readVideoFrame(event.target.files[0]);
+                  }}
+                />
+                Upload Video
+              </label>
+            </div>
+          </div>
 
           {result && (
             <div className={`rounded-lg border p-4 text-sm ${result.status === "success" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
@@ -213,7 +255,7 @@ export default function VerifyIdentityPage() {
             </div>
           )}
 
-          <Button fullWidth onClick={submit} disabled={submitting || !idImageData || !selfieFrameData}>
+          <Button fullWidth onClick={submit} disabled={submitting || !idImageData || !identityVideoFrameData}>
             {submitting ? "Submitting..." : "Submit Verification"}
           </Button>
         </div>

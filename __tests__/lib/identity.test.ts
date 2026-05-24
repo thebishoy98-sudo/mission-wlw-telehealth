@@ -29,7 +29,7 @@ describe("identity helpers", () => {
     expect(getIdentityGate({ identityStatus: "manual_approved" }).canDispatch).toBe(true);
   });
 
-  it("requires ID and selfie video uploads", () => {
+  it("requires ID and identity video uploads", () => {
     const baseUpload = {
       id: "u",
       orderId: "o",

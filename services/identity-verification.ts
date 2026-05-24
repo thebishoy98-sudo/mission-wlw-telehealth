@@ -31,7 +31,7 @@ export async function verifyIdentityUploads(uploads: Upload[]): Promise<Identity
   const selfieUpload = uploads.find((upload) => upload.type === "selfie_video");
 
   if (!idUpload || !selfieUpload) {
-    return fallbackResult("Identity verification is missing either the ID photo or selfie video.", [
+    return fallbackResult("Identity verification is missing either the ID photo or identity video.", [
       "missing_required_upload",
     ]);
   }
@@ -58,7 +58,7 @@ export async function verifyIdentityUploads(uploads: Upload[]): Promise<Identity
           content: [
             {
               type: "text",
-              text: `Compare the government ID image and selfie frame for identity verification.
+              text: `Compare the government ID image and identity video frame for identity verification.
 
 Return JSON only:
 {

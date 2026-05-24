@@ -84,7 +84,7 @@ export const sendMessage = (
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
-    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and selfie video here: {{uploadUrl}}",
+    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and 10-second identity video here: {{uploadUrl}}",
   };
   const fallbackBody = DEFAULT_TEMPLATES[templateKey];
   if (!template && !fallbackBody) {
@@ -168,7 +168,7 @@ export const scheduleMessage = (
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
-    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and selfie video here: {{uploadUrl}}",
+    identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and 10-second identity video here: {{uploadUrl}}",
   };
   const fallbackBody2 = DEFAULT_TEMPLATES[templateKey];
   if (!template && !fallbackBody2) {

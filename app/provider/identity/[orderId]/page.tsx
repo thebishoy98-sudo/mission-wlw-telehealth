@@ -169,12 +169,12 @@ function IdentityReviewContent() {
                   <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
                       <Video className="h-4 w-4 text-gray-500" />
-                      Selfie Frame
+                      Identity Video Frame
                     </div>
                     {selfieUpload?.base64Data ? (
-                      <img src={selfieUpload.base64Data} alt="Uploaded selfie frame" className="max-h-72 w-full rounded-md object-contain bg-white" />
+                      <img src={selfieUpload.base64Data} alt="Uploaded identity video frame" className="max-h-72 w-full rounded-md object-contain bg-white" />
                     ) : (
-                      <p className="text-sm text-gray-500">No selfie image uploaded.</p>
+                      <p className="text-sm text-gray-500">No identity video frame uploaded.</p>
                     )}
                   </div>
                 </div>

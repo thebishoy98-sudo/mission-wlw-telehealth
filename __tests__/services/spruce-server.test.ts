@@ -24,6 +24,8 @@ describe("renderSpruceTemplate", () => {
     });
 
     expect(text).toContain("identity verification");
+    expect(text).toContain("10-second identity video");
+    expect(text).not.toContain("selfie video");
     expect(text).toContain("https://mission-wlw-dev.vercel.app/verify-identity/token");
   });
 });
