@@ -62,7 +62,8 @@ async function resolvePhoneEndpoint(token: string) {
   const phoneEndpoint = endpoints.find((item: any) =>
     item.channelType === "phone" ||
     item.type === "phone" ||
-    item.endpoint?.channelType === "phone"
+    item.endpoint?.channelType === "phone" ||
+    item.endpoint?.channel === "phone"
   );
 
   return phoneEndpoint?.id ?? phoneEndpoint?.endpoint?.id ?? "";
