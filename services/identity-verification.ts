@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { IdentityAiResult, Upload } from "@/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
+function getAnthropicClient() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
+}
 
 function dataUrlToImageSource(dataUrl: string) {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -24,6 +26,44 @@ function fallbackResult(summary: string, flags: string[]): IdentityAiResult {
     flags,
     checkedAt: new Date().toISOString(),
   };
+}
+
+export function normalizeIdentityAiResult(result: IdentityAiResult): IdentityAiResult {
+  const flags = result.flags.map((flag) => flag.toLowerCase());
+  const summary = result.summary.toLowerCase();
+  const hasDemographicMatch =
+    (summary.includes("name") && summary.includes("dob") && summary.includes("match")) ||
+    summary.includes("name and dob match") ||
+    summary.includes("name/dob match");
+  const hasHardDifferentPersonSignal = flags.some((flag) =>
+    [
+      "different_person",
+      "identity_belongs_to_different_person",
+      "stolen_identity",
+      "wrong_person",
+      "no_face_in_id",
+      "no_face_in_video",
+    ].includes(flag)
+  );
+
+  if (result.status === "rejected" && hasDemographicMatch && !hasHardDifferentPersonSignal) {
+    return {
+      ...result,
+      status: "needs_review",
+      confidence: Math.min(result.confidence, 0.64),
+      summary:
+        "The ID portrait and identity video need provider review: name and DOB match the order, and the face comparison is not decisive enough to reject.",
+      flags: Array.from(
+        new Set(
+          result.flags
+            .filter((flag) => flag.toLowerCase() !== "face_mismatch")
+            .concat(["facial_match_uncertain"])
+        )
+      ),
+    };
+  }
+
+  return result;
 }
 
 interface IdentityVerificationContext {
@@ -57,7 +97,7 @@ export async function verifyIdentityUploads(
   }
 
   try {
-    const message = await anthropic.messages.create({
+    const message = await getAnthropicClient().messages.create({
       model: process.env.ANTHROPIC_MODEL ?? "claude-opus-4-6",
       max_tokens: 700,
       messages: [
@@ -114,13 +154,13 @@ Rules:
       ]);
     }
 
-    return {
+    return normalizeIdentityAiResult({
       status: parsed.status,
       confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
       summary: String(parsed.summary || "Identity verification completed."),
       flags: Array.isArray(parsed.flags) ? parsed.flags.map(String) : [],
       checkedAt: new Date().toISOString(),
-    };
+    });
   } catch (error) {
     return fallbackResult("AI identity verification failed and requires manual review.", [
       "ai_identity_error",
