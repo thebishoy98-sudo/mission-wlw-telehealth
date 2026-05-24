@@ -442,7 +442,7 @@ export default function Home() {
       <div className="bg-gray-950 border-t border-white/5 py-5">
         <div className="container-max">
           <p className="text-xs text-slate-600 text-center leading-relaxed">
-            <strong className="text-slate-500">Medical Disclaimer:</strong> This platform is for demonstration purposes. No real medical advice is provided. GLP-1 medications are contraindicated for patients with personal or family history of thyroid cancer or MEN 2, and are not suitable during pregnancy or breastfeeding. Results vary. Eligibility and dosage decisions are made by licensed providers.
+            <strong className="text-slate-500">Medical Disclaimer:</strong> GLP-1 medications are contraindicated for patients with a personal or family history of thyroid cancer or MEN 2, and are not suitable during pregnancy or breastfeeding. Results vary. Eligibility, prescription, and dosage decisions are made by licensed providers after clinical review.
           </p>
         </div>
       </div>

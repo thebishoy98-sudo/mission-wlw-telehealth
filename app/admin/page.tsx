@@ -76,15 +76,15 @@ function AdminDashboardContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="admin" />
-      <div className="container-max py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">Admin Dashboard</h1>
+      <div className="container-max py-8 sm:py-12">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Admin Dashboard</h1>
 
         {/* Key Metrics */}
-        <div className="grid md:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6 mb-8 sm:mb-12">
           <Card>
             <CardContent className="p-6">
               <p className="text-gray-600 text-sm mb-1">Total Revenue</p>
-              <p className="text-3xl font-bold text-teal-600">
+              <p className="text-2xl sm:text-3xl font-bold text-teal-600">
                 {formatCurrency(stats.totalRevenue)}
               </p>
             </CardContent>
@@ -92,19 +92,19 @@ function AdminDashboardContent() {
           <Card>
             <CardContent className="p-6">
               <p className="text-gray-600 text-sm mb-1">Total Orders</p>
-              <p className="text-3xl font-bold">{stats.totalOrders}</p>
+              <p className="text-2xl sm:text-3xl font-bold">{stats.totalOrders}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6">
               <p className="text-gray-600 text-sm mb-1">Patients</p>
-              <p className="text-3xl font-bold">{stats.totalPatients}</p>
+              <p className="text-2xl sm:text-3xl font-bold">{stats.totalPatients}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6">
               <p className="text-gray-600 text-sm mb-1">Avg Order Value</p>
-              <p className="text-3xl font-bold">
+              <p className="text-2xl sm:text-3xl font-bold">
                 {formatCurrency(stats.averageOrderValue)}
               </p>
             </CardContent>
@@ -112,7 +112,7 @@ function AdminDashboardContent() {
         </div>
 
         {/* Charts */}
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-8 sm:mb-12">
           <Card>
             <CardContent className="p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Revenue (Last 7 Days)</h3>
@@ -172,7 +172,7 @@ function AdminDashboardContent() {
         {/* Quick Actions */}
         <div className="mb-12">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Management</h2>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
             <Link href="/admin/products">
               <Button fullWidth variant="outline">
                 Manage Products

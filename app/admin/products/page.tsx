@@ -93,9 +93,9 @@ export default function ProductsManagement() {
     <>
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="admin" />
-      <div className="container-max py-12">
+      <div className="container-max py-8 sm:py-12">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">Products</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">Products</h1>
           {!showForm && (
             <Button onClick={() => setShowForm(true)}>
               + Add Product
@@ -148,7 +148,7 @@ export default function ProductsManagement() {
                 }
               />
               {formError && <p className="text-sm text-red-500">{formError}</p>}
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <Button fullWidth onClick={handleSave}>
                   Save
                 </Button>

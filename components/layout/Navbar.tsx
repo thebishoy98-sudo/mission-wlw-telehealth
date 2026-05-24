@@ -18,8 +18,9 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
+    const loginPath = user ? `/login/${user.role}` : "/login";
     logout();
-    router.push("/login");
+    router.push(loginPath);
   };
 
   const links = {
@@ -81,7 +82,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
           <div className="flex items-center gap-3">
             {variant === "customer" && !user && (
               <>
-                <Link href="/login" className="hidden sm:block">
+                <Link href="/login/patient" className="hidden sm:block">
                   <span className="text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
                     Sign in
                   </span>
@@ -139,11 +140,20 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
             </Link>
           ))}
           {variant === "customer" && !user && (
-            <Link href="/start/info" onClick={() => setOpen(false)}>
-              <span className="block mt-2 text-center bg-teal-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg">
+            <>
+              <Link
+                href="/login/patient"
+                onClick={() => setOpen(false)}
+                className="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+              >
+                Sign in
+              </Link>
+              <Link href="/start/info" onClick={() => setOpen(false)}>
+                <span className="block mt-2 text-center bg-teal-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg">
                 Get Started
-              </span>
-            </Link>
+                </span>
+              </Link>
+            </>
           )}
           {user && (
             <div className="mt-2 pt-2 border-t border-gray-100">

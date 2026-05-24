@@ -316,9 +316,6 @@ function ReorderContent() {
                     </p>
                     <p className="text-xs text-gray-400">Card on file</p>
                   </div>
-                  <span className="ml-auto text-xs text-gray-400">
-                    (demo)
-                  </span>
                 </div>
               </CardContent>
             </Card>

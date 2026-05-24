@@ -8,7 +8,7 @@ import { AuthProvider } from "@/lib/auth";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Mission Wellness & Weight Loss — Medical Weight Management",
+  title: "Mission Wellness & Weight Loss - Medical Weight Management",
   description:
     "GLP-1 medical weight loss programs with board-certified providers, FDA-regulated pharmacies, and free overnight shipping direct to your door.",
 };

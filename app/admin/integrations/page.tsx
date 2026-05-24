@@ -138,11 +138,11 @@ export default function IntegrationsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="admin" />
-      <div className="container-max py-12 space-y-12">
+      <div className="container-max py-8 sm:py-12 space-y-8 sm:space-y-12">
 
         {/* Header */}
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">How the Platform Connects</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">How the Platform Connects</h1>
           <p className="mt-2 text-gray-500 max-w-2xl">
             This platform doesn't work in isolation — it talks to several specialised tools behind the scenes.
             Here's what each one does and how they fit together.

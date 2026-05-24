@@ -205,7 +205,7 @@ function ProviderDashboardContent() {
               return (
                 <Card key={order.id} clickable>
                   <CardContent className="p-5 sm:p-6">
-                    <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-gray-900">
@@ -232,14 +232,14 @@ function ProviderDashboardContent() {
                           Order {order.id.slice(-6)} • {formatDateTime(order.createdAt)}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                         {!getIdentityGate(order).canDispatch && (
                           <Link href={`/provider/identity/${order.id}`}>
-                            <Button size="sm" variant="outline">Review Identity</Button>
+                            <Button size="sm" variant="outline" className="w-full sm:w-auto">Review Identity</Button>
                           </Link>
                         )}
                         <Link href={`/provider/patients/${order.patientId}`}>
-                          <Button size="sm">Review Chart</Button>
+                          <Button size="sm" className="w-full sm:w-auto">Review Chart</Button>
                         </Link>
                       </div>
                     </div>
@@ -316,7 +316,7 @@ function ProviderDashboardContent() {
             return (
               <Card key={order.id}>
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">
                         {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
@@ -327,7 +327,7 @@ function ProviderDashboardContent() {
                       {getStatusLabel(order.status)}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     {rev?.chartViewedAt ? (
                       <span className="inline-flex items-center gap-1 text-xs text-green-700 font-medium">
                         <ClipboardCheck className="w-3 h-3" />
@@ -336,8 +336,8 @@ function ProviderDashboardContent() {
                     ) : (
                       <span className="text-xs text-gray-400">Chart not reviewed</span>
                     )}
-                    <Link href={`/provider/patients/${order.patientId}`}>
-                      <Button size="sm" variant="outline">View Chart</Button>
+                    <Link href={`/provider/patients/${order.patientId}`} className="w-full">
+                      <Button size="sm" variant="outline" fullWidth>View Chart</Button>
                     </Link>
                   </div>
                 </CardContent>

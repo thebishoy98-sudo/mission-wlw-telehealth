@@ -41,7 +41,7 @@ export default function ProductDetail() {
   return (
     <div className="min-h-screen bg-white">
       <Navbar variant="customer" />
-      <div className="container-max py-12">
+      <div className="container-max py-8 sm:py-12">
         <button
           onClick={() => router.back()}
           className="flex items-center text-teal-600 hover:text-teal-700 mb-8"
@@ -66,7 +66,7 @@ export default function ProductDetail() {
           </div>
 
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               {product.name}
             </h1>
             <p className="text-3xl font-bold text-teal-600 mb-6">

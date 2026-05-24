@@ -1,7 +1,7 @@
 {
-  "name": "telehealth-demo",
+  "name": "mission-wlw",
   "version": "1.0.0",
-  "description": "Premium medical e-commerce/telehealth platform demo",
+  "description": "Mission WLW medical weight management platform",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -48,7 +48,7 @@ export function Footer() {
         </div>
         <div className="border-t border-gray-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-gray-400 text-sm text-center sm:text-left">
-            &copy; 2025 Mission Wellness &amp; Weight Loss. All rights reserved.
+            &copy; 2026 Mission Wellness &amp; Weight Loss. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <a href="https://instagram.com/missionwlw" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Instagram</a>

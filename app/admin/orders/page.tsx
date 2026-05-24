@@ -104,10 +104,10 @@ export default function OrdersManagement() {
     <>
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="admin" />
-      <div className="container-max py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">Order Management</h1>
+      <div className="container-max py-8 sm:py-12">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Order Management</h1>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           {/* Order List */}
           <div className="md:col-span-2">
             <Card>

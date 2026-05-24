@@ -101,7 +101,7 @@ export default function Questionnaire() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Health Questionnaire</h2>
         <p className="text-gray-500 text-sm mb-8">
-          Please answer honestly — this helps our providers determine if treatment is right for you.
+          Please answer honestly - this helps our providers determine if treatment is right for you.
         </p>
 
         {questions.length === 0 ? (
@@ -167,7 +167,7 @@ export default function Questionnaire() {
         <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/info")}>
           Back
         </Button>
-        <Button fullWidth type="submit">Continue →</Button>
+        <Button fullWidth type="submit">Continue</Button>
       </div>
     </form>
   );

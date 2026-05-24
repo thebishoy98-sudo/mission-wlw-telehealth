@@ -42,8 +42,8 @@ export default function PatientStatus() {
   return (
     <div className="min-h-screen bg-white">
       <Navbar variant="customer" />
-      <div className="container-max py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">Order Status Tracker</h1>
+      <div className="container-max py-8 sm:py-12">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Order Status Tracker</h1>
 
         {orders.length === 0 ? (
           <Card>

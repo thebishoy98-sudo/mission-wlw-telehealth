@@ -1,207 +1,65 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth, UserRole } from "@/lib/auth";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { ArrowRight, ClipboardCheck, ShieldCheck, UserRound } from "lucide-react";
 
-const ROLE_CONFIG: {
-  role: UserRole;
-  label: string;
-  description: string;
-  demoEmail: string;
-  demoPassword: string;
-  destination: string;
-  passwordHint?: string;
-}[] = [
+const portals = [
   {
-    role: "patient",
-    label: "Patient",
-    description: "Access your orders, reorder, or request a dose increase",
-    demoEmail: "alice@example.com",
-    demoPassword: "any password",
-    destination: "/patient",
-    passwordHint: "Patients: use any password (demo mode)",
+    label: "Patient Portal",
+    href: "/login/patient",
+    description: "View orders, check status, and request refills.",
+    icon: UserRound,
   },
   {
-    role: "provider",
-    label: "Provider",
-    description: "Review patient intakes and approve prescriptions",
-    demoEmail: "dr.johnson@telehealth.com",
-    demoPassword: "provider123",
-    destination: "/provider",
+    label: "Provider Portal",
+    href: "/login/provider",
+    description: "Review intakes, identity proof, and approvals.",
+    icon: ClipboardCheck,
   },
   {
-    role: "admin",
-    label: "Admin",
-    description: "Manage orders, products, CMS, and integrations",
-    demoEmail: "admin@telehealth.com",
-    demoPassword: "admin123",
-    destination: "/admin",
+    label: "Admin Console",
+    href: "/login/admin",
+    description: "Manage orders, catalog, content, and integrations.",
+    icon: ShieldCheck,
   },
 ];
 
-export default function LoginPage() {
-  const [activeRole, setActiveRole] = useState<UserRole>("patient");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const { login } = useAuth();
-  const router = useRouter();
-
-  const config = ROLE_CONFIG.find((r) => r.role === activeRole)!;
-
-  const handleRoleSwitch = (role: UserRole) => {
-    setActiveRole(role);
-    setEmail("");
-    setPassword("");
-    setError("");
-  };
-
-  const handleDemoFill = () => {
-    setEmail(config.demoEmail);
-    setPassword(config.demoPassword === "any password" ? "demo" : config.demoPassword);
-    setError("");
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    const result = login(email, password, activeRole);
-    setLoading(false);
-
-    if (!result.success) {
-      setError(result.error || "Login failed.");
-      return;
-    }
-
-    router.push(config.destination);
-  };
-
+export default function LoginChooserPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-gray-100 flex flex-col items-center justify-center p-4">
-      {/* Logo */}
-      <Link href="/" className="flex items-center gap-2.5 mb-8">
-        <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center">
-          <span className="text-white font-bold text-sm">M</span>
-        </div>
-        <span className="text-xl font-bold text-gray-900 tracking-tight">Mission WLW</span>
-      </Link>
-
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-
-          {/* Role tabs */}
-          <div className="flex border-b border-gray-100">
-            {ROLE_CONFIG.map(({ role, label }) => (
-              <button
-                key={role}
-                onClick={() => handleRoleSwitch(role)}
-                className={`flex-1 py-3.5 text-sm font-semibold transition-colors ${
-                  activeRole === role
-                    ? "text-teal-700 border-b-2 border-teal-600 bg-teal-50/50"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+    <div className="min-h-screen bg-gray-50 px-4 py-8 sm:py-12">
+      <div className="mx-auto w-full max-w-3xl">
+        <Link href="/" className="mb-8 flex items-center justify-center gap-2.5 sm:justify-start">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600">
+            <span className="text-sm font-bold text-white">M</span>
           </div>
+          <span className="text-lg font-bold tracking-tight text-gray-900">Mission WLW</span>
+        </Link>
 
-          <div className="p-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign in</h1>
-            <p className="text-sm text-gray-500 mb-6">{config.description}</p>
-
-            {/* Demo credentials callout */}
-            <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 mb-6">
-              <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-1.5">
-                Demo credentials
-              </p>
-              <div className="text-sm text-teal-800 space-y-0.5">
-                <div>
-                  <span className="font-medium">Email:</span> {config.demoEmail}
-                </div>
-                <div>
-                  <span className="font-medium">Password:</span>{" "}
-                  {config.demoPassword}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleDemoFill}
-                className="mt-2.5 text-xs font-semibold text-teal-700 underline underline-offset-2 hover:text-teal-900"
-              >
-                Fill automatically
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Email address
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={config.demoEmail}
-                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={config.passwordHint ?? "Enter your password"}
-                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-                {config.passwordHint && (
-                  <p className="mt-1 text-xs text-gray-400">{config.passwordHint}</p>
-                )}
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                fullWidth
-                disabled={loading}
-              >
-                {loading ? "Signing in..." : "Sign in"}
-              </Button>
-            </form>
-
-            {activeRole === "patient" && (
-              <p className="mt-6 text-center text-sm text-gray-500">
-                New patient?{" "}
-                <Link href="/start/info" className="text-teal-600 font-semibold hover:text-teal-700">
-                  Start your intake
-                </Link>
-              </p>
-            )}
-          </div>
+        <div className="mb-6 text-center sm:text-left">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Secure sign in</p>
+          <h1 className="mt-2 text-3xl font-bold text-gray-900">Choose your portal</h1>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            Use the portal that matches your role. Patient, provider, and admin access are separated.
+          </p>
         </div>
 
-        <p className="mt-6 text-center text-xs text-gray-400">
-          This is a demo. No real medical services are provided.
-        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {portals.map(({ label, href, description, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="group rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-teal-200 hover:shadow-md"
+            >
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <Icon className="h-5 w-5" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">{label}</h2>
+              <p className="mt-2 min-h-[48px] text-sm leading-6 text-gray-600">{description}</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-700">
+                Continue
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

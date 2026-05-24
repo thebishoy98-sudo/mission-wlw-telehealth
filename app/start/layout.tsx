@@ -20,17 +20,17 @@ export default function StartLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-50/60">
       {/* Progress header */}
       <div className="bg-white border-b border-gray-100">
-        <div className="max-w-3xl mx-auto px-4 py-5">
-          <div className="flex items-center gap-1.5">
+        <div className="max-w-3xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
+          <div className="flex items-start gap-1 sm:items-center sm:gap-1.5">
             {steps.map((step, index) => {
               const isCompleted = index < currentStep;
               const isCurrent = index === currentStep;
               return (
-                <div key={index} className="flex items-center flex-1 last:flex-none">
+                <div key={index} className="flex min-w-0 flex-1 items-center last:flex-none">
                   <div className="flex flex-col items-center">
                     <div
                       className={[
-                        "w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all",
+                        "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-all sm:h-8 sm:w-8",
                         isCompleted
                           ? "bg-teal-600 text-white"
                           : isCurrent
@@ -42,7 +42,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
                     </div>
                     <span
                       className={[
-                        "text-xs mt-1 font-medium hidden sm:block",
+                        "mt-1 hidden text-xs font-medium sm:block",
                         isCurrent ? "text-teal-700" : isCompleted ? "text-gray-600" : "text-gray-400",
                       ].join(" ")}
                     >
@@ -52,7 +52,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
                   {index < steps.length - 1 && (
                     <div
                       className={[
-                        "flex-1 h-0.5 mx-2 rounded-full mb-4",
+                        "mx-1 mb-4 h-0.5 flex-1 rounded-full sm:mx-2",
                         isCompleted ? "bg-teal-400" : "bg-gray-200",
                       ].join(" ")}
                     />
@@ -65,7 +65,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl mx-auto px-4 py-10 pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6 pb-16 sm:py-10 sm:pb-20">
         {children}
       </div>
     </div>

@@ -52,8 +52,8 @@ export default function CMSEditor() {
     <>
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="admin" />
-      <div className="container-max py-12 max-w-2xl">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">Website Content Editor</h1>
+      <div className="container-max py-8 sm:py-12 max-w-2xl">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Website Content Editor</h1>
 
         {/* Landing Page */}
         <Card className="mb-8">

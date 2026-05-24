@@ -9,11 +9,11 @@ import { Shield } from "lucide-react";
 
 const CONSENT_TEXT = `By proceeding, I consent to telemedicine services from a licensed healthcare provider. I understand that:
 
-• I am receiving telehealth services and may interact with licensed medical professionals remotely.
-• My health information will be collected and used solely for treatment purposes.
-• I have the right to refuse or discontinue treatment at any time.
-• Telehealth services may not be appropriate for all medical conditions.
-• My data is handled in accordance with HIPAA and our Privacy Policy.
+- I am receiving telehealth services and may interact with licensed medical professionals remotely.
+- My health information will be collected and used solely for treatment purposes.
+- I have the right to refuse or discontinue treatment at any time.
+- Telehealth services may not be appropriate for all medical conditions.
+- My data is handled in accordance with HIPAA and our Privacy Policy.
 
 I authorize the collection, use, and disclosure of my health information as necessary for my care. I confirm that the information I have provided is accurate and complete to the best of my knowledge.`;
 
@@ -41,7 +41,7 @@ export default function Consent() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
             <Shield className="w-5 h-5 text-teal-600" />
@@ -84,11 +84,11 @@ export default function Consent() {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/questionnaire")}>
           Back
         </Button>
-        <Button fullWidth type="submit">Continue →</Button>
+        <Button fullWidth type="submit">Continue</Button>
       </div>
     </form>
   );

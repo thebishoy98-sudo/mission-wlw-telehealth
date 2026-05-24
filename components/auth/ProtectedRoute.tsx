@@ -16,7 +16,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   useEffect(() => {
     if (isLoading) return;
     if (!user || user.role !== requiredRole) {
-      router.replace("/login");
+      router.replace(`/login/${requiredRole}`);
     }
   }, [user, isLoading, requiredRole, router]);
 

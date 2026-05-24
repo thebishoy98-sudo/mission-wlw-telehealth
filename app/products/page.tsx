@@ -20,7 +20,7 @@ export default function Products() {
     <div className="min-h-screen bg-white">
       <Navbar variant="customer" />
       <div className="container-max py-16">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
           Treatment Options
         </h1>
         <p className="text-xl text-gray-600 mb-12">

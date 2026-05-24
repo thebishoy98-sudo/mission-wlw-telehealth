@@ -10,6 +10,7 @@ import {
 import * as db from "@/lib/db";
 
 const AUTH_KEY = "tele_auth_session";
+const PATIENT_PORTAL_PASSWORD = "patient123";
 
 export type UserRole = "patient" | "provider" | "admin";
 
@@ -70,6 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalized = email.toLowerCase().trim();
 
     if (role === "patient") {
+      if (password !== PATIENT_PORTAL_PASSWORD) {
+        return { success: false, error: "Invalid email or password." };
+      }
       const patients = db.patientDb.getAll();
       const patient = patients.find(
         (p) => p.email.toLowerCase() === normalized
