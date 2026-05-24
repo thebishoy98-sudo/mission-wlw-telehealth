@@ -7,6 +7,7 @@ export async function GET() {
   try {
     const orders = await dbServer.orderDb.getAll();
     const reviews = await dbServer.providerReviewDb.getAll();
+    const products = await dbServer.productDb.getAll();
     const patients = await Promise.all(
       Array.from(new Set(orders.map((order) => order.patientId))).map((patientId) =>
         dbServer.patientDb.getById(patientId)
@@ -16,6 +17,7 @@ export async function GET() {
     return NextResponse.json({
       orders,
       patients: patients.filter(Boolean),
+      products,
       reviews,
     });
   } catch (error) {

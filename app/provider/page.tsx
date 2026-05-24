@@ -15,12 +15,14 @@ import { getIdentityGate } from "@/lib/identity";
 type DashboardData = {
   orders: Types.Order[];
   patients: Types.Patient[];
+  products: Types.Product[];
   reviews: Types.ProviderReview[];
 };
 
 function ProviderDashboardContent() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
+  const [products, setProducts] = useState<Record<string, Types.Product>>({});
   const [reviews, setReviews] = useState<Record<string, Types.ProviderReview>>({});
   const [approvingAll, setApprovingAll] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -38,6 +40,7 @@ function ProviderDashboardContent() {
       );
       setOrders(allOrders);
       setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
+      setProducts(Object.fromEntries(data.products.map((product) => [product.id, product])));
       setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
     } catch (err) {
       setError((err as Error).message);
@@ -48,9 +51,27 @@ function ProviderDashboardContent() {
 
   useEffect(() => { void reload(); }, []);
 
+  const canBulkDispatch = (order: Types.Order) => {
+    const patient = patients[order.patientId];
+    const product = products[order.productId];
+    const dose = product?.doses.find((item) => item.id === order.doseId);
+    const shipping = patient?.shippingAddress;
+    return Boolean(
+      patient &&
+      product &&
+      dose &&
+      shipping?.street1 &&
+      shipping?.city &&
+      shipping?.state &&
+      shipping?.zipCode
+    );
+  };
+
   const pendingReview = orders.filter((o) => o.status === "pending_review");
   const bulkApprovalTargets = orders.filter(
-    (o) => o.status === "pending_review" || (o.status === "approved" && o.pharmacyStatus === "draft")
+    (o) =>
+      (o.status === "pending_review" || (o.status === "approved" && o.pharmacyStatus === "draft")) &&
+      canBulkDispatch(o)
   );
   const approved = orders.filter((o) => o.status === "approved" || o.status === "sent_to_pharmacy");
   const fulfilled = orders.filter((o) => o.status === "fulfilled" || o.status === "delivered");
@@ -101,6 +122,7 @@ function ProviderDashboardContent() {
           body: JSON.stringify({
             orderId: order.id,
             patientData: patient ?? null,
+            productData: products[order.productId] ?? null,
           }),
         });
         if (!dispatchRes.ok) {
