@@ -251,8 +251,9 @@ export async function POST(req: NextRequest) {
 
     // 8. Update order status
     const orderUpdates = {
-      status: dispatchGate.canDispatch ? "sent_to_pharmacy" as const : "pending_review" as const,
+      status: dispatchGate.canDispatch ? "approved" as const : "pending_review" as const,
       paymentStatus: "completed" as const,
+      pharmacyStatus: "draft" as const,
       identityStatus,
       identityReason: identityAiResult.summary,
       identityAiResult,
@@ -300,12 +301,26 @@ export async function POST(req: NextRequest) {
       try {
         const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
-        db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
-        await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
+        db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
+        await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
         logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
       } catch (e) {
-        errors.push(`Life File: ${(e as Error).message}`);
-        logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", (e as Error).message);
+        const errorMessage = (e as Error).message;
+        errors.push(`Life File: ${errorMessage}`);
+        db.orderDb.update(orderId, { status: "approved", pharmacyStatus: "error" });
+        await dbServer.orderDb.update(orderId, { status: "approved", pharmacyStatus: "error" }).catch(() => {});
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "lifefile",
+          action: "Pharmacy order submission failed",
+          orderId,
+          patientId: patient.id,
+          status: "error",
+          details: { dispatchGate: "identity_verified" },
+          error: errorMessage,
+        }).catch(() => {});
+        logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", errorMessage);
       }
     } else {
       db.orderDb.update(orderId, { pharmacyStatus: "draft" });
@@ -359,6 +374,14 @@ export async function POST(req: NextRequest) {
       orderId,
       chargeId: chargeResult.chargeId,
       identityStatus,
+      orderStatus: dispatchGate.canDispatch && !errors.some((error) => error.startsWith("Life File:"))
+        ? "sent_to_pharmacy"
+        : orderUpdates.status,
+      pharmacyStatus: dispatchGate.canDispatch && !errors.some((error) => error.startsWith("Life File:"))
+        ? "submitted"
+        : dispatchGate.canDispatch
+          ? "error"
+          : "draft",
       identityUploadUrl: dispatchGate.canDispatch ? undefined : identityUploadUrl,
       warnings: errors.length ? errors : undefined,
     });

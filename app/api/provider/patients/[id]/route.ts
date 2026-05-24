@@ -18,6 +18,7 @@ export async function GET(
       consents: dbServer.consentDb,
       uploads: dbServer.uploadDb,
       payments: dbServer.paymentDb,
+      pharmacyOrders: dbServer.pharmacyOrderDb,
       reviews: dbServer.providerReviewDb,
     });
 

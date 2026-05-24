@@ -28,7 +28,14 @@ export default function Confirmation() {
     );
   }
 
-  const isSentToPharmacy = order.status === "sent_to_pharmacy" || order.status === "processing" || order.status === "fulfilled" || order.status === "shipped" || order.status === "delivered";
+  const isSentToPharmacy =
+    order.pharmacyStatus === "submitted" ||
+    order.pharmacyStatus === "received" ||
+    order.pharmacyStatus === "processing" ||
+    order.pharmacyStatus === "fulfilled" ||
+    order.pharmacyStatus === "shipped" ||
+    order.pharmacyStatus === "delivered";
+  const hasPharmacyIssue = order.pharmacyStatus === "error";
 
   return (
     <div className="space-y-5">
@@ -40,6 +47,8 @@ export default function Confirmation() {
         <p className="text-gray-500 text-lg mb-8">
           {isSentToPharmacy
             ? "Your prescription has been sent directly to our pharmacy."
+            : hasPharmacyIssue
+              ? "Your payment is complete. Our team is reviewing the pharmacy submission."
             : "Your intake has been submitted and is being processed."}
         </p>
 
@@ -55,6 +64,8 @@ export default function Confirmation() {
                 <Package className="w-3.5 h-3.5" />
                 Sent to Pharmacy
               </span>
+            ) : hasPharmacyIssue ? (
+              <span className="font-semibold text-amber-600">Pharmacy Review</span>
             ) : (
               <span className="font-semibold text-blue-600">Processing</span>
             )}
@@ -70,7 +81,7 @@ export default function Confirmation() {
           <ul className="space-y-2 text-sm text-gray-600">
             <li className="flex items-start gap-2">
               <span className="text-teal-500 mt-0.5 font-bold">1.</span>
-              Our pharmacy will prepare and package your medication
+              {isSentToPharmacy ? "Our pharmacy will prepare and package your medication" : "Our team will complete the pharmacy submission review"}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-teal-500 mt-0.5 font-bold">2.</span>

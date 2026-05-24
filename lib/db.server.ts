@@ -356,7 +356,7 @@ export const pharmacyOrderDb = {
   async getByOrder(orderId: string): Promise<PharmacyOrder | null> {
     if (!isDbAvailable()) return null;
     const { rows } = await sql`
-      SELECT * FROM pharmacy_orders WHERE order_id = ${orderId} LIMIT 1
+      SELECT * FROM pharmacy_orders WHERE order_id = ${orderId} ORDER BY submitted_at DESC NULLS LAST LIMIT 1
     `;
     return rows[0] ? rowToPharmacyOrder(rows[0]) : null;
   },
@@ -371,9 +371,10 @@ export const pharmacyOrderDb = {
   async create(o: PharmacyOrder): Promise<PharmacyOrder> {
     await sql`
       INSERT INTO pharmacy_orders (id, order_id, patient_id, life_file_order_id, status,
-        payload, submitted_at)
+        payload, submitted_at, last_error)
       VALUES (${o.id}, ${o.orderId}, ${o.patientId}, ${o.lifeFileOrderId ?? null},
-        ${o.status}, ${JSON.stringify(o.payload)}::jsonb, ${o.submittedAt ?? new Date().toISOString()})
+        ${o.status}, ${JSON.stringify(o.payload)}::jsonb, ${o.submittedAt ?? new Date().toISOString()},
+        ${o.lastError ?? null})
     `;
     return o;
   },

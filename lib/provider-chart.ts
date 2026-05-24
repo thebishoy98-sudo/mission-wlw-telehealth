@@ -3,6 +3,7 @@ import type {
   Order,
   Patient,
   Payment,
+  PharmacyOrder,
   Product,
   ProviderReview,
   Question,
@@ -21,6 +22,7 @@ export interface ProviderChartStores {
   consents: { getByOrder(orderId: string): MaybePromise<ConsentRecord | null> };
   uploads: { getByOrder(orderId: string): MaybePromise<Upload[]> };
   payments: { getByOrder(orderId: string): MaybePromise<Payment | null> };
+  pharmacyOrders?: { getByOrder(orderId: string): MaybePromise<PharmacyOrder | null> };
   reviews: { getByOrder(orderId: string): MaybePromise<ProviderReview | null> };
 }
 
@@ -34,6 +36,7 @@ export interface ProviderPatientChart {
   consent: ConsentRecord | null;
   uploads: Upload[];
   payment: Payment | null;
+  pharmacyOrder: PharmacyOrder | null;
   review: ProviderReview | null;
 }
 
@@ -48,7 +51,7 @@ export async function loadProviderPatientChart(
   const selectedOrder = orders[0];
   if (!selectedOrder) return null;
 
-  const [product, questionnaire, answers, consent, uploads, payment, review] =
+  const [product, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review] =
     await Promise.all([
       stores.products.getById(selectedOrder.productId),
       stores.questions.getAll(),
@@ -56,6 +59,7 @@ export async function loadProviderPatientChart(
       stores.consents.getByOrder(selectedOrder.id),
       stores.uploads.getByOrder(selectedOrder.id),
       stores.payments.getByOrder(selectedOrder.id),
+      stores.pharmacyOrders?.getByOrder(selectedOrder.id) ?? null,
       stores.reviews.getByOrder(selectedOrder.id),
     ]);
 
@@ -69,6 +73,7 @@ export async function loadProviderPatientChart(
     consent,
     uploads,
     payment,
+    pharmacyOrder,
     review,
   };
 }

@@ -67,10 +67,12 @@ function ProviderDashboardContent() {
     );
   };
 
-  const pendingReview = orders.filter((o) => o.status === "pending_review");
+  const pendingReview = orders.filter(
+    (o) => o.status === "pending_review" || (o.status === "approved" && (o.pharmacyStatus === "draft" || o.pharmacyStatus === "error"))
+  );
   const bulkApprovalTargets = orders.filter(
     (o) =>
-      (o.status === "pending_review" || (o.status === "approved" && o.pharmacyStatus === "draft")) &&
+      (o.status === "pending_review" || (o.status === "approved" && (o.pharmacyStatus === "draft" || o.pharmacyStatus === "error"))) &&
       canBulkDispatch(o)
   );
   const approved = orders.filter((o) => o.status === "approved" || o.status === "sent_to_pharmacy");
@@ -227,9 +229,14 @@ function ProviderDashboardContent() {
                               Identity review
                             </span>
                           )}
+                          {order.status === "approved" && order.pharmacyStatus === "error" && (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
+                              Pharmacy retry
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600 mt-0.5">
-                          Order {order.id.slice(-6)} • {formatDateTime(order.createdAt)}
+                          Order {order.id.slice(-6)} - {formatDateTime(order.createdAt)}
                         </p>
                       </div>
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -288,7 +295,7 @@ function ProviderDashboardContent() {
                               {new Date(rev.chartViewedAt).toLocaleDateString()}
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-400">—</span>
+                            <span className="text-xs text-gray-400">-</span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">

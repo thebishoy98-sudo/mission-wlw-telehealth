@@ -14,6 +14,7 @@ import type {
   Order,
   Patient,
   Payment,
+  PharmacyOrder,
   Product,
   ProviderReview,
   Question,
@@ -31,6 +32,7 @@ interface ChartState {
   consent: ConsentRecord | null;
   uploads: Upload[];
   payment: Payment | null;
+  pharmacyOrder: PharmacyOrder | null;
   review: ProviderReview | null;
 }
 
@@ -110,18 +112,20 @@ export default function PatientDetail() {
 
     await stepDelay(500);
     try {
-      const reviewRes = await fetch("/api/provider/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: chart.selectedOrder.id,
-          action: "approve",
-          notes: providerNotes,
-          reviewedBy: "Dr. Provider",
-        }),
-      });
-      if (!reviewRes.ok) throw new Error((await reviewRes.json()).error ?? "Provider approval failed");
-      setSelectedOrderPatch({ status: "approved", approvedAt: new Date().toISOString() });
+      if (chart.selectedOrder.status !== "approved") {
+        const reviewRes = await fetch("/api/provider/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: chart.selectedOrder.id,
+            action: "approve",
+            notes: providerNotes,
+            reviewedBy: "Dr. Provider",
+          }),
+        });
+        if (!reviewRes.ok) throw new Error((await reviewRes.json()).error ?? "Provider approval failed");
+        setSelectedOrderPatch({ status: "approved", approvedAt: new Date().toISOString() });
+      }
       setApprovalSteps((prev) => prev.map((step, index) => index === 0 ? { ...step, status: "done" } : index === 1 ? { ...step, status: "running" } : step));
 
       await stepDelay(500);
@@ -198,7 +202,7 @@ export default function PatientDetail() {
     );
   }
 
-  const { patient, selectedOrder, questionnaire, answers, consent, uploads, payment, review } = chart;
+  const { patient, selectedOrder, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review } = chart;
   const chartMarkedViewed = !!review?.chartViewedAt;
 
   return (
@@ -428,14 +432,44 @@ export default function PatientDetail() {
               </Card>
             )}
 
-            {(selectedOrder.status === "pending_review" || selectedOrder.status === "approved") && !approving && !approved && (
+            <Card>
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">Pharmacy</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center flex-wrap gap-1">
+                    <span className="text-gray-500">Status</span>
+                    <Badge className={getStatusColor(selectedOrder.pharmacyStatus)}>
+                      {getStatusLabel(selectedOrder.pharmacyStatus)}
+                    </Badge>
+                  </div>
+                  {pharmacyOrder?.lifeFileOrderId && (
+                    <div className="flex justify-between flex-wrap gap-1">
+                      <span className="text-gray-500">LifeFile ID</span>
+                      <span className="font-mono text-xs text-gray-700">{pharmacyOrder.lifeFileOrderId}</span>
+                    </div>
+                  )}
+                  {pharmacyOrder?.lastError && (
+                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{pharmacyOrder.lastError}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {(selectedOrder.status === "pending_review" || selectedOrder.status === "approved" || (selectedOrder.status === "sent_to_pharmacy" && selectedOrder.pharmacyStatus !== "submitted")) && !approving && !approved && (
               <div className="space-y-3">
                 <Button fullWidth onClick={handleApprove}>Approve &amp; Process Order</Button>
                 <Button fullWidth variant="outline" onClick={handleReject}>Reject Order</Button>
               </div>
             )}
 
-            {selectedOrder.status === "sent_to_pharmacy" && !approved && (
+            {selectedOrder.status === "sent_to_pharmacy" && selectedOrder.pharmacyStatus !== "submitted" && !approved && (
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-center">
+                <p className="text-amber-800 font-semibold text-sm">Pharmacy submission pending</p>
+                <p className="text-amber-700 text-xs mt-1">Use Approve & Process Order to retry dispatch</p>
+              </div>
+            )}
+
+            {selectedOrder.status === "sent_to_pharmacy" && selectedOrder.pharmacyStatus === "submitted" && !approved && (
               <div className="p-4 bg-teal-50 border border-teal-100 rounded-2xl text-center">
                 <p className="text-teal-700 font-semibold text-sm">Sent to Pharmacy</p>
                 <p className="text-teal-600 text-xs mt-1">No manual action required</p>

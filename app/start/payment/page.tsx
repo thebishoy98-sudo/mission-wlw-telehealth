@@ -48,8 +48,8 @@ export default function Payment() {
     setProcessingStep("Setting up your account...");
     await delay(400);
 
-    // Create patient + order in localStorage for demo
-    // In production, this is handled server-side in /api/payments/charge
+    // Create a local draft so the confirmation page has immediate browser state.
+    // The charge API persists and returns the authoritative order status.
     const patient = db.patientDb.create({
       id: `patient_${Date.now()}`,
       firstName: intakeState.firstName,
@@ -66,7 +66,7 @@ export default function Payment() {
 
     const amount = dose?.price || product?.startingPrice || 0;
 
-    // Create order as draft — the charge API transitions it through statuses
+    // Create order as draft - the charge API transitions it through statuses
     const order = db.orderDb.create({
       id: `order_${Date.now()}`,
       patientId: patient.id,
@@ -140,7 +140,7 @@ export default function Payment() {
       });
     }
 
-    // ── Call API route → QB Payments charge → integration chain ────────────
+    // Call API route -> QB Payments charge -> integration chain
     setProcessingStep("Charging card via QuickBooks Payments...");
 
     const res = await fetch("/api/payments/charge", {
@@ -205,6 +205,14 @@ export default function Payment() {
 
     setProcessingStep("Finalizing order...");
     await delay(500);
+
+    db.orderDb.update(order.id, {
+      status: result.orderStatus ?? "approved",
+      paymentStatus: "completed",
+      pharmacyStatus: result.pharmacyStatus ?? "draft",
+      identityStatus: result.identityStatus,
+      updatedAt: new Date().toISOString(),
+    });
 
     saveIntakeState({ orderId: order.id, patientId: patient.id, paymentProcessed: true });
     setProcessing(false);
