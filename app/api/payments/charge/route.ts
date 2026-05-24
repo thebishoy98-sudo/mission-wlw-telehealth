@@ -234,7 +234,10 @@ export async function POST(req: NextRequest) {
     }
 
     const identityAiResult = submittedUploads.length
-      ? await verifyIdentityUploads(identityAiUploads)
+      ? await verifyIdentityUploads(identityAiUploads, {
+          patientName: patient ? `${patient.firstName} ${patient.lastName}` : undefined,
+          dateOfBirth: patient?.dateOfBirth,
+        })
       : {
           status: "missing" as const,
           confidence: 0,

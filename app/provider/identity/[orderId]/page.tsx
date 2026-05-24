@@ -202,28 +202,17 @@ function IdentityReviewContent() {
           <div className="space-y-5">
             <Card>
               <CardContent className="p-5">
-                <h2 className="mb-3 text-lg font-bold text-gray-900">AI / Vendor Result</h2>
+                <h2 className="mb-3 text-lg font-bold text-gray-900">Automated Check</h2>
                 {aiResult ? (
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Status</span>
-                      <span className="font-semibold text-gray-900">{aiResult.status}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-500">Confidence</span>
-                      <span className="font-semibold text-gray-900">{Math.round(aiResult.confidence * 100)}%</span>
+                      <span className="text-gray-500">Result</span>
+                      <span className="font-semibold text-gray-900">{aiResult.status.replace("_", " ")}</span>
                     </div>
                     <p className="rounded-lg bg-gray-50 p-3 text-gray-700">{aiResult.summary}</p>
-                    {aiResult.flags.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {aiResult.flags.map((flag) => (
-                          <span key={flag} className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">{flag}</span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No AI or vendor result yet.</p>
+                  <p className="text-sm text-gray-500">Manual review required.</p>
                 )}
               </CardContent>
             </Card>

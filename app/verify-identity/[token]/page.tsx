@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-react";
 
@@ -56,6 +56,7 @@ const mediaRecorderOptions = (): MediaRecorderOptions => {
 
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
+  const router = useRouter();
   const idVideoRef = useRef<HTMLVideoElement | null>(null);
   const idStreamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -219,13 +220,7 @@ export default function VerifyIdentityPage() {
         });
         return;
       }
-      setResult({
-        status: "success",
-        message:
-          payload.identityStatus === "verified"
-            ? "Identity verified. A provider will complete the chart review before pharmacy processing."
-            : "Upload received. Our team will review it before pharmacy dispatch.",
-      });
+      router.push(`/verify-identity/${encodeURIComponent(params.token)}/submitted`);
     } catch (error) {
       setResult({
         status: "error",

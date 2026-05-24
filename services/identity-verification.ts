@@ -26,7 +26,15 @@ function fallbackResult(summary: string, flags: string[]): IdentityAiResult {
   };
 }
 
-export async function verifyIdentityUploads(uploads: Upload[]): Promise<IdentityAiResult> {
+interface IdentityVerificationContext {
+  patientName?: string;
+  dateOfBirth?: string;
+}
+
+export async function verifyIdentityUploads(
+  uploads: Upload[],
+  context: IdentityVerificationContext = {}
+): Promise<IdentityAiResult> {
   const idUpload = uploads.find((upload) => upload.type === "driver_license");
   const selfieUpload = uploads.find((upload) => upload.type === "selfie_video");
 
@@ -60,17 +68,28 @@ export async function verifyIdentityUploads(uploads: Upload[]): Promise<Identity
               type: "text",
               text: `Compare the government ID image and identity video frame for identity verification.
 
+Expected order identity:
+- Patient name: ${context.patientName || "unknown"}
+- Date of birth: ${context.dateOfBirth || "unknown"}
+
 Return JSON only:
 {
   "status": "verified" | "needs_review" | "rejected",
   "confidence": 0.0 to 1.0,
-  "summary": "short provider-facing summary",
+  "summary": "one short provider-facing sentence",
   "flags": ["short machine-readable flags"]
 }
 
-Use "verified" only when the images are clear and the same person appears to be shown.
-Use "needs_review" when quality is poor, the ID is obscured, the match is uncertain, or liveness cannot be assessed.
-Use "rejected" only when there is a clear mismatch or obvious invalid document.`,
+Check all of these:
+1. The ID appears to be a real government ID, not a screen/photo of a screen.
+2. The face on the ID appears to match the person in the identity video frame.
+3. The full name extracted from the ID matches the expected order name.
+4. The date of birth extracted from the ID matches the expected order date of birth.
+
+Use "verified" only when the ID is readable, the face match is clear, and name/DOB match the order.
+Use "needs_review" when image quality, ID readability, name, DOB, or face match is uncertain.
+Use "rejected" only when there is a clear mismatch, obvious fake/invalid document, or clear name/DOB mismatch.
+Keep the summary brief and avoid listing implementation details.`,
             },
             idImage,
             selfieFrame,

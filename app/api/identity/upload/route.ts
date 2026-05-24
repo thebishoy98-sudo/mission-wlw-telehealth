@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+    const patient =
+      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+      db.patientDb.getById(order.patientId);
 
     const now = new Date().toISOString();
     const uploads: Upload[] = [
@@ -62,7 +65,10 @@ export async function POST(req: NextRequest) {
     await Promise.all(uploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
 
     const result = hasRequiredIdentityUploads(aiUploads)
-      ? await verifyIdentityUploads(aiUploads)
+      ? await verifyIdentityUploads(aiUploads, {
+          patientName: patient ? `${patient.firstName} ${patient.lastName}` : undefined,
+          dateOfBirth: patient?.dateOfBirth,
+        })
       : {
           status: "needs_review" as const,
           confidence: 0,
