@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as lifefile from "@/services/lifefile";
-import * as spruce from "@/services/spruce";
 import { generateId } from "@/lib/utils";
 import { hasRequiredIdentityUploads, statusFromAiResult } from "@/lib/identity";
 import { verifyIdentityUploads } from "@/services/identity-verification";
@@ -93,29 +91,6 @@ export async function POST(req: NextRequest) {
         identityAiResult: result,
         identityReviewRequired: identityStatus !== "verified",
       }).catch(() => {});
-    }
-
-    if (identityStatus === "verified" && order.paymentStatus === "completed" && order.pharmacyStatus !== "submitted") {
-      try {
-        const patient =
-          (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
-          db.patientDb.getById(order.patientId);
-        const product =
-          (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
-          db.productDb.getById(order.productId);
-        const pharmacyOrder = await lifefile.createPharmacyOrder(
-          { ...order, ...identityUpdate, status: "sent_to_pharmacy", pharmacyStatus: "submitted" },
-          { patient, product }
-        );
-        await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
-        db.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
-        await dbServer.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
-        if (patient) {
-          await spruce.sendMessage(patient.id, "payment_received", { orderId: order.id }, patient);
-        }
-      } catch (error) {
-        console.error("Identity upload dispatch error:", error);
-      }
     }
 
     const auditCtx = actorFromHeaders(req.headers);

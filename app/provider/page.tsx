@@ -76,19 +76,6 @@ function ProviderDashboardContent() {
     }
   };
 
-  const handleManualIdentityApproval = async (order: Types.Order) => {
-    await fetch("/api/identity/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderId: order.id,
-        reviewedBy: "provider",
-        notes: "Identity manually approved by provider",
-      }),
-    });
-    await reload();
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="provider" />
@@ -185,9 +172,9 @@ function ProviderDashboardContent() {
                       </div>
                       <div className="flex gap-2">
                         {!getIdentityGate(order).canDispatch && (
-                          <Button size="sm" variant="outline" onClick={() => handleManualIdentityApproval(order)}>
-                            Approve Identity
-                          </Button>
+                          <Link href={`/provider/identity/${order.id}`}>
+                            <Button size="sm" variant="outline">Review Identity</Button>
+                          </Link>
                         )}
                         <Link href={`/provider/patients/${order.patientId}`}>
                           <Button size="sm">Review Chart</Button>

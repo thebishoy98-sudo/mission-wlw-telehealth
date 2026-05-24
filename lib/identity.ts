@@ -31,3 +31,25 @@ export function statusFromAiResult(result: IdentityAiResult): IdentityStatus {
   if (result.status === "rejected") return "rejected";
   return "needs_review";
 }
+
+export type IdentityReviewAction = "approve" | "deny";
+
+export function getIdentityReviewUpdate({
+  action,
+  reviewedBy,
+  notes,
+  now = new Date().toISOString(),
+}: {
+  action: IdentityReviewAction;
+  reviewedBy: string;
+  notes?: string;
+  now?: string;
+}) {
+  const approved = action === "approve";
+  return {
+    identityStatus: approved ? ("manual_approved" as const) : ("rejected" as const),
+    identityReason: notes || (approved ? "Identity manually approved." : "Identity manually denied."),
+    identityReviewedAt: now,
+    identityReviewedBy: reviewedBy,
+  };
+}

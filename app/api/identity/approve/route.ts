@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { getIdentityReviewUpdate } from "@/lib/identity";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,12 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const update = {
-      identityStatus: "manual_approved" as const,
-      identityReason: notes ?? "Identity manually approved.",
-      identityReviewedAt: new Date().toISOString(),
-      identityReviewedBy: reviewedBy,
-    };
+    const update = getIdentityReviewUpdate({ action: "approve", reviewedBy, notes });
 
     db.orderDb.update(orderId, update);
     await dbServer.orderDb.update(orderId, update).catch(() => {});
