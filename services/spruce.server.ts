@@ -86,7 +86,7 @@ async function sendViaSpruceApi(phoneNumber: string, messageText: string, idempo
       "s-idempotency-key": idempotencyKey.slice(0, 255),
     },
     body: JSON.stringify({
-      destination: { smsOrEmailEndpoint: { value: phoneNumber } },
+      destination: { smsOrEmailEndpoint: phoneNumber },
       message: { body: [{ type: "text", value: messageText }] },
     }),
   });
