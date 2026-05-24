@@ -54,23 +54,58 @@ function ProviderDashboardContent() {
 
   const handleApproveAll = async () => {
     setApprovingAll(true);
+    setError("");
     try {
-      await Promise.all(
-        pendingReview
-          .filter((order) => !getIdentityGate(order).canDispatch)
-          .map((order) =>
-            fetch("/api/identity/approve", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                orderId: order.id,
-                reviewedBy: "provider",
-                notes: "Identity manually approved by provider",
-              }),
-            })
-          )
-      );
+      for (const order of pendingReview) {
+        const patient = patients[order.patientId];
+
+        if (!getIdentityGate(order).canDispatch) {
+          const identityRes = await fetch("/api/identity/approve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: order.id,
+              reviewedBy: "Dr. Provider",
+              notes: "Identity manually approved by provider",
+            }),
+          });
+          if (!identityRes.ok) {
+            const message = await identityRes.text();
+            throw new Error(message || `Identity approval failed for order ${order.id.slice(-6)}`);
+          }
+        }
+
+        const reviewRes = await fetch("/api/provider/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: order.id,
+            action: "approve",
+            notes: "Bulk approved by provider",
+            reviewedBy: "Dr. Provider",
+          }),
+        });
+        if (!reviewRes.ok) {
+          const message = await reviewRes.text();
+          throw new Error(message || `Provider approval failed for order ${order.id.slice(-6)}`);
+        }
+
+        const dispatchRes = await fetch("/api/orders/dispatch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: order.id,
+            patientData: patient ?? null,
+          }),
+        });
+        if (!dispatchRes.ok) {
+          const message = await dispatchRes.text();
+          throw new Error(message || `Pharmacy dispatch failed for order ${order.id.slice(-6)}`);
+        }
+      }
       await reload();
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setApprovingAll(false);
     }
