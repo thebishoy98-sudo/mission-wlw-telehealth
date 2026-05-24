@@ -16,11 +16,18 @@ describe("stripe identity helpers", () => {
     process.env = oldEnv;
   });
 
-  it("reports disabled when required env vars are missing", () => {
+  it("reports disabled when the Stripe secret is missing", () => {
     delete process.env.STRIPE_SECRET_KEY;
     delete process.env.NEXT_PUBLIC_APP_URL;
 
     expect(isStripeIdentityConfigured(getStripeIdentityConfig())).toBe(false);
+  });
+
+  it("reports enabled when the Stripe secret exists", () => {
+    process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    delete process.env.NEXT_PUBLIC_APP_URL;
+
+    expect(isStripeIdentityConfigured(getStripeIdentityConfig())).toBe(true);
   });
 
   it("builds a document and selfie verification session payload", () => {

@@ -27,7 +27,7 @@ export function getStripeIdentityConfig(): StripeIdentityConfig {
 }
 
 export function isStripeIdentityConfigured(config = getStripeIdentityConfig()) {
-  return !!config.secretKey && !!config.appUrl;
+  return !!config.secretKey;
 }
 
 export function buildStripeIdentitySessionParams(input: StripeIdentitySessionInput) {
