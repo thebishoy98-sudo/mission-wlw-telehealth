@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText, Pill, X } from "lucide-react";
+import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText, X } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -408,27 +408,6 @@ export default function PatientDetail() {
                       <span className="text-gray-700 text-xs">{new Date(review.chartViewedAt).toLocaleString()}</span>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-gray-900 mb-3">Integration Status</h3>
-                <div className="space-y-2.5">
-                  {[
-                    { icon: FileText, label: "PracticeQ", value: selectedOrder.practiceQStatus },
-                    { icon: CreditCard, label: "QuickBooks", value: selectedOrder.quickbooksStatus },
-                    { icon: Pill, label: "Pharmacy", value: selectedOrder.pharmacyStatus },
-                  ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="flex items-center justify-between flex-wrap gap-1">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Icon className="w-4 h-4 text-gray-400" />
-                        {label}
-                      </div>
-                      <Badge className={getStatusColor(value)}>{value}</Badge>
-                    </div>
-                  ))}
                 </div>
               </CardContent>
             </Card>
