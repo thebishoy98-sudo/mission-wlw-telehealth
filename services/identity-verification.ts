@@ -76,7 +76,7 @@ Return JSON only:
 {
   "status": "verified" | "needs_review" | "rejected",
   "confidence": 0.0 to 1.0,
-  "summary": "one short provider-facing sentence",
+  "summary": "one short provider-facing sentence that separately states face match and demographic match",
   "flags": ["short machine-readable flags"]
 }
 
@@ -86,10 +86,13 @@ Check all of these:
 3. The full name extracted from the ID matches the expected order name.
 4. The date of birth extracted from the ID matches the expected order date of birth.
 
-Use "verified" only when the ID is readable, the face match is clear, and name/DOB match the order.
-Use "needs_review" when image quality, ID readability, name, DOB, or face match is uncertain.
-Use "rejected" only when there is a clear mismatch, obvious fake/invalid document, or clear name/DOB mismatch.
-Keep the summary brief and avoid listing implementation details.`,
+Rules:
+- Always state whether the ID face and video face appear to be the same person.
+- Do not imply a face mismatch when the concern is only name, DOB, or document capture quality.
+- Use "verified" only when the ID is readable, the face match is clear, and name/DOB match the order.
+- Use "needs_review" when face appears to match but name/DOB is mismatched, partially obscured, uncertain, or needs staff confirmation.
+- Use "rejected" only for a clear face mismatch, obvious fake/invalid document, or clear evidence the submitted identity belongs to a different person.
+- Keep the summary brief and avoid listing implementation details.`,
             },
             idImage,
             selfieFrame,

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle, Flashlight, FlashlightOff, ShieldCheck, Video } from "lucide-react";
 
 const RECORDING_SECONDS = 10;
 const MAX_IMAGE_WIDTH = 1200;
@@ -67,6 +67,8 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [captureError, setCaptureError] = useState("");
+  const [idTorchSupported, setIdTorchSupported] = useState(false);
+  const [idTorchOn, setIdTorchOn] = useState(false);
 
   useEffect(() => {
     onChange({
@@ -80,6 +82,8 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
   const stopIdCamera = () => {
     idStreamRef.current?.getTracks().forEach((track) => track.stop());
     idStreamRef.current = null;
+    setIdTorchOn(false);
+    setIdTorchSupported(false);
     setIdCameraOpen(false);
   };
 
@@ -111,6 +115,9 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
         audio: false,
       });
       idStreamRef.current = stream;
+      const [track] = stream.getVideoTracks();
+      const capabilities = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
+      setIdTorchSupported(!!capabilities?.torch);
       if (idVideoRef.current) {
         idVideoRef.current.srcObject = stream;
         await idVideoRef.current.play().catch(() => {});
@@ -126,6 +133,19 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
     if (!video) return;
     setIdImageData(dataUrlFromVideo(video));
     stopIdCamera();
+  };
+
+  const toggleIdTorch = async () => {
+    const [track] = idStreamRef.current?.getVideoTracks() ?? [];
+    if (!track) return;
+    const next = !idTorchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] });
+      setIdTorchOn(next);
+    } catch {
+      setIdTorchSupported(false);
+      setCaptureError("Flashlight is not available on this camera.");
+    }
   };
 
   const resetVideoCapture = () => {
@@ -224,6 +244,12 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
                 <Camera className="h-4 w-4 mr-2" />
                 Capture ID Photo
               </Button>
+              {idTorchSupported && (
+                <Button type="button" fullWidth variant="outline" onClick={toggleIdTorch}>
+                  {idTorchOn ? <FlashlightOff className="h-4 w-4 mr-2" /> : <Flashlight className="h-4 w-4 mr-2" />}
+                  {idTorchOn ? "Flash Off" : "Flash On"}
+                </Button>
+              )}
               <Button type="button" fullWidth variant="outline" onClick={stopIdCamera}>
                 Cancel
               </Button>
