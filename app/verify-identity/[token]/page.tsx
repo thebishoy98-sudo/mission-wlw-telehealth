@@ -7,11 +7,21 @@ import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-rea
 
 const RECORDING_SECONDS = 10;
 const MAX_IMAGE_WIDTH = 1200;
+const VIDEO_BITS_PER_SECOND = 180_000;
+const MAX_VIDEO_DATA_URL_BYTES = 3_500_000;
 
 const errorMessage = (value: unknown, fallback: string) => {
   if (typeof value === "string") return value;
   if (value && typeof value === "object" && "message" in value && typeof value.message === "string") return value.message;
   return fallback;
+};
+
+const parseJson = (value: string) => {
+  try {
+    return value ? JSON.parse(value) : {};
+  } catch {
+    return {};
+  }
 };
 
 const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
@@ -23,6 +33,25 @@ const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
   canvas.height = Math.round(sourceHeight * scale);
   canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", quality);
+};
+
+const identityVideoConstraints: MediaStreamConstraints = {
+  video: {
+    facingMode: "user",
+    width: { ideal: 360, max: 480 },
+    height: { ideal: 480, max: 640 },
+    frameRate: { ideal: 15, max: 20 },
+  },
+  audio: false,
+};
+
+const mediaRecorderOptions = (): MediaRecorderOptions => {
+  const candidates = ["video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+  return {
+    ...(mimeType ? { mimeType } : {}),
+    videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+  };
 };
 
 export default function VerifyIdentityPage() {
@@ -58,6 +87,12 @@ export default function VerifyIdentityPage() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setRecording(false);
+  };
+
+  const resetVideoCapture = () => {
+    setIdentityVideoFrameData("");
+    setIdentityVideoData("");
+    setRecordingSeconds(0);
   };
 
   useEffect(() => {
@@ -102,14 +137,14 @@ export default function VerifyIdentityPage() {
 
   const startRecording = async () => {
     setResult(null);
-    setIdentityVideoFrameData("");
-    setIdentityVideoData("");
-    setRecordingSeconds(0);
+    resetVideoCapture();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      setRecording(true);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const stream = await navigator.mediaDevices.getUserMedia(identityVideoConstraints);
       streamRef.current = stream;
       recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, mediaRecorderOptions());
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedChunksRef.current.push(event.data);
@@ -117,7 +152,18 @@ export default function VerifyIdentityPage() {
       recorder.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
         const reader = new FileReader();
-        reader.onload = () => setIdentityVideoData(String(reader.result ?? ""));
+        reader.onload = () => {
+          const dataUrl = String(reader.result ?? "");
+          if (dataUrl.length > MAX_VIDEO_DATA_URL_BYTES) {
+            resetVideoCapture();
+            setResult({
+              status: "error",
+              message: "The video file is too large. Please re-record in steady light and keep the phone still.",
+            });
+            return;
+          }
+          setIdentityVideoData(dataUrl);
+        };
         reader.readAsDataURL(blob);
       };
       if (videoRef.current) {
@@ -125,7 +171,6 @@ export default function VerifyIdentityPage() {
         await videoRef.current.play().catch(() => {});
       }
       recorder.start();
-      setRecording(true);
       let seconds = 0;
       timerRef.current = setInterval(() => {
         seconds += 1;
@@ -136,6 +181,7 @@ export default function VerifyIdentityPage() {
         }
       }, 1000);
     } catch {
+      setRecording(false);
       setResult({ status: "error", message: "Camera access was blocked. Please allow camera access and try again." });
     }
   };
@@ -146,6 +192,10 @@ export default function VerifyIdentityPage() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25000);
     try {
+      if (identityVideoData.length > MAX_VIDEO_DATA_URL_BYTES) {
+        setResult({ status: "error", message: "The video is too large. Please re-record and try again." });
+        return;
+      }
       const response = await fetch("/api/identity/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,9 +207,16 @@ export default function VerifyIdentityPage() {
           identityVideoData,
         }),
       });
-      const payload = await response.json();
+      const responseText = await response.text();
+      const payload = parseJson(responseText);
       if (!response.ok) {
-        setResult({ status: "error", message: errorMessage(payload.error, "Identity upload failed.") });
+        setResult({
+          status: "error",
+          message:
+            response.status === 413
+              ? "The video is too large. Please re-record and try again."
+              : errorMessage(payload.error, "Identity upload failed."),
+        });
         return;
       }
       setResult({
@@ -175,7 +232,7 @@ export default function VerifyIdentityPage() {
         message:
           (error as Error).name === "AbortError"
             ? "Upload is taking too long. Please check your connection and try again."
-            : "Identity upload failed. Please try again.",
+            : "Identity upload failed. Please re-record the video and try again.",
       });
     } finally {
       window.clearTimeout(timeout);
@@ -283,7 +340,7 @@ export default function VerifyIdentityPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button type="button" onClick={recording ? stopCamera : startRecording} variant={recording ? "outline" : "primary"}>
                 <Video className="h-4 w-4 mr-2" />
-                {recording ? "Stop Recording" : "Start Recording"}
+                {recording ? "Stop Recording" : identityVideoData ? "Re-record Video" : "Start Recording"}
               </Button>
             </div>
           </div>

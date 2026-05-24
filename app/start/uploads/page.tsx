@@ -9,6 +9,8 @@ import { CheckCircle, Video, Camera } from "lucide-react";
 
 const RECORDING_SECONDS = 10;
 const MAX_IMAGE_WIDTH = 1200;
+const VIDEO_BITS_PER_SECOND = 180_000;
+const MAX_VIDEO_DATA_URL_BYTES = 3_500_000;
 
 const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
   const sourceWidth = video.videoWidth || 640;
@@ -19,6 +21,25 @@ const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
   canvas.height = Math.round(sourceHeight * scale);
   canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", quality);
+};
+
+const identityVideoConstraints: MediaStreamConstraints = {
+  video: {
+    facingMode: "user",
+    width: { ideal: 360, max: 480 },
+    height: { ideal: 480, max: 640 },
+    frameRate: { ideal: 15, max: 20 },
+  },
+  audio: false,
+};
+
+const mediaRecorderOptions = (): MediaRecorderOptions => {
+  const candidates = ["video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+  return {
+    ...(mimeType ? { mimeType } : {}),
+    videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+  };
 };
 
 export default function Uploads() {
@@ -32,6 +53,7 @@ export default function Uploads() {
   const [identityVideoData, setIdentityVideoData] = useState<string>("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [captureError, setCaptureError] = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const idVideoRef = useRef<HTMLVideoElement | null>(null);
   const idStreamRef = useRef<MediaStream | null>(null);
@@ -81,16 +103,23 @@ export default function Uploads() {
     setSelfieUploaded(true);
   };
 
-  const startRecording = async () => {
-    setRecordingSeconds(0);
+  const resetVideoCapture = () => {
     setSelfieFrameData("");
     setIdentityVideoData("");
+    setRecordingSeconds(0);
     setSelfieUploaded(false);
+  };
+
+  const startRecording = async () => {
+    setCaptureError("");
+    resetVideoCapture();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      setRecording(true);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const stream = await navigator.mediaDevices.getUserMedia(identityVideoConstraints);
       streamRef.current = stream;
       recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, mediaRecorderOptions());
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedChunksRef.current.push(event.data);
@@ -98,7 +127,15 @@ export default function Uploads() {
       recorder.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
         const reader = new FileReader();
-        reader.onload = () => setIdentityVideoData(String(reader.result ?? ""));
+        reader.onload = () => {
+          const dataUrl = String(reader.result ?? "");
+          if (dataUrl.length > MAX_VIDEO_DATA_URL_BYTES) {
+            resetVideoCapture();
+            setCaptureError("The video file is too large. Please re-record in steady light and keep the phone still.");
+            return;
+          }
+          setIdentityVideoData(dataUrl);
+        };
         reader.readAsDataURL(blob);
       };
       if (videoRef.current) {
@@ -106,7 +143,6 @@ export default function Uploads() {
         await videoRef.current.play().catch(() => {});
       }
       recorder.start();
-      setRecording(true);
       let secs = 0;
       timerRef.current = setInterval(() => {
         secs++;
@@ -118,6 +154,7 @@ export default function Uploads() {
       }, 1000);
     } catch {
       setRecording(false);
+      setCaptureError("Camera access was blocked. Please allow camera access and try again.");
     }
   };
 
@@ -240,9 +277,14 @@ export default function Uploads() {
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button onClick={startRecording} size="sm">
                   <Video className="w-4 h-4 mr-2" />
-                  Start Recording
+                  {identityVideoData ? "Re-record Video" : "Start Recording"}
                 </Button>
               </div>
+            </div>
+          )}
+          {captureError && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {captureError}
             </div>
           )}
         </div>
