@@ -12,6 +12,13 @@ import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 
+type AdminDashboardData = {
+  orders: Types.Order[];
+  patients: Types.Patient[];
+  payments: Types.Payment[];
+  pharmacyOrders: Types.PharmacyOrder[];
+};
+
 function AdminDashboardContent() {
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -24,53 +31,74 @@ function AdminDashboardContent() {
   });
 
   const [orders, setOrders] = useState<Types.Order[]>([]);
+  const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
+  const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [revenueData, setRevenueData] = useState<any[]>([]);
 
   useEffect(() => {
-    const allOrders = db.orderDb.getAll();
-    const allPayments = db.paymentDb.getAll();
-    const allPatients = db.patientDb.getAll();
+    async function loadAdminData() {
+      let allOrders = db.orderDb.getAll();
+      let allPayments = db.paymentDb.getAll();
+      let allPatients = db.patientDb.getAll();
+      let allPharmacyOrders = db.pharmacyOrderDb.getAll();
 
-    const totalRevenue = allPayments
-      .filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + p.amount, 0);
+      try {
+        const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+        if (response.ok) {
+          const data = (await response.json()) as AdminDashboardData;
+          allOrders = data.orders;
+          allPayments = data.payments;
+          allPatients = data.patients;
+          allPharmacyOrders = data.pharmacyOrders;
+        }
+      } catch {
+        // Keep local fallback for static/local runs.
+      }
 
-    const paidOrders = allPayments.filter((p) => p.status === "completed").length;
-    const fulfilled = allOrders.filter(
-      (o) => o.status === "delivered" || o.status === "fulfilled"
-    ).length;
-
-    setStats({
-      totalOrders: allOrders.length,
-      totalPatients: allPatients.length,
-      totalRevenue,
-      paidOrders,
-      pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
-      fulfilled,
-      averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
-    });
-
-    setOrders(allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-
-    // Generate revenue data
-    const last7Days: { date: string; revenue: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dayRevenue = allPayments
-        .filter(
-          (p) =>
-            p.status === "completed" &&
-            new Date(p.createdAt).toDateString() === date.toDateString()
-        )
+      const totalRevenue = allPayments
+        .filter((p) => p.status === "completed")
         .reduce((sum, p) => sum + p.amount, 0);
 
-      last7Days.push({
-        date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        revenue: dayRevenue,
+      const paidOrders = allPayments.filter((p) => p.status === "completed").length;
+      const fulfilled = allOrders.filter(
+        (o) => o.status === "delivered" || o.status === "fulfilled"
+      ).length;
+
+      setStats({
+        totalOrders: allOrders.length,
+        totalPatients: allPatients.length,
+        totalRevenue,
+        paidOrders,
+        pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
+        fulfilled,
+        averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
       });
+
+      setOrders(allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setPayments(Object.fromEntries(allPayments.map((payment) => [payment.orderId, payment])));
+      setPharmacyOrders(Object.fromEntries(allPharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
+
+      const last7Days: { date: string; revenue: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dayRevenue = allPayments
+          .filter(
+            (p) =>
+              p.status === "completed" &&
+              new Date(p.createdAt).toDateString() === date.toDateString()
+          )
+          .reduce((sum, p) => sum + p.amount, 0);
+
+        last7Days.push({
+          date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          revenue: dayRevenue,
+        });
+      }
+      setRevenueData(last7Days);
     }
-    setRevenueData(last7Days);
+
+    void loadAdminData();
   }, []);
 
   return (
@@ -211,7 +239,7 @@ function AdminDashboardContent() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">
-                      Payment
+                      Payment / QB
                     </th>
                     <th className="px-6 py-3 text-left text-sm font-semibold">
                       Pharmacy
@@ -236,11 +264,22 @@ function AdminDashboardContent() {
                         <Badge className={getStatusColor(order.paymentStatus)}>
                           {getStatusLabel(order.paymentStatus)}
                         </Badge>
+                        <div className="mt-1">
+                          <Badge className={getStatusColor(order.quickbooksStatus)}>
+                            {getStatusLabel(order.quickbooksStatus)}
+                          </Badge>
+                        </div>
+                        {payments[order.id]?.transactionId && (
+                          <p className="mt-1 text-xs text-gray-500">{payments[order.id].transactionId}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <Badge className={getStatusColor(order.pharmacyStatus)}>
                           {getStatusLabel(order.pharmacyStatus)}
                         </Badge>
+                        {pharmacyOrders[order.id]?.lifeFileOrderId && (
+                          <p className="mt-1 text-xs text-gray-500">LF {pharmacyOrders[order.id].lifeFileOrderId}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <Link href={`/admin/orders#${order.id}`}>
