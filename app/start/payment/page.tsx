@@ -152,6 +152,7 @@ export default function Payment() {
         cardLast4,
         cardBrand: "Visa",
         amount: total,
+        identityStatus: intakeState.identityStatus ?? "missing",
         // Send full patient + order data so server can create in Postgres
         // (localStorage is not accessible server-side)
         patientData: {
@@ -177,6 +178,8 @@ export default function Payment() {
           pharmacyStatus: "draft",
           practiceQStatus: "pending",
           quickbooksStatus: "pending",
+          identityStatus: intakeState.identityStatus ?? "missing",
+          identityAiResult: intakeState.identityAiResult,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },

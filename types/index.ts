@@ -81,6 +81,21 @@ export type PharmacyStatus =
   | "delivered"
   | "error";
 
+export type IdentityStatus =
+  | "missing"
+  | "pending"
+  | "verified"
+  | "needs_review"
+  | "rejected"
+  | "manual_approved";
+
+export interface IdentityAiResult {
+  verdict: "verified" | "needs_review" | "rejected";
+  confidence: number;
+  summary: string;
+  flags: string[];
+}
+
 export interface Order {
   id: string;
   patientId: string;
@@ -91,6 +106,11 @@ export interface Order {
   pharmacyStatus: PharmacyStatus;
   practiceQStatus: "pending" | "submitted" | "completed" | "error";
   quickbooksStatus: "pending" | "created" | "invoiced" | "error";
+  identityStatus?: IdentityStatus;
+  identityReason?: string;
+  identityAiResult?: IdentityAiResult;
+  identityReviewedAt?: string;
+  identityReviewedBy?: string;
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;

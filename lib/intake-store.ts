@@ -37,6 +37,8 @@ export interface IntakeFormState {
   selfieUploaded: boolean;
   paymentProcessed: boolean;
   orderId?: string;
+  identityStatus?: "missing" | "pending" | "verified" | "needs_review" | "rejected" | "manual_approved";
+  identityAiResult?: { verdict: string; confidence: number; summary: string; flags: string[] };
 }
 
 const STORAGE_KEY = "tele_intake_form_state";

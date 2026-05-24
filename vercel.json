@@ -3,5 +3,11 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/identity-reminders",
+      "schedule": "0 13 * * *"
+    }
+  ]
 }

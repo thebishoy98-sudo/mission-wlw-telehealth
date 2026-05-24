@@ -33,6 +33,9 @@ export const sendMessage = (
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
+    identity_verification_required: "Payment received! To release your medication, please upload your government ID and a short selfie video at your patient portal. Your order is on hold until your identity is verified.",
+    identity_reminder_day1: "Reminder: Your Mission WLW order is on hold. We still need your government ID and a short selfie video before we can ship your medication. Please complete your identity verification today.",
+    identity_reminder_day2: "Final reminder: Your Mission WLW medication cannot ship until we verify your identity. Please upload your government ID and selfie video at your patient portal today to avoid further delays.",
   };
   const fallbackBody = DEFAULT_TEMPLATES[templateKey];
   if (!template && !fallbackBody) {

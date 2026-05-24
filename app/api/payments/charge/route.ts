@@ -33,7 +33,7 @@ import type { Payment } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityStatus: bodyIdentityStatus } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -154,11 +154,18 @@ export async function POST(req: NextRequest) {
     db.paymentDb.create(payment);
     await dbServer.paymentDb.create(payment).catch(() => {});
 
-    // 7. Update order status
+    // 7. Update order status — gate on identity verification
+    const identityStatus: string =
+      bodyIdentityStatus ?? orderData?.identityStatus ?? "missing";
+    const identityVerified =
+      identityStatus === "verified" || identityStatus === "manual_approved";
+
     const orderUpdates = {
-      status: "sent_to_pharmacy" as const,
+      status: identityVerified ? ("sent_to_pharmacy" as const) : ("pending_review" as const),
       paymentStatus: "completed" as const,
       submittedAt: new Date().toISOString(),
+      identityStatus: identityStatus as any,
+      identityAiResult: orderData?.identityAiResult,
     };
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
@@ -195,15 +202,31 @@ export async function POST(req: NextRequest) {
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor, "error", (e as Error).message);
     }
 
-    // 10. Life File — pharmacy prescription order
-    try {
-      await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
-      db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
-      await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
-      logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
-    } catch (e) {
-      errors.push(`Life File: ${(e as Error).message}`);
-      logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", (e as Error).message);
+    // 10. Life File — only dispatch if identity is verified or manually approved
+    if (identityVerified) {
+      try {
+        await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
+        await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
+        logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
+      } catch (e) {
+        errors.push(`Life File: ${(e as Error).message}`);
+        logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", (e as Error).message);
+      }
+    } else {
+      // Identity not verified — keep pharmacyStatus=draft, send Spruce reminder
+      try {
+        await spruce.sendMessage(patient.id, "identity_verification_required", { orderId }, patient);
+        logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
+      } catch (e) {
+        errors.push(`Spruce identity reminder: ${(e as Error).message}`);
+        db.integrationLogDb.create({
+          id: generateId(), timestamp: new Date().toISOString(),
+          integrationName: "spruce", action: "Identity reminder SMS failed",
+          orderId, patientId: patient.id, status: "error",
+          details: {}, error: (e as Error).message,
+        });
+      }
     }
 
     // 11. Spruce SMS — "payment received, order processing"
