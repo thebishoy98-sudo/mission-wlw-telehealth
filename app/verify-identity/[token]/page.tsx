@@ -1,23 +1,69 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-react";
 
 const RECORDING_SECONDS = 10;
+const MAX_IMAGE_WIDTH = 1200;
+
+const errorMessage = (value: unknown, fallback: string) => {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "message" in value && typeof value.message === "string") return value.message;
+  return fallback;
+};
+
+const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
+  const sourceWidth = video.videoWidth || 640;
+  const sourceHeight = video.videoHeight || 480;
+  const scale = Math.min(1, MAX_IMAGE_WIDTH / sourceWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sourceWidth * scale);
+  canvas.height = Math.round(sourceHeight * scale);
+  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+};
+
+const readCompressedImage = (file: File, onSuccess: (value: string) => void, onError: () => void) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, MAX_IMAGE_WIDTH / image.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      onSuccess(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    image.onerror = onError;
+    image.src = String(reader.result ?? "");
+  };
+  reader.onerror = onError;
+  reader.readAsDataURL(file);
+};
 
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
+  const idVideoRef = useRef<HTMLVideoElement | null>(null);
+  const idStreamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [idImageData, setIdImageData] = useState("");
+  const [idCameraOpen, setIdCameraOpen] = useState(false);
   const [identityVideoFrameData, setIdentityVideoFrameData] = useState("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ status: "success" | "error"; message: string } | null>(null);
+
+  const stopIdCamera = () => {
+    idStreamRef.current?.getTracks().forEach((track) => track.stop());
+    idStreamRef.current = null;
+    setIdCameraOpen(false);
+  };
 
   const stopCamera = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -27,24 +73,50 @@ export default function VerifyIdentityPage() {
     setRecording(false);
   };
 
+  useEffect(() => {
+    return () => {
+      stopIdCamera();
+      stopCamera();
+    };
+  }, []);
+
+  const startIdCamera = async () => {
+    setResult(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      idStreamRef.current = stream;
+      if (idVideoRef.current) {
+        idVideoRef.current.srcObject = stream;
+        await idVideoRef.current.play().catch(() => {});
+      }
+      setIdCameraOpen(true);
+    } catch {
+      setResult({ status: "error", message: "Camera access was blocked. You can upload an ID photo instead." });
+    }
+  };
+
+  const captureIdPhoto = () => {
+    const video = idVideoRef.current;
+    if (!video) return;
+    setIdImageData(dataUrlFromVideo(video));
+    stopIdCamera();
+  };
+
   const captureVideoFrame = () => {
     const video = videoRef.current;
     if (!video) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setIdentityVideoFrameData(canvas.toDataURL("image/jpeg", 0.85));
+    setIdentityVideoFrameData(dataUrlFromVideo(video));
   };
 
   const readImage = (file: File, setter: (value: string) => void) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const value = event.target?.result;
-      if (typeof value === "string") setter(value);
-    };
-    reader.onerror = () => setResult({ status: "error", message: "Could not read that image. Try taking a new photo." });
-    reader.readAsDataURL(file);
+    readCompressedImage(
+      file,
+      setter,
+      () => setResult({ status: "error", message: "Could not read that image. Try taking a new photo." })
+    );
   };
 
   const readVideoFrame = (file: File) => {
@@ -61,11 +133,7 @@ export default function VerifyIdentityPage() {
     const finish = () => {
       if (completed) return;
       completed = true;
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setIdentityVideoFrameData(canvas.toDataURL("image/jpeg", 0.85));
+      setIdentityVideoFrameData(dataUrlFromVideo(video));
       URL.revokeObjectURL(url);
     };
     const timeout = window.setTimeout(fail, 8000);
@@ -129,7 +197,7 @@ export default function VerifyIdentityPage() {
       });
       const payload = await response.json();
       if (!response.ok) {
-        setResult({ status: "error", message: payload.error ?? "Identity upload failed." });
+        setResult({ status: "error", message: errorMessage(payload.error, "Identity upload failed.") });
         return;
       }
       setResult({
@@ -175,31 +243,63 @@ export default function VerifyIdentityPage() {
             </div>
           </div>
 
-          <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500">
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(event) => {
-                if (event.target.files?.[0]) readImage(event.target.files[0], setIdImageData);
-              }}
-            />
-            {idImageData ? (
-              <span className="inline-flex items-center gap-2 text-green-700 font-semibold">
-                <CheckCircle className="h-5 w-5" /> ID photo ready
-              </span>
+          <div className="rounded-lg border border-gray-200 p-5 space-y-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">Government ID</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Place the ID inside the frame on a dark flat surface. Keep all corners visible and avoid glare.
+              </p>
+            </div>
+
+            {idCameraOpen ? (
+              <div className="space-y-4">
+                <div className="relative overflow-hidden rounded-lg bg-gray-900">
+                  <video ref={idVideoRef} playsInline muted className="aspect-[4/3] w-full object-cover" />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+                    <div className="aspect-[1.586/1] w-full max-w-md rounded-xl border-4 border-white shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button type="button" fullWidth onClick={captureIdPhoto}>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Capture ID Photo
+                  </Button>
+                  <Button type="button" fullWidth variant="outline" onClick={stopIdCamera}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : idImageData ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
+                  <CheckCircle className="h-5 w-5" />
+                  ID photo ready
+                </div>
+                <img src={idImageData} alt="Government ID preview" className="max-h-44 w-full rounded-lg object-contain bg-gray-50" />
+                <Button type="button" fullWidth variant="outline" onClick={() => setIdImageData("")}>
+                  Retake ID Photo
+                </Button>
+              </div>
             ) : (
-              <span className="inline-flex flex-col items-center gap-2 text-gray-700">
-                <span className="inline-flex items-center gap-2 font-semibold">
-                  <Camera className="h-5 w-5" /> Take ID photo
-                </span>
-                <span className="max-w-sm text-xs text-gray-500">
-                  Place the ID on a flat dark surface. Capture the full front of the card with no glare or cut-off corners.
-                </span>
-              </span>
+              <div className="space-y-3">
+                <Button type="button" fullWidth onClick={startIdCamera}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  Open Camera
+                </Button>
+                <label className="flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files?.[0]) readImage(event.target.files[0], setIdImageData);
+                    }}
+                  />
+                  Upload ID Photo
+                </label>
+              </div>
             )}
-          </label>
+          </div>
 
           <div className="rounded-lg border border-gray-200 p-5 space-y-4">
             <div>

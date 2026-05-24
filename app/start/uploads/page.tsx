@@ -1,36 +1,98 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { saveIntakeState } from "@/lib/intake-store";
-import { Upload, CheckCircle, Video } from "lucide-react";
+import { Upload, CheckCircle, Video, Camera } from "lucide-react";
 
 const RECORDING_SECONDS = 10;
+const MAX_IMAGE_WIDTH = 1200;
+
+const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
+  const sourceWidth = video.videoWidth || 640;
+  const sourceHeight = video.videoHeight || 480;
+  const scale = Math.min(1, MAX_IMAGE_WIDTH / sourceWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sourceWidth * scale);
+  canvas.height = Math.round(sourceHeight * scale);
+  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+};
+
+const readCompressedImage = (file: File, onSuccess: (value: string) => void) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, MAX_IMAGE_WIDTH / image.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      onSuccess(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    image.src = String(reader.result ?? "");
+  };
+  reader.readAsDataURL(file);
+};
 
 export default function Uploads() {
   const router = useRouter();
   const [licenseUploaded, setLicenseUploaded] = useState(false);
   const [selfieUploaded, setSelfieUploaded] = useState(false);
+  const [idCameraOpen, setIdCameraOpen] = useState(false);
   const [licensePreview, setLicensePreview] = useState<string>("");
   const [licenseImageData, setLicenseImageData] = useState<string>("");
   const [selfieFrameData, setSelfieFrameData] = useState<string>("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const idVideoRef = useRef<HTMLVideoElement | null>(null);
+  const idStreamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const handleLicenseUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
+    readCompressedImage(file, (dataUrl) => {
       setLicensePreview(dataUrl);
       setLicenseImageData(dataUrl);
       setLicenseUploaded(true);
-    };
-    reader.readAsDataURL(file);
+    });
+  };
+
+  const stopIdCamera = () => {
+    idStreamRef.current?.getTracks().forEach((track) => track.stop());
+    idStreamRef.current = null;
+    setIdCameraOpen(false);
+  };
+
+  const startIdCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      idStreamRef.current = stream;
+      if (idVideoRef.current) {
+        idVideoRef.current.srcObject = stream;
+        await idVideoRef.current.play().catch(() => {});
+      }
+      setIdCameraOpen(true);
+    } catch {
+      setIdCameraOpen(false);
+    }
+  };
+
+  const captureIdPhoto = () => {
+    const video = idVideoRef.current;
+    if (!video) return;
+    const dataUrl = dataUrlFromVideo(video);
+    setLicensePreview(dataUrl);
+    setLicenseImageData(dataUrl);
+    setLicenseUploaded(true);
+    stopIdCamera();
   };
 
   const handleVideoUpload = (file: File) => {
@@ -43,11 +105,7 @@ export default function Uploads() {
       video.currentTime = Math.min(1, video.duration || 1);
     };
     video.onseeked = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setSelfieFrameData(canvas.toDataURL("image/jpeg", 0.85));
+      setSelfieFrameData(dataUrlFromVideo(video));
       setSelfieUploaded(true);
       URL.revokeObjectURL(url);
     };
@@ -56,11 +114,7 @@ export default function Uploads() {
   const captureIdentityVideoFrame = () => {
     const video = videoRef.current;
     if (!video) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setSelfieFrameData(canvas.toDataURL("image/jpeg", 0.85));
+    setSelfieFrameData(dataUrlFromVideo(video));
     setSelfieUploaded(true);
   };
 
@@ -97,6 +151,13 @@ export default function Uploads() {
     setRecording(false);
   };
 
+  useEffect(() => {
+    return () => {
+      stopIdCamera();
+      stopRecording();
+    };
+  }, []);
+
   const handleContinue = () => {
     saveIntakeState({
       licenseUploaded,
@@ -120,30 +181,55 @@ export default function Uploads() {
           <h3 className="font-semibold text-gray-800 mb-1">Driver's License or Government ID</h3>
           <p className="text-xs text-gray-400 mb-3">Clear photo of the front of your ID</p>
 
-          <label className="block border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 transition-all duration-200">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleLicenseUpload(e.target.files[0]); }}
-            />
-            {licenseUploaded ? (
-              <div>
+          <div className="rounded-xl border border-gray-200 p-5 space-y-4">
+            {idCameraOpen ? (
+              <div className="space-y-4">
+                <div className="relative overflow-hidden rounded-xl bg-gray-900">
+                  <video ref={idVideoRef} playsInline muted className="aspect-[4/3] w-full object-cover" />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+                    <div className="aspect-[1.586/1] w-full max-w-md rounded-xl border-4 border-white shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button type="button" fullWidth onClick={captureIdPhoto}>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Capture ID Photo
+                  </Button>
+                  <Button type="button" fullWidth variant="outline" onClick={stopIdCamera}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : licenseUploaded ? (
+              <div className="text-center">
                 <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-2" />
-                <p className="font-semibold text-green-600">ID Uploaded</p>
+                <p className="font-semibold text-green-600">ID photo ready</p>
                 {licensePreview && (
-                  <img src={licensePreview} alt="ID preview" className="mt-3 max-h-28 mx-auto rounded-lg object-cover" />
+                  <img src={licensePreview} alt="ID preview" className="mt-3 max-h-36 w-full rounded-lg object-contain bg-gray-50" />
                 )}
-                <p className="text-xs text-gray-400 mt-2">Click to replace</p>
+                <Button type="button" fullWidth variant="outline" onClick={() => setLicenseUploaded(false)} className="mt-4">
+                  Retake ID Photo
+                </Button>
               </div>
             ) : (
-              <div>
-                <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                <p className="text-gray-600 font-medium">Click to upload ID photo</p>
-                <p className="text-xs text-gray-400 mt-1">JPG or PNG, max 10MB</p>
+              <div className="space-y-3 text-center">
+                <Button type="button" fullWidth onClick={startIdCamera}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  Open Camera
+                </Button>
+                <label className="flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files?.[0]) handleLicenseUpload(e.target.files[0]); }}
+                  />
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload ID Photo
+                </label>
               </div>
             )}
-          </label>
+          </div>
         </div>
 
         {/* Identity Video */}
