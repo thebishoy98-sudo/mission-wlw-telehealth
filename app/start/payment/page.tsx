@@ -159,6 +159,7 @@ export default function Payment() {
         identityUploads: {
           licenseImageData: intakeState.licenseImageData,
           selfieFrameData: intakeState.selfieFrameData,
+          identityVideoData: intakeState.identityVideoData,
         },
         // Send full patient + order data so server can create in Postgres
         // (localStorage is not accessible server-side)

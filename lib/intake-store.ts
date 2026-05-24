@@ -37,6 +37,7 @@ export interface IntakeFormState {
   selfieUploaded: boolean;
   licenseImageData?: string;
   selfieFrameData?: string;
+  identityVideoData?: string;
   paymentProcessed: boolean;
   orderId?: string;
   identityStatus?: "missing" | "pending" | "verified" | "needs_review" | "rejected" | "manual_approved";

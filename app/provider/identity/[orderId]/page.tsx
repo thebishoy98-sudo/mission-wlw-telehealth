@@ -116,6 +116,7 @@ function IdentityReviewContent() {
 
   const idUpload = data.uploads.find((upload) => upload.type === "driver_license");
   const selfieUpload = data.uploads.find((upload) => upload.type === "selfie_video");
+  const hasIdentityVideo = !!selfieUpload?.base64Data && selfieUpload.mimeType.startsWith("video/");
   const aiResult = data.order.identityAiResult ?? data.review?.identityAiResult;
 
   return (
@@ -169,12 +170,14 @@ function IdentityReviewContent() {
                   <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
                       <Video className="h-4 w-4 text-gray-500" />
-                      Identity Video Frame
+                      Identity Video
                     </div>
-                    {selfieUpload?.base64Data ? (
+                    {hasIdentityVideo ? (
+                      <video controls playsInline src={selfieUpload.base64Data} className="max-h-72 w-full rounded-md bg-white" />
+                    ) : selfieUpload?.base64Data ? (
                       <img src={selfieUpload.base64Data} alt="Uploaded identity video frame" className="max-h-72 w-full rounded-md object-contain bg-white" />
                     ) : (
-                      <p className="text-sm text-gray-500">No identity video frame uploaded.</p>
+                      <p className="text-sm text-gray-500">No identity video uploaded.</p>
                     )}
                   </div>
                 </div>

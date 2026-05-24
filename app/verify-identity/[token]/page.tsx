@@ -25,35 +25,19 @@ const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
   return canvas.toDataURL("image/jpeg", quality);
 };
 
-const readCompressedImage = (file: File, onSuccess: (value: string) => void, onError: () => void) => {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const image = new Image();
-    image.onload = () => {
-      const scale = Math.min(1, MAX_IMAGE_WIDTH / image.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-      onSuccess(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    image.onerror = onError;
-    image.src = String(reader.result ?? "");
-  };
-  reader.onerror = onError;
-  reader.readAsDataURL(file);
-};
-
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
   const idVideoRef = useRef<HTMLVideoElement | null>(null);
   const idStreamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [idImageData, setIdImageData] = useState("");
   const [idCameraOpen, setIdCameraOpen] = useState(false);
   const [identityVideoFrameData, setIdentityVideoFrameData] = useState("");
+  const [identityVideoData, setIdentityVideoData] = useState("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -68,6 +52,9 @@ export default function VerifyIdentityPage() {
   const stopCamera = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setRecording(false);
@@ -83,6 +70,8 @@ export default function VerifyIdentityPage() {
   const startIdCamera = async () => {
     setResult(null);
     try {
+      setIdCameraOpen(true);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -92,9 +81,9 @@ export default function VerifyIdentityPage() {
         idVideoRef.current.srcObject = stream;
         await idVideoRef.current.play().catch(() => {});
       }
-      setIdCameraOpen(true);
     } catch {
-      setResult({ status: "error", message: "Camera access was blocked. You can upload an ID photo instead." });
+      stopIdCamera();
+      setResult({ status: "error", message: "Camera access was blocked. Please allow camera access and try again." });
     }
   };
 
@@ -111,59 +100,31 @@ export default function VerifyIdentityPage() {
     setIdentityVideoFrameData(dataUrlFromVideo(video));
   };
 
-  const readImage = (file: File, setter: (value: string) => void) => {
-    readCompressedImage(
-      file,
-      setter,
-      () => setResult({ status: "error", message: "Could not read that image. Try taking a new photo." })
-    );
-  };
-
-  const readVideoFrame = (file: File) => {
-    setResult(null);
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    let completed = false;
-    const fail = () => {
-      if (completed) return;
-      completed = true;
-      URL.revokeObjectURL(url);
-      setResult({ status: "error", message: "Could not read the identity video. Try a shorter video in good lighting." });
-    };
-    const finish = () => {
-      if (completed) return;
-      completed = true;
-      setIdentityVideoFrameData(dataUrlFromVideo(video));
-      URL.revokeObjectURL(url);
-    };
-    const timeout = window.setTimeout(fail, 8000);
-    video.src = url;
-    video.muted = true;
-    video.playsInline = true;
-    video.onloadedmetadata = () => {
-      video.currentTime = Math.min(1, video.duration || 1);
-    };
-    video.onseeked = () => {
-      window.clearTimeout(timeout);
-      finish();
-    };
-    video.onerror = () => {
-      window.clearTimeout(timeout);
-      fail();
-    };
-  };
-
   const startRecording = async () => {
     setResult(null);
     setIdentityVideoFrameData("");
+    setIdentityVideoData("");
     setRecordingSeconds(0);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       streamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
+        const reader = new FileReader();
+        reader.onload = () => setIdentityVideoData(String(reader.result ?? ""));
+        reader.readAsDataURL(blob);
+      };
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
+      recorder.start();
       setRecording(true);
       let seconds = 0;
       timerRef.current = setInterval(() => {
@@ -175,7 +136,7 @@ export default function VerifyIdentityPage() {
         }
       }, 1000);
     } catch {
-      setResult({ status: "error", message: "Camera access was blocked. You can upload a 10-second identity video instead." });
+      setResult({ status: "error", message: "Camera access was blocked. Please allow camera access and try again." });
     }
   };
 
@@ -193,6 +154,7 @@ export default function VerifyIdentityPage() {
           token: params.token,
           idImageData,
           selfieFrameData: identityVideoFrameData,
+          identityVideoData,
         }),
       });
       const payload = await response.json();
@@ -286,17 +248,6 @@ export default function VerifyIdentityPage() {
                   <Camera className="h-4 w-4 mr-2" />
                   Open Camera
                 </Button>
-                <label className="flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      if (event.target.files?.[0]) readImage(event.target.files[0], setIdImageData);
-                    }}
-                  />
-                  Upload ID Photo
-                </label>
               </div>
             )}
           </div>
@@ -321,9 +272,12 @@ export default function VerifyIdentityPage() {
               </div>
             )}
             {identityVideoFrameData && !recording ? (
-              <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
-                <CheckCircle className="h-5 w-5" />
-                Video recorded
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
+                  <CheckCircle className="h-5 w-5" />
+                  Video recorded
+                </div>
+                {identityVideoData && <video controls playsInline src={identityVideoData} className="w-full rounded-lg bg-gray-100" />}
               </div>
             ) : null}
             <div className="flex flex-col sm:flex-row gap-3">
@@ -331,18 +285,6 @@ export default function VerifyIdentityPage() {
                 <Video className="h-4 w-4 mr-2" />
                 {recording ? "Stop Recording" : "Start Recording"}
               </Button>
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
-                <input
-                  type="file"
-                  accept="video/*"
-                  capture="user"
-                  className="hidden"
-                  onChange={(event) => {
-                    if (event.target.files?.[0]) readVideoFrame(event.target.files[0]);
-                  }}
-                />
-                Upload Video
-              </label>
             </div>
           </div>
 
@@ -355,7 +297,7 @@ export default function VerifyIdentityPage() {
             </div>
           )}
 
-          <Button fullWidth onClick={submit} disabled={submitting || !idImageData || !identityVideoFrameData}>
+          <Button fullWidth onClick={submit} disabled={submitting || !idImageData || !identityVideoFrameData || !identityVideoData}>
             {submitting ? "Submitting..." : "Submit Verification"}
           </Button>
         </div>

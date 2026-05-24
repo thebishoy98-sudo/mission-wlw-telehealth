@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { saveIntakeState } from "@/lib/intake-store";
-import { Upload, CheckCircle, Video, Camera } from "lucide-react";
+import { CheckCircle, Video, Camera } from "lucide-react";
 
 const RECORDING_SECONDS = 10;
 const MAX_IMAGE_WIDTH = 1200;
@@ -21,23 +21,6 @@ const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
   return canvas.toDataURL("image/jpeg", quality);
 };
 
-const readCompressedImage = (file: File, onSuccess: (value: string) => void) => {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const image = new Image();
-    image.onload = () => {
-      const scale = Math.min(1, MAX_IMAGE_WIDTH / image.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-      onSuccess(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    image.src = String(reader.result ?? "");
-  };
-  reader.readAsDataURL(file);
-};
-
 export default function Uploads() {
   const router = useRouter();
   const [licenseUploaded, setLicenseUploaded] = useState(false);
@@ -46,6 +29,7 @@ export default function Uploads() {
   const [licensePreview, setLicensePreview] = useState<string>("");
   const [licenseImageData, setLicenseImageData] = useState<string>("");
   const [selfieFrameData, setSelfieFrameData] = useState<string>("");
+  const [identityVideoData, setIdentityVideoData] = useState<string>("");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -53,14 +37,8 @@ export default function Uploads() {
   const idStreamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
-  const handleLicenseUpload = (file: File) => {
-    readCompressedImage(file, (dataUrl) => {
-      setLicensePreview(dataUrl);
-      setLicenseImageData(dataUrl);
-      setLicenseUploaded(true);
-    });
-  };
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   const stopIdCamera = () => {
     idStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -70,6 +48,8 @@ export default function Uploads() {
 
   const startIdCamera = async () => {
     try {
+      setIdCameraOpen(true);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -79,9 +59,8 @@ export default function Uploads() {
         idVideoRef.current.srcObject = stream;
         await idVideoRef.current.play().catch(() => {});
       }
-      setIdCameraOpen(true);
     } catch {
-      setIdCameraOpen(false);
+      stopIdCamera();
     }
   };
 
@@ -95,22 +74,6 @@ export default function Uploads() {
     stopIdCamera();
   };
 
-  const handleVideoUpload = (file: File) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    video.src = url;
-    video.muted = true;
-    video.playsInline = true;
-    video.onloadeddata = () => {
-      video.currentTime = Math.min(1, video.duration || 1);
-    };
-    video.onseeked = () => {
-      setSelfieFrameData(dataUrlFromVideo(video));
-      setSelfieUploaded(true);
-      URL.revokeObjectURL(url);
-    };
-  };
-
   const captureIdentityVideoFrame = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -120,14 +83,29 @@ export default function Uploads() {
 
   const startRecording = async () => {
     setRecordingSeconds(0);
+    setSelfieFrameData("");
+    setIdentityVideoData("");
     setSelfieUploaded(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       streamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
+        const reader = new FileReader();
+        reader.onload = () => setIdentityVideoData(String(reader.result ?? ""));
+        reader.readAsDataURL(blob);
+      };
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
+      recorder.start();
       setRecording(true);
       let secs = 0;
       timerRef.current = setInterval(() => {
@@ -146,6 +124,7 @@ export default function Uploads() {
   const stopRecording = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setRecording(false);
@@ -164,6 +143,7 @@ export default function Uploads() {
       selfieUploaded,
       licenseImageData,
       selfieFrameData,
+      identityVideoData,
     });
     router.push("/start/payment");
   };
@@ -173,7 +153,7 @@ export default function Uploads() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Identity Verification</h2>
         <p className="text-gray-500 text-sm mb-8">
-          Upload a photo ID and record a 10-second identity video. This helps our provider verify your identity. Both are optional for demo.
+          Take a live ID photo and record a 10-second identity video. This helps our provider verify your identity. Both are optional for demo.
         </p>
 
         {/* License Upload */}
@@ -217,16 +197,6 @@ export default function Uploads() {
                   <Camera className="h-4 w-4 mr-2" />
                   Open Camera
                 </Button>
-                <label className="flex cursor-pointer items-center justify-center rounded-xl border-2 border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => { if (e.target.files?.[0]) handleLicenseUpload(e.target.files[0]); }}
-                  />
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload ID Photo
-                </label>
               </div>
             )}
           </div>
@@ -238,9 +208,10 @@ export default function Uploads() {
           <p className="text-xs text-gray-400 mb-3">Face a light source, remove sunglasses, hold still, then slowly turn your head left and right</p>
 
           {selfieUploaded ? (
-            <div className="border-2 border-green-200 bg-green-50 rounded-xl p-6 text-center">
+            <div className="border-2 border-green-200 bg-green-50 rounded-xl p-6 text-center space-y-3">
               <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-2" />
               <p className="font-semibold text-green-700">Video recorded</p>
+              {identityVideoData && <video controls playsInline src={identityVideoData} className="w-full rounded-lg bg-gray-100" />}
               <button onClick={() => setSelfieUploaded(false)} className="text-xs text-gray-400 mt-2 hover:text-gray-600">
                 Re-record
               </button>
@@ -271,20 +242,7 @@ export default function Uploads() {
                   <Video className="w-4 h-4 mr-2" />
                   Start Recording
                 </Button>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={(e) => { if (e.target.files?.[0]) handleVideoUpload(e.target.files[0]); }}
-                  />
-                  <span className="inline-flex items-center gap-2 px-4 py-2 border-2 border-teal-600 text-teal-600 rounded-xl text-sm font-semibold hover:bg-teal-50 transition-all cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    Upload Video
-                  </span>
-                </label>
               </div>
-              <p className="text-xs text-gray-400">MP4, MOV accepted · max 30 seconds</p>
             </div>
           )}
         </div>
@@ -294,7 +252,7 @@ export default function Uploads() {
         <Button fullWidth variant="outline" onClick={() => router.push("/start/consent")}>
           Back
         </Button>
-        <Button fullWidth onClick={handleContinue}>
+        <Button fullWidth onClick={handleContinue} disabled={selfieUploaded && !identityVideoData}>
           {licenseUploaded && selfieUploaded ? "Continue →" : "Skip for Now"}
         </Button>
       </div>

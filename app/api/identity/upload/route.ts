@@ -10,7 +10,7 @@ import type { Upload } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { token, orderId, idImageData, selfieFrameData } = body;
+    const { token, orderId, idImageData, selfieFrameData, identityVideoData } = body;
 
     if ((!token && !orderId) || !idImageData || !selfieFrameData) {
       return NextResponse.json(
@@ -46,20 +46,23 @@ export async function POST(req: NextRequest) {
         id: generateId(),
         orderId: order.id,
         type: "selfie_video",
-        filename: "selfie-frame.jpg",
-        fileSize: selfieFrameData.length,
-        mimeType: "image/jpeg",
-        base64Data: selfieFrameData,
+        filename: "identity-video.webm",
+        fileSize: (identityVideoData ?? selfieFrameData).length,
+        mimeType: identityVideoData ? "video/webm" : "image/jpeg",
+        base64Data: identityVideoData ?? selfieFrameData,
         uploadedAt: now,
         status: "uploaded",
       },
     ];
+    const aiUploads = uploads.map((upload) =>
+      upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: selfieFrameData } : upload
+    );
 
     uploads.forEach((upload) => db.uploadDb.create(upload));
     await Promise.all(uploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
 
-    const result = hasRequiredIdentityUploads(uploads)
-      ? await verifyIdentityUploads(uploads)
+    const result = hasRequiredIdentityUploads(aiUploads)
+      ? await verifyIdentityUploads(aiUploads)
       : {
           status: "needs_review" as const,
           confidence: 0,

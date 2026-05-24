@@ -215,15 +215,18 @@ export async function POST(req: NextRequest) {
             id: generateId(),
             orderId,
             type: "selfie_video",
-            filename: "selfie-frame.jpg",
-            fileSize: identityUploads.selfieFrameData.length,
-            mimeType: "image/jpeg",
-            base64Data: identityUploads.selfieFrameData,
+            filename: "identity-video.webm",
+            fileSize: (identityUploads.identityVideoData ?? identityUploads.selfieFrameData).length,
+            mimeType: identityUploads.identityVideoData ? "video/webm" : "image/jpeg",
+            base64Data: identityUploads.identityVideoData ?? identityUploads.selfieFrameData,
             uploadedAt: new Date().toISOString(),
             status: "uploaded",
           },
         ]
       : [];
+    const identityAiUploads = submittedUploads.map((upload) =>
+      upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: identityUploads.selfieFrameData } : upload
+    );
 
     if (submittedUploads.length) {
       submittedUploads.forEach((upload) => db.uploadDb.create(upload));
@@ -231,7 +234,7 @@ export async function POST(req: NextRequest) {
     }
 
     const identityAiResult = submittedUploads.length
-      ? await verifyIdentityUploads(submittedUploads)
+      ? await verifyIdentityUploads(identityAiUploads)
       : {
           status: "missing" as const,
           confidence: 0,
