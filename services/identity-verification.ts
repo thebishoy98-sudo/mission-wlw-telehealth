@@ -81,17 +81,20 @@ Return JSON only:
 }
 
 Check all of these:
-1. The ID appears to be a real government ID, not a screen/photo of a screen.
-2. The face on the ID appears to match the person in the identity video frame.
+1. Whether the ID image contains a readable government ID with a visible portrait and demographics.
+2. Whether the face on the ID appears to match the person in the identity video frame.
 3. The full name extracted from the ID matches the expected order name.
 4. The date of birth extracted from the ID matches the expected order date of birth.
 
 Rules:
 - Always state whether the ID face and video face appear to be the same person.
 - Do not imply a face mismatch when the concern is only name, DOB, or document capture quality.
+- Compare stable facial features first: face shape, eyes, eyebrows, nose, mouth, beard/facial hair pattern, and general appearance. Tolerate different lighting, smile/expression, angle, crop, or video compression.
+- If the ID portrait and video face appear to be the same person and name/DOB match, do not return "rejected" because the ID was photographed from a screen, keyboard, wallet, or imperfect surface. Use "needs_review" with a lower confidence and a document_capture_irregular flag if staff should inspect the capture.
 - Use "verified" only when the ID is readable, the face match is clear, and name/DOB match the order.
-- Use "needs_review" when face appears to match but name/DOB is mismatched, partially obscured, uncertain, or needs staff confirmation.
-- Use "rejected" only for a clear face mismatch, obvious fake/invalid document, or clear evidence the submitted identity belongs to a different person.
+- Use "needs_review" when face appears similar/same but name/DOB is mismatched, partially obscured, capture quality is irregular, or staff confirmation is needed.
+- Use "rejected" only when the faces are clearly different people, the document is clearly fake/invalid with no readable identity, or there is clear evidence the submitted identity belongs to a different person.
+- Only include a face_mismatch flag for a high-confidence different-person mismatch. For uncertainty, use facial_match_uncertain instead.
 - Keep the summary brief and avoid listing implementation details.`,
             },
             idImage,
