@@ -47,16 +47,56 @@ const seed = () => {
 describe("lifefile.createPharmacyOrder", () => {
   beforeEach(seed);
 
-  it("creates a pharmacy order with correct structure", async () => {
+  it("maps tirzepatide orders to pharmacy compound plus supplies", async () => {
     const order = db.orderDb.getById("o1")!;
     const pharmacyOrder = await lifefile.createPharmacyOrder(order);
 
     expect(pharmacyOrder.orderId).toBe("o1");
     expect(pharmacyOrder.patientId).toBe("p1");
     expect(pharmacyOrder.status).toBe("submitted");
-    expect(pharmacyOrder.payload.order.rxs).toHaveLength(1);
-    expect(pharmacyOrder.payload.order.rxs[0].drugName).toBe("Tirzepatide");
-    expect(pharmacyOrder.payload.order.rxs[0].drugStrength).toBe("2.5mg");
+    expect(pharmacyOrder.payload.order.rxs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          drugName: "TIRZEPATIDE/PYRIDOXINE",
+          drugStrength: "20MG/25MG/ML (2 ML)",
+          quantity: 1,
+          directions: "Inject 2.5mg subcutaneously once weekly as directed by prescriber",
+        }),
+        expect.objectContaining({
+          drugName: "ALCOHOL SWABS",
+          drugStrength: "EA",
+          quantity: 10,
+        }),
+        expect.objectContaining({
+          drugName: "COMFORT EZ 31GX5/16\" 1ML SYRINGE",
+          drugStrength: "EA",
+          quantity: 10,
+        }),
+      ])
+    );
+  });
+
+  it("calculates tirzepatide vial quantity from the weekly dose", async () => {
+    const order = db.orderDb.create({
+      ...db.orderDb.getById("o1")!,
+      id: "o_high",
+      doseId: "dose_high",
+    });
+    const product = db.productDb.update("prod_1", {
+      doses: [
+        { id: "dose_1", label: "2.5mg Starter", strength: "2.5mg", quantity: 1, price: 299 },
+        { id: "dose_high", label: "15mg Weekly", strength: "15mg", quantity: 1, price: 599 },
+      ],
+    })!;
+
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product });
+    expect(pharmacyOrder.payload.order.rxs[0]).toEqual(
+      expect.objectContaining({
+        drugName: "TIRZEPATIDE/PYRIDOXINE",
+        quantity: 2,
+        directions: "Inject 15mg subcutaneously once weekly as directed by prescriber",
+      })
+    );
   });
 
   it("saves pharmacy order to pharmacyOrderDb", async () => {

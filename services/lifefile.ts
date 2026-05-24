@@ -74,6 +74,112 @@ function getLfProductId(product: Types.Product): number {
   return 305492221; // default sandbox fallback
 }
 
+type LfRxPayload = {
+  rxType: "new";
+  drugName: string;
+  drugStrength: string;
+  drugForm: string;
+  lfProductID?: number;
+  quantity: string;
+  quantityUnits: string;
+  directions: string;
+  refills: number;
+  dateWritten: string;
+  daysSupply: number;
+  scheduleCode: "L" | "O";
+};
+
+function isTirzepatide(product: Types.Product): boolean {
+  const slug = product.slug?.toLowerCase() ?? "";
+  return slug.includes("tirzepatide") || product.name.toLowerCase().includes("tirzepatide");
+}
+
+function parseWeeklyDoseMg(dose: Types.DoseOption): number {
+  const match = `${dose.strength} ${dose.label}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
+  return match ? Number(match[1]) : 0;
+}
+
+function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
+  const weeklyMg = parseWeeklyDoseMg(dose);
+  if (!weeklyMg || Number.isNaN(weeklyMg)) return 1;
+
+  const monthlyMg = weeklyMg * 4;
+  const mgPerMl = 20;
+  const vialMl = 2;
+  return Math.max(1, Math.ceil(monthlyMg / (mgPerMl * vialMl)));
+}
+
+function buildPharmacyRxs(
+  product: Types.Product,
+  dose: Types.DoseOption,
+  lfProductId: number,
+  dateWritten: string
+): LfRxPayload[] {
+  if (isTirzepatide(product)) {
+    const weeklyMg = parseWeeklyDoseMg(dose);
+    const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
+    return [
+      {
+        rxType: "new",
+        drugName: "TIRZEPATIDE/PYRIDOXINE",
+        drugStrength: "20MG/25MG/ML (2 ML)",
+        drugForm: "INJECTABLE",
+        lfProductID: lfProductId,
+        quantity: String(calculateTirzepatideVialQuantity(dose)),
+        quantityUnits: "each",
+        directions: `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`,
+        refills: 0,
+        dateWritten,
+        daysSupply: 28,
+        scheduleCode: "L",
+      },
+      {
+        rxType: "new",
+        drugName: "ALCOHOL SWABS",
+        drugStrength: "EA",
+        drugForm: "SUPPLY",
+        quantity: "10",
+        quantityUnits: "each",
+        directions: "Use as directed with injection",
+        refills: 0,
+        dateWritten,
+        daysSupply: 28,
+        scheduleCode: "O",
+      },
+      {
+        rxType: "new",
+        drugName: "COMFORT EZ 31GX5/16\" 1ML SYRINGE",
+        drugStrength: "EA",
+        drugForm: "SYRINGE",
+        quantity: "10",
+        quantityUnits: "each",
+        directions: "Use as directed with injection",
+        refills: 0,
+        dateWritten,
+        daysSupply: 28,
+        scheduleCode: "O",
+      },
+    ];
+  }
+
+  return [
+    {
+      rxType: "new",
+      drugName: product.name.slice(0, 254),
+      drugStrength: dose.strength.slice(0, 254),
+      drugForm: dose.label.slice(0, 255),
+      lfProductID: lfProductId,
+      quantity: String(dose.quantity),
+      quantityUnits: "each",
+      directions: "As directed by prescriber",
+      refills: 11,
+      dateWritten,
+      daysSupply: 84,
+      scheduleCode: "L",
+    },
+  ];
+}
+
 // Life File response envelope: { type: "success"|"error", message: string, data: {} }
 interface LfResponse {
   type: "success" | "error";
@@ -126,6 +232,8 @@ export const createPharmacyOrder = async (
   const c = cfg();
   const lfProductId = getLfProductId(product);
   const ship = patient.shippingAddress;
+  const dateWritten = new Date().toISOString().split("T")[0];
+  const rxs = buildPharmacyRxs(product, dose, lfProductId, dateWritten);
 
   // Build Life File POST /order payload per spec
   const payload = {
@@ -178,22 +286,7 @@ export const createPharmacyOrder = async (
       billing: {
         payorType: "pat" as const,
       },
-      rxs: [
-        {
-          rxType: "new" as const,
-          drugName: product.name.slice(0, 254),
-          drugStrength: dose.strength.slice(0, 254),
-          drugForm: dose.label.slice(0, 255),
-          lfProductID: lfProductId,
-          quantity: String(dose.quantity),
-          quantityUnits: "each",
-          directions: "As directed by prescriber",
-          refills: 11,
-          dateWritten: new Date().toISOString().split("T")[0],
-          daysSupply: 84,
-          scheduleCode: "L" as const, // sandbox schedule code
-        },
-      ],
+      rxs,
     },
   };
 
