@@ -1,14 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { IdentityCapture, MAX_VIDEO_DATA_URL_BYTES, type IdentityCaptureValue } from "@/components/identity/IdentityCapture";
 import { Button } from "@/components/ui/Button";
-import { AlertCircle, Camera, CheckCircle, ShieldCheck, Video } from "lucide-react";
-
-const RECORDING_SECONDS = 10;
-const MAX_IMAGE_WIDTH = 1200;
-const VIDEO_BITS_PER_SECOND = 180_000;
-const MAX_VIDEO_DATA_URL_BYTES = 3_500_000;
+import { AlertCircle } from "lucide-react";
 
 const errorMessage = (value: unknown, fallback: string) => {
   if (typeof value === "string") return value;
@@ -24,177 +20,31 @@ const parseJson = (value: string) => {
   }
 };
 
-const dataUrlFromVideo = (video: HTMLVideoElement, quality = 0.82) => {
-  const sourceWidth = video.videoWidth || 640;
-  const sourceHeight = video.videoHeight || 480;
-  const scale = Math.min(1, MAX_IMAGE_WIDTH / sourceWidth);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(sourceWidth * scale);
-  canvas.height = Math.round(sourceHeight * scale);
-  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", quality);
-};
-
-const identityVideoConstraints: MediaStreamConstraints = {
-  video: {
-    facingMode: "user",
-    width: { ideal: 360, max: 480 },
-    height: { ideal: 480, max: 640 },
-    frameRate: { ideal: 15, max: 20 },
-  },
-  audio: false,
-};
-
-const mediaRecorderOptions = (): MediaRecorderOptions => {
-  const candidates = ["video/webm;codecs=vp8", "video/webm", "video/mp4"];
-  const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
-  return {
-    ...(mimeType ? { mimeType } : {}),
-    videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
-  };
-};
-
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
-  const idVideoRef = useRef<HTMLVideoElement | null>(null);
-  const idStreamRef = useRef<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [idImageData, setIdImageData] = useState("");
-  const [idCameraOpen, setIdCameraOpen] = useState(false);
-  const [identityVideoFrameData, setIdentityVideoFrameData] = useState("");
-  const [identityVideoData, setIdentityVideoData] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [identity, setIdentity] = useState<IdentityCaptureValue>({
+    idImageData: "",
+    identityVideoFrameData: "",
+    identityVideoData: "",
+    complete: false,
+  });
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ status: "success" | "error"; message: string } | null>(null);
+  const [error, setError] = useState("");
 
-  const stopIdCamera = () => {
-    idStreamRef.current?.getTracks().forEach((track) => track.stop());
-    idStreamRef.current = null;
-    setIdCameraOpen(false);
-  };
-
-  const stopCamera = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setRecording(false);
-  };
-
-  const resetVideoCapture = () => {
-    setIdentityVideoFrameData("");
-    setIdentityVideoData("");
-    setRecordingSeconds(0);
-  };
-
-  useEffect(() => {
-    return () => {
-      stopIdCamera();
-      stopCamera();
-    };
+  const handleIdentityChange = useCallback((value: IdentityCaptureValue) => {
+    setIdentity(value);
+    setError("");
   }, []);
-
-  const startIdCamera = async () => {
-    setResult(null);
-    try {
-      setIdCameraOpen(true);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      idStreamRef.current = stream;
-      if (idVideoRef.current) {
-        idVideoRef.current.srcObject = stream;
-        await idVideoRef.current.play().catch(() => {});
-      }
-    } catch {
-      stopIdCamera();
-      setResult({ status: "error", message: "Camera access was blocked. Please allow camera access and try again." });
-    }
-  };
-
-  const captureIdPhoto = () => {
-    const video = idVideoRef.current;
-    if (!video) return;
-    setIdImageData(dataUrlFromVideo(video));
-    stopIdCamera();
-  };
-
-  const captureVideoFrame = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    setIdentityVideoFrameData(dataUrlFromVideo(video));
-  };
-
-  const startRecording = async () => {
-    setResult(null);
-    resetVideoCapture();
-    try {
-      setRecording(true);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const stream = await navigator.mediaDevices.getUserMedia(identityVideoConstraints);
-      streamRef.current = stream;
-      recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(stream, mediaRecorderOptions());
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = String(reader.result ?? "");
-          if (dataUrl.length > MAX_VIDEO_DATA_URL_BYTES) {
-            resetVideoCapture();
-            setResult({
-              status: "error",
-              message: "The video file is too large. Please re-record in steady light and keep the phone still.",
-            });
-            return;
-          }
-          setIdentityVideoData(dataUrl);
-        };
-        reader.readAsDataURL(blob);
-      };
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
-      recorder.start();
-      let seconds = 0;
-      timerRef.current = setInterval(() => {
-        seconds += 1;
-        setRecordingSeconds(seconds);
-        if (seconds >= RECORDING_SECONDS) {
-          captureVideoFrame();
-          stopCamera();
-        }
-      }, 1000);
-    } catch {
-      setRecording(false);
-      setResult({ status: "error", message: "Camera access was blocked. Please allow camera access and try again." });
-    }
-  };
 
   const submit = async () => {
     setSubmitting(true);
-    setResult(null);
+    setError("");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25000);
     try {
-      if (identityVideoData.length > MAX_VIDEO_DATA_URL_BYTES) {
-        setResult({ status: "error", message: "The video is too large. Please re-record and try again." });
+      if (identity.identityVideoData.length > MAX_VIDEO_DATA_URL_BYTES) {
+        setError("The video is too large. Please re-record and try again.");
         return;
       }
       const response = await fetch("/api/identity/upload", {
@@ -203,39 +53,33 @@ export default function VerifyIdentityPage() {
         signal: controller.signal,
         body: JSON.stringify({
           token: params.token,
-          idImageData,
-          selfieFrameData: identityVideoFrameData,
-          identityVideoData,
+          idImageData: identity.idImageData,
+          selfieFrameData: identity.identityVideoFrameData,
+          identityVideoData: identity.identityVideoData,
         }),
       });
       const responseText = await response.text();
       const payload = parseJson(responseText);
       if (!response.ok) {
-        setResult({
-          status: "error",
-          message:
-            response.status === 413
-              ? "The video is too large. Please re-record and try again."
-              : errorMessage(payload.error, "Identity upload failed."),
-        });
+        setError(
+          response.status === 413
+            ? "The video is too large. Please re-record and try again."
+            : errorMessage(payload.error, "Identity upload failed.")
+        );
         return;
       }
       router.push(`/verify-identity/${encodeURIComponent(params.token)}/submitted`);
-    } catch (error) {
-      setResult({
-        status: "error",
-        message:
-          (error as Error).name === "AbortError"
-            ? "Upload is taking too long. Please check your connection and try again."
-            : "Identity upload failed. Please re-record the video and try again.",
-      });
+    } catch (err) {
+      setError(
+        (err as Error).name === "AbortError"
+          ? "Upload is taking too long. Please check your connection and try again."
+          : "Identity upload failed. Please re-record the video and try again."
+      );
     } finally {
       window.clearTimeout(timeout);
       setSubmitting(false);
     }
   };
-
-  const progress = Math.min(100, (recordingSeconds / RECORDING_SECONDS) * 100);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -248,108 +92,18 @@ export default function VerifyIdentityPage() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-teal-100 bg-teal-50 p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-700" />
-              <p className="text-sm text-teal-900">
-                Take a clear ID photo, then record a 10-second identity video in good lighting.
-              </p>
-            </div>
-          </div>
+          <IdentityCapture onChange={handleIdentityChange} />
 
-          <div className="rounded-lg border border-gray-200 p-5 space-y-4">
-            <div>
-              <h2 className="font-semibold text-gray-900">Government ID</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Place the ID inside the frame on a dark flat surface. Keep all corners visible and avoid glare.
-              </p>
-            </div>
-
-            {idCameraOpen ? (
-              <div className="space-y-4">
-                <div className="relative overflow-hidden rounded-lg bg-gray-900">
-                  <video ref={idVideoRef} playsInline muted className="aspect-[4/3] w-full object-cover" />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-                    <div className="aspect-[1.586/1] w-full max-w-md rounded-xl border-4 border-white shadow-[0_0_0_999px_rgba(0,0,0,0.35)]" />
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button type="button" fullWidth onClick={captureIdPhoto}>
-                    <Camera className="h-4 w-4 mr-2" />
-                    Capture ID Photo
-                  </Button>
-                  <Button type="button" fullWidth variant="outline" onClick={stopIdCamera}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : idImageData ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
-                  <CheckCircle className="h-5 w-5" />
-                  ID photo ready
-                </div>
-                <img src={idImageData} alt="Government ID preview" className="max-h-44 w-full rounded-lg object-contain bg-gray-50" />
-                <Button type="button" fullWidth variant="outline" onClick={() => setIdImageData("")}>
-                  Retake ID Photo
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Button type="button" fullWidth onClick={startIdCamera}>
-                  <Camera className="h-4 w-4 mr-2" />
-                  Open Camera
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-gray-200 p-5 space-y-4">
-            <div>
-              <h2 className="font-semibold text-gray-900">10-Second Identity Video</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Face a light source, remove sunglasses, hold still, then slowly turn your head left and right.
-              </p>
-            </div>
-            <video ref={videoRef} playsInline muted className={`w-full rounded-lg bg-gray-100 ${recording ? "block" : "hidden"}`} />
-            {recording && (
-              <div>
-                <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
-                  <span>Recording: {recordingSeconds} seconds</span>
-                  <span>{RECORDING_SECONDS}s</span>
-                </div>
-                <div className="h-2 rounded-full bg-gray-100">
-                  <div className="h-2 rounded-full bg-teal-600 transition-all" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            )}
-            {identityVideoFrameData && !recording ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700">
-                  <CheckCircle className="h-5 w-5" />
-                  Video recorded
-                </div>
-                {identityVideoData && <video controls playsInline src={identityVideoData} className="w-full rounded-lg bg-gray-100" />}
-              </div>
-            ) : null}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button type="button" onClick={recording ? stopCamera : startRecording} variant={recording ? "outline" : "primary"}>
-                <Video className="h-4 w-4 mr-2" />
-                {recording ? "Stop Recording" : identityVideoData ? "Re-record Video" : "Start Recording"}
-              </Button>
-            </div>
-          </div>
-
-          {result && (
-            <div className={`rounded-lg border p-4 text-sm ${result.status === "success" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <span className="inline-flex items-center gap-2">
-                {result.status === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-                {result.message}
+                <AlertCircle className="h-4 w-4" />
+                {error}
               </span>
             </div>
           )}
 
-          <Button fullWidth onClick={submit} disabled={submitting || !idImageData || !identityVideoFrameData || !identityVideoData}>
+          <Button fullWidth onClick={submit} disabled={submitting || !identity.complete}>
             {submitting ? "Submitting..." : "Submit Verification"}
           </Button>
         </div>
