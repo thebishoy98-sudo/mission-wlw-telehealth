@@ -24,16 +24,18 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
 import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { checkEligibility } from "@/lib/eligibility";
+import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
-import type { Payment } from "@/types";
+import { verifyIdentityUploads } from "@/services/identity-verification";
+import type { Payment, Upload } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityStatus: bodyIdentityStatus } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -47,19 +49,58 @@ export async function POST(req: NextRequest) {
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
       db.orderDb.getById(orderId);
 
-    // Upsert product FIRST (order has FK dependency on products table)
+    // Resolve product/dose against the server product row. Browser demo products
+    // have generated IDs, but server orders must reference stable Postgres IDs.
+    let persistedProduct = productData?.slug
+      ? await dbServer.productDb.getBySlug(productData.slug).catch(() => null)
+      : null;
     if (productData) {
-      try {
+      if (!persistedProduct) {
         await dbServer.productDb.upsert(productData);
-      } catch { /* ignore */ }
+        persistedProduct =
+          (await dbServer.productDb.getBySlug(productData.slug).catch(() => null)) ??
+          (await dbServer.productDb.getById(productData.id).catch(() => null));
+      }
     }
+    const requestedDose = productData?.doses?.find((dose: any) => dose.id === orderData?.doseId);
+    const persistedDose = requestedDose && persistedProduct
+      ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
+      : null;
+
+    // Patient must exist before the order because orders.patient_id has an FK. Repeated
+    // checkout retries may reuse the same email with a new browser-generated patient id.
+    let persistedPatient = patientData?.email
+      ? await dbServer.patientDb.getByEmail(patientData.email).catch(() => null)
+      : null;
+    if (patientData) {
+      if (!persistedPatient) {
+        persistedPatient = await dbServer.patientDb.create(patientData);
+      } else {
+        await dbServer.patientDb.update(persistedPatient.id, {
+          firstName: patientData.firstName,
+          lastName: patientData.lastName,
+          dateOfBirth: patientData.dateOfBirth,
+          gender: patientData.gender,
+          phone: patientData.phone,
+          email: patientData.email,
+          address: patientData.address,
+          shippingAddress: patientData.shippingAddress?.street1 ? patientData.shippingAddress : patientData.address,
+        }).catch(() => persistedPatient);
+      }
+    }
+    const normalizedOrderData = orderData && persistedPatient
+      ? {
+          ...orderData,
+          patientId: persistedPatient.id,
+          productId: persistedProduct?.id ?? orderData.productId,
+          doseId: persistedDose?.id ?? orderData.doseId,
+        }
+      : orderData;
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
-    if (!order && orderData) {
-      try {
-        await dbServer.orderDb.create(orderData);
-      } catch { /* may already exist */ }
-      order = orderData;
+    if (!order && normalizedOrderData) {
+      await dbServer.orderDb.create(normalizedOrderData);
+      order = normalizedOrderData;
     }
 
     if (!order) {
@@ -154,18 +195,62 @@ export async function POST(req: NextRequest) {
     db.paymentDb.create(payment);
     await dbServer.paymentDb.create(payment).catch(() => {});
 
-    // 7. Update order status — gate on identity verification
-    const identityStatus: string =
-      bodyIdentityStatus ?? orderData?.identityStatus ?? "missing";
-    const identityVerified =
-      identityStatus === "verified" || identityStatus === "manual_approved";
+    // 7. Verify identity when patient submitted usable media. Missing/uncertain identity blocks pharmacy dispatch.
+    const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
+    const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
+    const submittedUploads: Upload[] = submittedIdentityMedia
+      ? [
+          {
+            id: generateId(),
+            orderId,
+            type: "driver_license",
+            filename: "identity-document.jpg",
+            fileSize: identityUploads.licenseImageData.length,
+            mimeType: "image/jpeg",
+            base64Data: identityUploads.licenseImageData,
+            uploadedAt: new Date().toISOString(),
+            status: "uploaded",
+          },
+          {
+            id: generateId(),
+            orderId,
+            type: "selfie_video",
+            filename: "selfie-frame.jpg",
+            fileSize: identityUploads.selfieFrameData.length,
+            mimeType: "image/jpeg",
+            base64Data: identityUploads.selfieFrameData,
+            uploadedAt: new Date().toISOString(),
+            status: "uploaded",
+          },
+        ]
+      : [];
 
+    if (submittedUploads.length) {
+      submittedUploads.forEach((upload) => db.uploadDb.create(upload));
+      await Promise.all(submittedUploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
+    }
+
+    const identityAiResult = submittedUploads.length
+      ? await verifyIdentityUploads(submittedUploads)
+      : {
+          status: "missing" as const,
+          confidence: 0,
+          summary: "Patient did not submit both identity verification uploads before payment.",
+          flags: ["missing_identity_uploads"],
+          checkedAt: new Date().toISOString(),
+        };
+    const identityStatus = submittedUploads.length ? statusFromAiResult(identityAiResult) : "missing";
+    const dispatchGate = getIdentityGate({ identityStatus });
+
+    // 8. Update order status
     const orderUpdates = {
-      status: identityVerified ? ("sent_to_pharmacy" as const) : ("pending_review" as const),
+      status: dispatchGate.canDispatch ? "sent_to_pharmacy" as const : "pending_review" as const,
       paymentStatus: "completed" as const,
+      identityStatus,
+      identityReason: identityAiResult.summary,
+      identityAiResult,
+      identityUploadToken,
       submittedAt: new Date().toISOString(),
-      identityStatus: identityStatus as any,
-      identityAiResult: orderData?.identityAiResult,
     };
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
@@ -173,6 +258,7 @@ export async function POST(req: NextRequest) {
     // Build updatedOrder from known data (localStorage not available server-side)
     const updatedOrder = { ...order, ...orderUpdates };
     const errors: string[] = [];
+    const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     try {
@@ -202,10 +288,11 @@ export async function POST(req: NextRequest) {
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor, "error", (e as Error).message);
     }
 
-    // 10. Life File — only dispatch if identity is verified or manually approved
-    if (identityVerified) {
+    // 10. Life File — pharmacy prescription order
+    if (dispatchGate.canDispatch) {
       try {
-        await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { pharmacyStatus: "submitted" }).catch(() => {});
         logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor);
@@ -214,38 +301,35 @@ export async function POST(req: NextRequest) {
         logPhiDisclosure(patient.id, orderId, "lifefile", auditCtx.actor, "error", (e as Error).message);
       }
     } else {
-      // Identity not verified — keep pharmacyStatus=draft, send Spruce reminder
-      try {
-        await spruce.sendMessage(patient.id, "identity_verification_required", { orderId }, patient);
-        logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
-      } catch (e) {
-        errors.push(`Spruce identity reminder: ${(e as Error).message}`);
-        db.integrationLogDb.create({
-          id: generateId(), timestamp: new Date().toISOString(),
-          integrationName: "spruce", action: "Identity reminder SMS failed",
-          orderId, patientId: patient.id, status: "error",
-          details: {}, error: (e as Error).message,
-        });
-      }
+      db.orderDb.update(orderId, { pharmacyStatus: "draft" });
+      await dbServer.orderDb.update(orderId, { pharmacyStatus: "draft" }).catch(() => {});
     }
 
     // 11. Spruce SMS — "payment received, order processing"
     try {
-      await spruce.sendMessage(patient.id, "payment_received", { orderId }, patient);
+      await spruceServer.sendMessage(
+        patient,
+        dispatchGate.canDispatch ? "payment_received" : "identity_upload_reminder",
+        { orderId, uploadUrl: identityUploadUrl }
+      );
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {
       errors.push(`Spruce SMS: ${(e as Error).message}`);
     }
 
-    // 12. Auto provider review record
+    // 12. Provider review record
     const reviewRecord = {
       id: generateId(),
       orderId,
       patientId: patient.id,
-      status: "approved" as const,
-      reviewedAt: new Date().toISOString(),
-      reviewedBy: "system-auto",
-      notes: "Auto-approved: patient passed eligibility screening",
+      status: dispatchGate.canDispatch ? "approved" as const : "needs_more_info" as const,
+      reviewedAt: dispatchGate.canDispatch ? new Date().toISOString() : undefined,
+      reviewedBy: dispatchGate.canDispatch ? "system-auto" : undefined,
+      notes: dispatchGate.canDispatch
+        ? "Auto-approved: patient passed eligibility and identity screening"
+        : `Payment collected. Pharmacy dispatch blocked until identity is approved. Upload link: ${identityUploadUrl}`,
+      identityAiResult,
+      identityReviewRequired: !dispatchGate.canDispatch,
     };
     db.providerReviewDb.create(reviewRecord);
     await dbServer.providerReviewDb.create(reviewRecord).catch(() => {});
@@ -263,6 +347,8 @@ export async function POST(req: NextRequest) {
       success: true,
       orderId,
       chargeId: chargeResult.chargeId,
+      identityStatus,
+      identityUploadUrl: dispatchGate.canDispatch ? undefined : identityUploadUrl,
       warnings: errors.length ? errors : undefined,
     });
   } catch (err: any) {

@@ -12,6 +12,10 @@ import { Lock, CreditCard } from "lucide-react";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const usableShippingAddress = (state: ReturnType<typeof getIntakeState>) => {
+  return state.shippingAddress?.street1 ? state.shippingAddress : state.address;
+};
+
 export default function Payment() {
   const router = useRouter();
   const [intakeState] = useState(getIntakeState());
@@ -55,7 +59,7 @@ export default function Payment() {
       phone: intakeState.phone,
       email: intakeState.email,
       address: intakeState.address,
-      shippingAddress: intakeState.shippingAddress || intakeState.address,
+      shippingAddress: usableShippingAddress(intakeState),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -117,7 +121,7 @@ export default function Payment() {
         filename: "drivers_license.jpg",
         fileSize: 245000,
         mimeType: "image/jpeg",
-        base64Data: "",
+        base64Data: intakeState.licenseImageData ?? "",
         uploadedAt: new Date().toISOString(),
         status: "uploaded",
       });
@@ -132,7 +136,7 @@ export default function Payment() {
         mimeType: "video/mp4",
         uploadedAt: new Date().toISOString(),
         status: "uploaded",
-        base64Data: "",
+        base64Data: intakeState.selfieFrameData ?? "",
       });
     }
 
@@ -152,7 +156,10 @@ export default function Payment() {
         cardLast4,
         cardBrand: "Visa",
         amount: total,
-        identityStatus: intakeState.identityStatus ?? "missing",
+        identityUploads: {
+          licenseImageData: intakeState.licenseImageData,
+          selfieFrameData: intakeState.selfieFrameData,
+        },
         // Send full patient + order data so server can create in Postgres
         // (localStorage is not accessible server-side)
         patientData: {
@@ -164,7 +171,7 @@ export default function Payment() {
           phone: intakeState.phone,
           email: intakeState.email,
           address: intakeState.address,
-          shippingAddress: intakeState.shippingAddress || intakeState.address,
+          shippingAddress: usableShippingAddress(intakeState),
           createdAt: patient.createdAt,
           updatedAt: patient.updatedAt,
         },
@@ -178,8 +185,7 @@ export default function Payment() {
           pharmacyStatus: "draft",
           practiceQStatus: "pending",
           quickbooksStatus: "pending",
-          identityStatus: intakeState.identityStatus ?? "missing",
-          identityAiResult: intakeState.identityAiResult,
+          identityStatus: "missing",
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },

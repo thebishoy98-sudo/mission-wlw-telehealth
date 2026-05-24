@@ -90,10 +90,11 @@ export type IdentityStatus =
   | "manual_approved";
 
 export interface IdentityAiResult {
-  verdict: "verified" | "needs_review" | "rejected";
+  status: IdentityStatus;
   confidence: number;
   summary: string;
   flags: string[];
+  checkedAt?: string;
 }
 
 export interface Order {
@@ -106,17 +107,18 @@ export interface Order {
   pharmacyStatus: PharmacyStatus;
   practiceQStatus: "pending" | "submitted" | "completed" | "error";
   quickbooksStatus: "pending" | "created" | "invoiced" | "error";
-  identityStatus?: IdentityStatus;
-  identityReason?: string;
-  identityAiResult?: IdentityAiResult;
-  identityReviewedAt?: string;
-  identityReviewedBy?: string;
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;
   approvedAt?: string;
   providerNotes?: string;
   rejectionReason?: string;
+  identityStatus?: IdentityStatus;
+  identityReason?: string;
+  identityReviewedAt?: string;
+  identityReviewedBy?: string;
+  identityAiResult?: IdentityAiResult;
+  identityUploadToken?: string;
 }
 
 // Intake and Medical Information
@@ -345,4 +347,6 @@ export interface ProviderReview {
   chartViewedAt?: string;
   /** Name of provider who viewed the chart */
   chartViewedBy?: string;
+  identityAiResult?: IdentityAiResult;
+  identityReviewRequired?: boolean;
 }

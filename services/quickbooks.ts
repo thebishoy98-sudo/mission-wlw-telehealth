@@ -6,7 +6,6 @@
  */
 
 import { serviceConfig } from "@/lib/service-config";
-import * as dbServer from "@/lib/db.server";
 import * as db from "@/lib/db";
 import { generateId, formatCurrency } from "@/lib/utils";
 import { getQBAccessToken } from "@/lib/qb-oauth";
@@ -58,7 +57,6 @@ async function logIntegration(
     details,
   };
   db.integrationLogDb.create(entry);
-  await dbServer.integrationLogDb.create(entry).catch(() => {});
 }
 
 export async function createCustomerRecord(patient: Patient): Promise<string> {
@@ -106,17 +104,15 @@ export async function createInvoice(
 
   const patient =
     overrides?.patient ??
-    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
     db.patientDb.getById(order.patientId);
   const product =
     overrides?.product ??
-    (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
     db.productDb.getById(order.productId);
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) throw new Error("Invalid order data for QB invoice");
 
-  const amountDollars = payment.amount / 100; // payment amount is stored in cents
+  const amountDollars = payment.amount;
 
   if (!config.useMock) {
     const result = await qboPost("/invoice", {
@@ -166,11 +162,11 @@ export async function recordPayment(
 
   if (!config.useMock) {
     await qboPost("/payment", {
-      TotalAmt: amount / 100,
+      TotalAmt: amount,
       ...(qbCustomerId ? { CustomerRef: { value: qbCustomerId } } : {}),
       Line: [
         {
-          Amount: amount / 100,
+          Amount: amount,
           LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }],
         },
       ],

@@ -14,7 +14,7 @@ import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "
 import * as lifefileService from "@/services/lifefile";
 import * as spruceService from "@/services/spruce";
 import { Toast } from "@/components/ui/Toast";
-import { ShieldCheck, ShieldAlert, ShieldX, Shield } from "lucide-react";
+import { getIdentityGate } from "@/lib/identity";
 
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
@@ -38,79 +38,14 @@ export default function OrdersManagement() {
     setPatients(patientMap);
   }, []);
 
-  const identityIcon = (status: Types.IdentityStatus | undefined) => {
-    switch (status) {
-      case "verified":        return <ShieldCheck className="w-4 h-4 text-green-500" />;
-      case "manual_approved": return <ShieldCheck className="w-4 h-4 text-teal-500" />;
-      case "needs_review":    return <ShieldAlert className="w-4 h-4 text-yellow-500" />;
-      case "rejected":        return <ShieldX className="w-4 h-4 text-red-500" />;
-      default:                return <Shield className="w-4 h-4 text-gray-300" />;
-    }
-  };
-
-  const identityLabel = (status: Types.IdentityStatus | undefined) => {
-    const labels: Record<string, string> = {
-      verified: "Verified",
-      manual_approved: "Manually Approved",
-      needs_review: "Needs Review",
-      rejected: "Rejected",
-      missing: "Missing",
-      pending: "Pending",
-    };
-    return labels[status ?? "missing"] ?? "Missing";
-  };
-
-  const handleApproveIdentity = (order: Types.Order) => {
+  const handleSendToPharmacy = async (order: Types.Order) => {
     try {
-      // Mark identity as manually approved
-      db.orderDb.update(order.id, {
-        identityStatus: "manual_approved",
-        identityReviewedAt: new Date().toISOString(),
-        identityReviewedBy: "admin",
-        status: "sent_to_pharmacy",
-      } as any);
-
-      // Dispatch to pharmacy
-      lifefileService.createPharmacyOrder(order);
-      db.orderDb.update(order.id, { pharmacyStatus: "submitted" });
-
-      // Notify patient
-      const patient = db.patientDb.getById(order.patientId);
-      if (patient) {
-        spruceService.sendMessage(patient.id, "provider_approved", { orderId: order.id });
+      const gate = getIdentityGate(order);
+      if (!gate.canDispatch) {
+        setToast({ message: "Identity must be verified or manually approved before pharmacy dispatch.", type: "error" });
+        return;
       }
-
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === order.id
-            ? { ...o, identityStatus: "manual_approved" as any, pharmacyStatus: "submitted" as any, status: "sent_to_pharmacy" as any }
-            : o
-        )
-      );
-      if (selectedOrder?.id === order.id) {
-        setSelectedOrder((prev) => prev ? { ...prev, identityStatus: "manual_approved" as any, pharmacyStatus: "submitted" as any } : prev);
-      }
-
-      setToast({ message: "Identity approved — order dispatched to pharmacy.", type: "success" });
-    } catch (error) {
-      setToast({ message: "Error approving identity. Please try again.", type: "error" });
-    }
-  };
-
-  const handleResendReminder = (order: Types.Order) => {
-    try {
-      const patient = db.patientDb.getById(order.patientId);
-      if (!patient) throw new Error("Patient not found");
-      spruceService.sendMessage(patient.id, "identity_verification_required", { orderId: order.id });
-      setToast({ message: "Verification reminder SMS sent to patient.", type: "success" });
-    } catch (error) {
-      setToast({ message: "Error sending reminder. Please try again.", type: "error" });
-    }
-  };
-
-  const handleSendToPharmacy = (order: Types.Order) => {
-    try {
-      const pharmacy = lifefileService.createPharmacyOrder(order);
+      await lifefileService.createPharmacyOrder(order);
       db.orderDb.update(order.id, { pharmacyStatus: "submitted" });
 
       // Send notification
@@ -188,10 +123,10 @@ export default function OrdersManagement() {
                           Status
                         </th>
                         <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Identity
+                          Pharmacy
                         </th>
                         <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Pharmacy
+                          Identity
                         </th>
                       </tr>
                     </thead>
@@ -222,18 +157,15 @@ export default function OrdersManagement() {
                               </Badge>
                             </td>
                             <td className="px-6 py-4 text-sm">
-                              <div className="flex items-center gap-1.5">
-                                {identityIcon(order.identityStatus)}
-                                <span className="text-xs text-gray-600">
-                                  {identityLabel(order.identityStatus)}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
                               <Badge
                                 className={getStatusColor(order.pharmacyStatus)}
                               >
                                 {getStatusLabel(order.pharmacyStatus)}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                                {order.identityStatus ?? "missing"}
                               </Badge>
                             </td>
                           </tr>
@@ -264,58 +196,48 @@ export default function OrdersManagement() {
                       <strong>Created:</strong>{" "}
                       {formatDateTime(selectedOrder.createdAt)}
                     </p>
+                    <p>
+                      <strong>Identity:</strong>{" "}
+                      {selectedOrder.identityStatus ?? "missing"}
+                    </p>
+                    {selectedOrder.identityReason && (
+                      <p className="text-gray-600">{selectedOrder.identityReason}</p>
+                    )}
 
-                    {/* Identity status */}
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <div className="flex items-center gap-2 mb-1">
-                        {identityIcon(selectedOrder.identityStatus)}
-                        <span className="text-xs font-semibold text-gray-700">
-                          Identity: {identityLabel(selectedOrder.identityStatus)}
-                        </span>
+                    {!getIdentityGate(selectedOrder).canDispatch && selectedOrder.paymentStatus === "completed" && (
+                      <div className="mt-4 space-y-2">
+                        <Button
+                          fullWidth
+                          variant="outline"
+                          onClick={() => {
+                            db.orderDb.update(selectedOrder.id, {
+                              identityStatus: "manual_approved",
+                              identityReason: "Manually approved by admin",
+                              identityReviewedAt: new Date().toISOString(),
+                              identityReviewedBy: "admin",
+                            });
+                            setSelectedOrder({ ...selectedOrder, identityStatus: "manual_approved", identityReason: "Manually approved by admin" });
+                            setOrders((prev) => prev.map((order) => order.id === selectedOrder.id ? { ...order, identityStatus: "manual_approved", identityReason: "Manually approved by admin" } : order));
+                          }}
+                        >
+                          Manually Approve Identity
+                        </Button>
+                        <Button
+                          fullWidth
+                          variant="outline"
+                          onClick={() => {
+                            const patient = db.patientDb.getById(selectedOrder.patientId);
+                            if (!patient) { setToast({ message: "Patient not found.", type: "error" }); return; }
+                            spruceService.sendMessage(patient.id, "identity_verification_required", { orderId: selectedOrder.id });
+                            setToast({ message: "Verification reminder sent to patient.", type: "success" });
+                          }}
+                        >
+                          Resend Verification Reminder
+                        </Button>
                       </div>
-                      {selectedOrder.identityReason && (
-                        <p className="text-xs text-gray-500 ml-6">{selectedOrder.identityReason}</p>
-                      )}
-                      {(selectedOrder.identityAiResult as any)?.confidence !== undefined && (
-                        <p className="text-xs text-gray-400 ml-6">
-                          AI confidence: {Math.round(((selectedOrder.identityAiResult as any).confidence ?? 0) * 100)}%
-                        </p>
-                      )}
-                      {(selectedOrder.identityAiResult as any)?.flags?.length > 0 && (
-                        <ul className="ml-6 mt-1 space-y-0.5">
-                          {((selectedOrder.identityAiResult as any).flags as string[]).map((f, i) => (
-                            <li key={i} className="text-xs text-yellow-600">• {f}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                    )}
 
-                    {/* Identity action buttons */}
-                    {selectedOrder.identityStatus !== "verified" &&
-                      selectedOrder.identityStatus !== "manual_approved" &&
-                      selectedOrder.paymentStatus === "completed" && (
-                        <div className="mt-4 space-y-2">
-                          {selectedOrder.pharmacyStatus === "draft" && (
-                            <Button
-                              fullWidth
-                              onClick={() => handleApproveIdentity(selectedOrder)}
-                            >
-                              <ShieldCheck className="w-4 h-4 mr-2" />
-                              Approve Identity &amp; Dispatch
-                            </Button>
-                          )}
-                          <Button
-                            fullWidth
-                            variant="outline"
-                            onClick={() => handleResendReminder(selectedOrder)}
-                          >
-                            Resend Verification Reminder
-                          </Button>
-                        </div>
-                      )}
-
-                    {selectedOrder.status === "approved" && selectedOrder.pharmacyStatus === "draft" &&
-                      (selectedOrder.identityStatus === "verified" || selectedOrder.identityStatus === "manual_approved") && (
+                    {(selectedOrder.status === "approved" || selectedOrder.status === "pending_review") && selectedOrder.pharmacyStatus === "draft" && (
                       <Button
                         fullWidth
                         className="mt-4"

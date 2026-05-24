@@ -64,10 +64,23 @@ CREATE TABLE IF NOT EXISTS orders (
   approved_at          TIMESTAMPTZ,
   provider_notes       TEXT,
   rejection_reason     TEXT,
+  identity_status      TEXT,
+  identity_reason      TEXT,
+  identity_reviewed_at TIMESTAMPTZ,
+  identity_reviewed_by TEXT,
+  identity_ai_result   JSONB,
+  identity_upload_token TEXT,
   retention_delete_after TIMESTAMPTZ,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_status TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_by TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_upload_token TEXT;
 
 -- ── Payments ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS payments (
@@ -135,11 +148,14 @@ CREATE TABLE IF NOT EXISTS uploads (
   file_size           INTEGER NOT NULL,
   mime_type           TEXT NOT NULL,
   storage_url         TEXT NOT NULL DEFAULT '',
+  base64_data         TEXT,
   uploaded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status              TEXT NOT NULL DEFAULT 'uploaded',
   verification_notes  TEXT,
   retention_delete_after TIMESTAMPTZ
 );
+
+ALTER TABLE uploads ADD COLUMN IF NOT EXISTS base64_data TEXT;
 
 -- ── Provider Reviews ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS provider_reviews (
@@ -156,9 +172,14 @@ CREATE TABLE IF NOT EXISTS provider_reviews (
   chart_viewed_by   TEXT,
   ai_summary        TEXT,
   ai_flags          JSONB DEFAULT '[]',
+  identity_ai_result JSONB,
+  identity_review_required BOOLEAN NOT NULL DEFAULT false,
   retention_delete_after TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
+ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_review_required BOOLEAN NOT NULL DEFAULT false;
 
 -- ── PHI Audit Logs ─────────────────────────────────────────────────────────────
 -- HIPAA § 164.312(b) — INSERT ONLY. Never UPDATE or DELETE rows here.
@@ -287,6 +308,8 @@ CREATE INDEX IF NOT EXISTS idx_logs_order_id        ON integration_logs(order_id
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp       ON integration_logs(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_spruce_patient_id    ON spruce_messages(patient_id);
 CREATE INDEX IF NOT EXISTS idx_pharmacy_order_id    ON pharmacy_orders(order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_identity_status ON orders(identity_status);
+CREATE INDEX IF NOT EXISTS idx_orders_identity_token ON orders(identity_upload_token);
 CREATE INDEX IF NOT EXISTS idx_phi_audit_patient    ON phi_audit_logs(patient_id);
 CREATE INDEX IF NOT EXISTS idx_phi_audit_timestamp  ON phi_audit_logs(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_phi_audit_actor      ON phi_audit_logs(actor);

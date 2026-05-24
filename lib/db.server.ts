@@ -11,7 +11,7 @@
  *   4. Run: npm run db:migrate
  */
 
-import { sql } from "@vercel/postgres";
+import { Client } from "pg";
 import type {
   Patient, Order, Payment, Product, Question, QuestionnaireAnswer,
   ConsentRecord, Upload, ProviderReview, PharmacyOrder, PracticeQPacket,
@@ -27,6 +27,12 @@ export const productDb = {
     return rows[0] ? rowToProduct(rows[0]) : null;
   },
 
+  async getBySlug(slug: string): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM products WHERE slug = ${slug} LIMIT 1`;
+    return rows[0] ? rowToProduct(rows[0]) : null;
+  },
+
   async getAll(): Promise<Product[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`SELECT * FROM products WHERE is_active = true ORDER BY name ASC`;
@@ -39,16 +45,31 @@ export const productDb = {
     await sql`
       INSERT INTO products (id, name, slug, description, long_description, starting_price, image, doses, eligibility_note, is_active, faqs, created_at)
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
-        ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}, ${p.eligibilityNote},
-        ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}, ${p.createdAt})
-      ON CONFLICT (slug) DO UPDATE SET
-        id = EXCLUDED.id, name = EXCLUDED.name, description = EXCLUDED.description,
-        starting_price = EXCLUDED.starting_price, doses = EXCLUDED.doses, is_active = EXCLUDED.is_active
+        ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}::jsonb, ${p.eligibilityNote},
+        ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
+      ON CONFLICT (slug) DO NOTHING
     `;
   },
 };
 
-const isDbAvailable = () => !!process.env.POSTGRES_URL;
+const isDbAvailable = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
+
+async function sql(strings: TemplateStringsArray, ...values: any[]) {
+  const text = strings.reduce((query, chunk, index) => {
+    return `${query}${index > 0 ? `$${index}` : ""}${chunk}`;
+  }, "");
+  const client = new Client({
+    connectionString: process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+
+  await client.connect();
+  try {
+    return await client.query(text, values);
+  } finally {
+    await client.end();
+  }
+}
 
 // ── Patients ──────────────────────────────────────────────────────────────────
 
@@ -70,8 +91,8 @@ export const patientDb = {
       INSERT INTO patients (id, first_name, last_name, date_of_birth, gender, phone, email,
         address, shipping_address, emergency_contact, created_at, updated_at)
       VALUES (${p.id}, ${p.firstName}, ${p.lastName}, ${p.dateOfBirth}, ${p.gender},
-        ${p.phone}, ${p.email}, ${JSON.stringify(p.address)}, ${JSON.stringify(p.shippingAddress)},
-        ${JSON.stringify(p.emergencyContact ?? null)}, ${p.createdAt}, ${p.updatedAt})
+        ${p.phone}, ${p.email}, ${JSON.stringify(p.address)}::jsonb, ${JSON.stringify(p.shippingAddress)}::jsonb,
+        ${JSON.stringify(p.emergencyContact ?? null)}::jsonb, ${p.createdAt}, ${p.updatedAt})
       ON CONFLICT (id) DO NOTHING
     `;
     return p;
@@ -83,8 +104,12 @@ export const patientDb = {
       UPDATE patients SET
         first_name = COALESCE(${data.firstName ?? null}, first_name),
         last_name  = COALESCE(${data.lastName ?? null}, last_name),
+        date_of_birth = COALESCE(${data.dateOfBirth ?? null}, date_of_birth),
+        gender     = COALESCE(${data.gender ?? null}, gender),
         phone      = COALESCE(${data.phone ?? null}, phone),
         email      = COALESCE(${data.email ?? null}, email),
+        address    = COALESCE(${data.address ? JSON.stringify(data.address) : null}::jsonb, address),
+        shipping_address = COALESCE(${data.shippingAddress ? JSON.stringify(data.shippingAddress) : null}::jsonb, shipping_address),
         updated_at = ${now}
       WHERE id = ${id}
     `;
@@ -98,6 +123,12 @@ export const orderDb = {
   async getById(id: string): Promise<Order | null> {
     if (!isDbAvailable()) return null;
     const { rows } = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToOrder(rows[0]) : null;
+  },
+
+  async getByIdentityUploadToken(token: string): Promise<Order | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM orders WHERE identity_upload_token = ${token} LIMIT 1`;
     return rows[0] ? rowToOrder(rows[0]) : null;
   },
 
@@ -123,10 +154,14 @@ export const orderDb = {
   async create(o: Order): Promise<Order> {
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
-        pharmacy_status, practice_q_status, quickbooks_status, created_at, updated_at)
+        pharmacy_status, practice_q_status, quickbooks_status, identity_status,
+        identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
+        identity_upload_token, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus},
-        ${o.createdAt}, ${o.updatedAt})
+        ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
+        ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
+        ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
   },
@@ -144,10 +179,40 @@ export const orderDb = {
         approved_at        = COALESCE(${data.approvedAt ?? null}, approved_at),
         provider_notes     = COALESCE(${data.providerNotes ?? null}, provider_notes),
         rejection_reason   = COALESCE(${data.rejectionReason ?? null}, rejection_reason),
+        identity_status    = COALESCE(${data.identityStatus ?? null}, identity_status),
+        identity_reason    = COALESCE(${data.identityReason ?? null}, identity_reason),
+        identity_reviewed_at = COALESCE(${data.identityReviewedAt ?? null}, identity_reviewed_at),
+        identity_reviewed_by = COALESCE(${data.identityReviewedBy ?? null}, identity_reviewed_by),
+        identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
+        identity_upload_token = COALESCE(${data.identityUploadToken ?? null}, identity_upload_token),
         updated_at         = ${now}
       WHERE id = ${id}
     `;
     return this.getById(id);
+  },
+};
+
+// ── Uploads ───────────────────────────────────────────────────────────────────
+
+export const uploadDb = {
+  async getByOrder(orderId: string): Promise<Upload[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM uploads WHERE order_id = ${orderId} ORDER BY uploaded_at ASC
+    `;
+    return rows.map(rowToUpload);
+  },
+
+  async create(upload: Upload): Promise<Upload> {
+    await sql`
+      INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
+        storage_url, base64_data, uploaded_at, status, verification_notes)
+      VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
+        ${upload.fileSize}, ${upload.mimeType}, ${""}, ${upload.base64Data ?? ""},
+        ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return upload;
   },
 };
 
@@ -207,6 +272,18 @@ export const answerDb = {
   },
 };
 
+// ── Consent Records ───────────────────────────────────────────────────────────
+
+export const consentDb = {
+  async getByOrder(orderId: string): Promise<ConsentRecord | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM consent_records WHERE order_id = ${orderId} LIMIT 1
+    `;
+    return rows[0] ? rowToConsent(rows[0]) : null;
+  },
+};
+
 // ── Questions ─────────────────────────────────────────────────────────────────
 
 export const questionDb = {
@@ -241,12 +318,14 @@ export const providerReviewDb = {
     await sql`
       INSERT INTO provider_reviews (id, order_id, patient_id, status, reviewed_at,
         reviewed_by, notes, rejection_reason, chart_viewed_at, chart_viewed_by,
-        ai_summary, ai_flags, created_at)
+        ai_summary, ai_flags, identity_ai_result, identity_review_required, created_at)
       VALUES (${r.id}, ${r.orderId}, ${r.patientId}, ${r.status},
         ${r.reviewedAt ?? null}, ${r.reviewedBy ?? null}, ${r.notes ?? null},
         ${r.rejectionReason ?? null}, ${r.chartViewedAt ?? null},
         ${r.chartViewedBy ?? null}, ${(r as any).aiSummary ?? null},
-        ${JSON.stringify((r as any).aiFlags ?? [])}, ${new Date().toISOString()})
+        ${JSON.stringify((r as any).aiFlags ?? [])}::jsonb,
+        ${r.identityAiResult ? JSON.stringify(r.identityAiResult) : null}::jsonb,
+        ${r.identityReviewRequired ?? false}, ${new Date().toISOString()})
     `;
     return r;
   },
@@ -262,7 +341,9 @@ export const providerReviewDb = {
         chart_viewed_at  = COALESCE(${data.chartViewedAt ?? null}, chart_viewed_at),
         chart_viewed_by  = COALESCE(${data.chartViewedBy ?? null}, chart_viewed_by),
         ai_summary       = COALESCE(${data.aiSummary ?? null}, ai_summary),
-        ai_flags         = COALESCE(${data.aiFlags ? JSON.stringify(data.aiFlags) : null}::jsonb, ai_flags)
+        ai_flags         = COALESCE(${data.aiFlags ? JSON.stringify(data.aiFlags) : null}::jsonb, ai_flags),
+        identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
+        identity_review_required = COALESCE(${data.identityReviewRequired ?? null}, identity_review_required)
       WHERE id = ${id}
     `;
     return this.getByOrder(id);
@@ -292,7 +373,7 @@ export const pharmacyOrderDb = {
       INSERT INTO pharmacy_orders (id, order_id, patient_id, life_file_order_id, status,
         payload, submitted_at)
       VALUES (${o.id}, ${o.orderId}, ${o.patientId}, ${o.lifeFileOrderId ?? null},
-        ${o.status}, ${JSON.stringify(o.payload)}, ${o.submittedAt ?? new Date().toISOString()})
+        ${o.status}, ${JSON.stringify(o.payload)}::jsonb, ${o.submittedAt ?? new Date().toISOString()})
     `;
     return o;
   },
@@ -319,7 +400,7 @@ export const integrationLogDb = {
         patient_id, status, details, error)
       VALUES (${log.id}, ${log.timestamp}, ${log.integrationName}, ${log.action},
         ${log.orderId ?? null}, ${log.patientId ?? null}, ${log.status},
-        ${JSON.stringify(log.details)}, ${log.error ?? null})
+        ${JSON.stringify(log.details)}::jsonb, ${log.error ?? null})
     `;
   },
 
@@ -332,6 +413,42 @@ export const integrationLogDb = {
       action: r.action, orderId: r.order_id, patientId: r.patient_id,
       status: r.status, details: r.details, error: r.error,
     }));
+  },
+};
+
+// ── Spruce Messages ───────────────────────────────────────────────────────────
+
+export const spruceMessageDb = {
+  async create(message: SpruceMessage): Promise<SpruceMessage> {
+    if (!isDbAvailable()) return message;
+    await sql`
+      INSERT INTO spruce_messages (id, order_id, patient_id, template_key, phone_number,
+        message_text, status, scheduled_for, sent_at, created_at)
+      VALUES (${message.id}, ${message.orderId || null}, ${message.patientId}, ${message.templateKey},
+        ${message.phoneNumber}, ${message.messageText}, ${message.status},
+        ${message.scheduledFor ?? null}, ${message.sentAt ?? null}, ${message.createdAt})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return message;
+  },
+
+  async update(id: string, data: Partial<SpruceMessage>): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE spruce_messages SET
+        status = COALESCE(${data.status ?? null}, status),
+        sent_at = COALESCE(${data.sentAt ?? null}, sent_at),
+        scheduled_for = COALESCE(${data.scheduledFor ?? null}, scheduled_for)
+      WHERE id = ${id}
+    `;
+  },
+
+  async getByOrder(orderId: string): Promise<SpruceMessage[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM spruce_messages WHERE order_id = ${orderId} ORDER BY created_at DESC
+    `;
+    return rows.map(rowToSpruceMessage);
   },
 };
 
@@ -365,7 +482,7 @@ export const aiConversationDb = {
     await sql`
       INSERT INTO ai_conversations (id, patient_id, order_id, role, messages, created_at, updated_at)
       VALUES (${data.id}, ${data.patientId ?? null}, ${data.orderId ?? null},
-        ${data.role}, ${JSON.stringify(data.messages)}, ${now}, ${now})
+        ${data.role}, ${JSON.stringify(data.messages)}::jsonb, ${now}, ${now})
     `;
     return data;
   },
@@ -417,7 +534,28 @@ function rowToOrder(r: any): Order {
     submittedAt: r.submitted_at ?? undefined, approvedAt: r.approved_at ?? undefined,
     providerNotes: r.provider_notes ?? undefined,
     rejectionReason: r.rejection_reason ?? undefined,
+    identityStatus: r.identity_status ?? undefined,
+    identityReason: r.identity_reason ?? undefined,
+    identityReviewedAt: r.identity_reviewed_at ?? undefined,
+    identityReviewedBy: r.identity_reviewed_by ?? undefined,
+    identityAiResult: r.identity_ai_result ?? undefined,
+    identityUploadToken: r.identity_upload_token ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+
+function rowToUpload(r: any): Upload {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    type: r.type,
+    filename: r.filename,
+    fileSize: r.file_size,
+    mimeType: r.mime_type,
+    base64Data: r.base64_data ?? "",
+    uploadedAt: r.uploaded_at,
+    status: r.status,
+    verificationNotes: r.verification_notes ?? undefined,
   };
 }
 
@@ -432,6 +570,19 @@ function rowToPayment(r: any): Payment {
   };
 }
 
+function rowToConsent(r: any): ConsentRecord {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    consentText: r.consent_text,
+    acknowledgments: r.acknowledgments ?? {},
+    signedName: r.signed_name,
+    signedAt: r.signed_at,
+    ipAddress: r.ip_address ?? undefined,
+    userAgent: r.user_agent ?? undefined,
+  };
+}
+
 function rowToReview(r: any): ProviderReview {
   return {
     id: r.id, orderId: r.order_id, patientId: r.patient_id, status: r.status,
@@ -440,6 +591,8 @@ function rowToReview(r: any): ProviderReview {
     rejectionReason: r.rejection_reason ?? undefined,
     chartViewedAt: r.chart_viewed_at ?? undefined,
     chartViewedBy: r.chart_viewed_by ?? undefined,
+    identityAiResult: r.identity_ai_result ?? undefined,
+    identityReviewRequired: r.identity_review_required ?? undefined,
   };
 }
 
@@ -451,6 +604,21 @@ function rowToPharmacyOrder(r: any): PharmacyOrder {
     trackingNumber: r.tracking_number ?? undefined,
     shippedAt: r.shipped_at ?? undefined, deliveredAt: r.delivered_at ?? undefined,
     submittedAt: r.submitted_at ?? undefined, lastError: r.last_error ?? undefined,
+  };
+}
+
+function rowToSpruceMessage(r: any): SpruceMessage {
+  return {
+    id: r.id,
+    orderId: r.order_id ?? "",
+    patientId: r.patient_id,
+    templateKey: r.template_key,
+    phoneNumber: r.phone_number,
+    messageText: r.message_text,
+    status: r.status,
+    scheduledFor: r.scheduled_for ?? undefined,
+    sentAt: r.sent_at ?? undefined,
+    createdAt: r.created_at,
   };
 }
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
+import * as dbServer from "@/lib/db.server";
 import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
@@ -22,7 +24,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const order = db.orderDb.getById(orderId);
+    const order =
+      (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
+      db.orderDb.getById(orderId);
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
@@ -34,49 +38,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const review = db.providerReviewDb.getByOrder(orderId);
+    const review =
+      (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
+      db.providerReviewDb.getByOrder(orderId);
 
     if (action === "approve") {
-      db.orderDb.update(orderId, {
-        status: "sent_to_pharmacy",
+      const orderUpdate = {
+        status: "approved" as const,
         approvedAt: new Date().toISOString(),
         providerNotes: notes,
-      });
+      };
+      db.orderDb.update(orderId, orderUpdate);
+      await dbServer.orderDb.update(orderId, orderUpdate).catch(() => {});
 
       if (review) {
-        db.providerReviewDb.update(review.id, {
+        const reviewUpdate = {
           status: "approved",
           reviewedAt: new Date().toISOString(),
           reviewedBy,
           notes,
-        });
+        } as const;
+        db.providerReviewDb.update(review.id, reviewUpdate);
+        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
       } else {
-        db.providerReviewDb.create({
+        const createdReview = {
           id: generateId(),
           orderId,
           patientId: order.patientId,
-          status: "approved",
+          status: "approved" as const,
           reviewedAt: new Date().toISOString(),
           reviewedBy,
           notes,
-        });
+        };
+        db.providerReviewDb.create(createdReview);
+        await dbServer.providerReviewDb.create(createdReview).catch(() => {});
       }
 
       // Send approval SMS
       try {
-        spruce.sendMessage(order.patientId, "approved", { orderId });
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          await spruceServer.sendMessage(patient, "approved", { orderId });
+        } else {
+          spruce.sendMessage(order.patientId, "approved", { orderId });
+        }
       } catch { /* non-fatal */ }
 
-      db.integrationLogDb.create({
+      const log = {
         id: generateId(),
         timestamp: new Date().toISOString(),
-        integrationName: "system",
+        integrationName: "system" as const,
         action: "Provider approved order",
         orderId,
         patientId: order.patientId,
-        status: "success",
+        status: "success" as const,
         details: { reviewedBy, notes },
-      });
+      };
+      db.integrationLogDb.create(log);
+      await dbServer.integrationLogDb.create(log).catch(() => {});
 
     } else if (action === "reject") {
       if (!rejectionReason) {
@@ -86,52 +105,67 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      db.orderDb.update(orderId, {
-        status: "rejected",
+      const orderUpdate = {
+        status: "rejected" as const,
         rejectionReason,
         providerNotes: notes,
-      });
+      };
+      db.orderDb.update(orderId, orderUpdate);
+      await dbServer.orderDb.update(orderId, orderUpdate).catch(() => {});
 
       if (review) {
-        db.providerReviewDb.update(review.id, {
-          status: "rejected",
+        const reviewUpdate = {
+          status: "rejected" as const,
           reviewedAt: new Date().toISOString(),
           reviewedBy,
           rejectionReason,
           notes,
-        });
+        };
+        db.providerReviewDb.update(review.id, reviewUpdate);
+        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
       }
 
       // Send rejection SMS
       try {
-        spruce.sendMessage(order.patientId, "rejected", { orderId });
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          await spruceServer.sendMessage(patient, "rejected", { orderId });
+        } else {
+          spruce.sendMessage(order.patientId, "rejected", { orderId });
+        }
       } catch { /* non-fatal */ }
 
-      db.integrationLogDb.create({
+      const log = {
         id: generateId(),
         timestamp: new Date().toISOString(),
-        integrationName: "system",
+        integrationName: "system" as const,
         action: "Provider rejected order",
         orderId,
         patientId: order.patientId,
-        status: "success",
+        status: "success" as const,
         details: { reviewedBy, rejectionReason, notes },
-      });
+      };
+      db.integrationLogDb.create(log);
+      await dbServer.integrationLogDb.create(log).catch(() => {});
 
     } else {
       // needs_more_info
-      db.orderDb.update(orderId, {
-        status: "pending_review",
+      const orderUpdate = {
+        status: "pending_review" as const,
         providerNotes: notes,
-      });
+      };
+      db.orderDb.update(orderId, orderUpdate);
+      await dbServer.orderDb.update(orderId, orderUpdate).catch(() => {});
 
       if (review) {
-        db.providerReviewDb.update(review.id, {
-          status: "needs_more_info",
+        const reviewUpdate = {
+          status: "needs_more_info" as const,
           reviewedAt: new Date().toISOString(),
           reviewedBy,
           notes,
-        });
+        };
+        db.providerReviewDb.update(review.id, reviewUpdate);
+        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
       }
     }
 

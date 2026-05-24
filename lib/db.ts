@@ -104,6 +104,10 @@ export const orderDb = {
     const orders = orderDb.getAll();
     return orders.find((o) => o.id === id) || null;
   },
+  getByIdentityUploadToken: (token: string): Types.Order | null => {
+    const orders = orderDb.getAll();
+    return orders.find((o) => o.identityUploadToken === token) || null;
+  },
   getByPatient: (patientId: string): Types.Order[] => {
     return orderDb.getAll().filter((o) => o.patientId === patientId);
   },
