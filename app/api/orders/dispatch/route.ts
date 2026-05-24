@@ -32,12 +32,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { patient: patientData ?? null, product: productData ?? null });
+    const patient = patientData ?? await dbServer.patientDb.getById(order.patientId).catch(() => null);
+    const product = productData ?? await dbServer.productDb.getById(order.productId).catch(() => null);
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { patient, product });
     await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
     const update = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
     db.orderDb.update(orderId, update);
     await dbServer.orderDb.update(orderId, update).catch(() => {});
-    const patient = patientData ?? await dbServer.patientDb.getById(order.patientId).catch(() => null);
     if (patient) {
       await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId }).catch(() => {});
     }

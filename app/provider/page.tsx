@@ -49,6 +49,9 @@ function ProviderDashboardContent() {
   useEffect(() => { void reload(); }, []);
 
   const pendingReview = orders.filter((o) => o.status === "pending_review");
+  const bulkApprovalTargets = orders.filter(
+    (o) => o.status === "pending_review" || (o.status === "approved" && o.pharmacyStatus === "draft")
+  );
   const approved = orders.filter((o) => o.status === "approved" || o.status === "sent_to_pharmacy");
   const fulfilled = orders.filter((o) => o.status === "fulfilled" || o.status === "delivered");
 
@@ -56,7 +59,7 @@ function ProviderDashboardContent() {
     setApprovingAll(true);
     setError("");
     try {
-      for (const order of pendingReview) {
+      for (const order of bulkApprovalTargets) {
         const patient = patients[order.patientId];
 
         if (!getIdentityGate(order).canDispatch) {
@@ -75,19 +78,21 @@ function ProviderDashboardContent() {
           }
         }
 
-        const reviewRes = await fetch("/api/provider/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: order.id,
-            action: "approve",
-            notes: "Bulk approved by provider",
-            reviewedBy: "Dr. Provider",
-          }),
-        });
-        if (!reviewRes.ok) {
-          const message = await reviewRes.text();
-          throw new Error(message || `Provider approval failed for order ${order.id.slice(-6)}`);
+        if (order.status === "pending_review") {
+          const reviewRes = await fetch("/api/provider/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: order.id,
+              action: "approve",
+              notes: "Bulk approved by provider",
+              reviewedBy: "Dr. Provider",
+            }),
+          });
+          if (!reviewRes.ok) {
+            const message = await reviewRes.text();
+            throw new Error(message || `Provider approval failed for order ${order.id.slice(-6)}`);
+          }
         }
 
         const dispatchRes = await fetch("/api/orders/dispatch", {
@@ -158,9 +163,9 @@ function ProviderDashboardContent() {
         {/* Pending review section */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Orders Requiring Review</h2>
-          {pendingReview.length > 0 && (
+          {bulkApprovalTargets.length > 0 && (
             <Button onClick={handleApproveAll} disabled={approvingAll} size="sm">
-              {approvingAll ? "Approving..." : `Approve All (${pendingReview.length})`}
+              {approvingAll ? "Approving..." : `Approve All (${bulkApprovalTargets.length})`}
             </Button>
           )}
         </div>
