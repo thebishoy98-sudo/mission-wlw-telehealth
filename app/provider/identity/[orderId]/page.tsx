@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle, ChevronLeft, FileImage, ShieldCheck, Video } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, FileImage, Send, ShieldCheck, Video } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
@@ -25,8 +25,9 @@ function IdentityReviewContent() {
   const [data, setData] = useState<IdentityReviewState | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
-  const [actioning, setActioning] = useState<"approve" | "deny" | "">("");
+  const [actioning, setActioning] = useState<"approve" | "deny" | "resend" | "">("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -53,6 +54,7 @@ function IdentityReviewContent() {
   const submitAction = async (action: "approve" | "deny") => {
     setActioning(action);
     setError("");
+    setNotice("");
     try {
       const response = await fetch("/api/identity/review", {
         method: "POST",
@@ -65,6 +67,27 @@ function IdentityReviewContent() {
         }),
       });
       if (!response.ok) throw new Error((await response.json()).error ?? "Identity review failed.");
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setActioning("");
+    }
+  };
+
+  const resendVerificationText = async () => {
+    setActioning("resend");
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/identity/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: params.orderId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Could not resend verification text.");
+      setNotice(`Verification text resent to ${payload.phone}.`);
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -106,6 +129,9 @@ function IdentityReviewContent() {
 
         {error && (
           <div className="mb-5 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        )}
+        {notice && (
+          <div className="mb-5 rounded-lg border border-green-100 bg-green-50 p-4 text-sm text-green-700">{notice}</div>
         )}
 
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -211,6 +237,13 @@ function IdentityReviewContent() {
             </Card>
 
             <div className="space-y-3">
+              {data.order.identityStatus !== "verified" && data.order.identityStatus !== "manual_approved" && (
+                <Button fullWidth variant="outline" onClick={resendVerificationText} disabled={!!actioning}>
+                  {actioning === "resend" ? "Sending..." : (
+                    <span className="inline-flex items-center gap-2"><Send className="h-4 w-4" /> Resend Verification Text</span>
+                  )}
+                </Button>
+              )}
               <Button fullWidth onClick={() => submitAction("approve")} disabled={!!actioning}>
                 {actioning === "approve" ? "Approving..." : (
                   <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Approve Identity</span>
