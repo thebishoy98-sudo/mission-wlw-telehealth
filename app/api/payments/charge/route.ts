@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       : null;
     if (productData) {
       if (!persistedProduct) {
-        await dbServer.productDb.upsert(productData);
+        await dbServer.productDb.upsert(productData).catch(() => {});
         persistedProduct =
           (await dbServer.productDb.getBySlug(productData.slug).catch(() => null)) ??
           (await dbServer.productDb.getById(productData.id).catch(() => null));
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       : null;
     if (patientData) {
       if (!persistedPatient) {
-        persistedPatient = await dbServer.patientDb.create(patientData);
+        persistedPatient = await dbServer.patientDb.create(patientData).catch(() => null);
       } else {
         await dbServer.patientDb.update(persistedPatient.id, {
           firstName: patientData.firstName,
@@ -88,10 +88,11 @@ export async function POST(req: NextRequest) {
         }).catch(() => persistedPatient);
       }
     }
-    const normalizedOrderData = orderData && persistedPatient
+    const effectivePatient = persistedPatient ?? patientData;
+    const normalizedOrderData = orderData && effectivePatient
       ? {
           ...orderData,
-          patientId: persistedPatient.id,
+          patientId: effectivePatient.id,
           productId: persistedProduct?.id ?? orderData.productId,
           doseId: persistedDose?.id ?? orderData.doseId,
         }
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
     if (!order && normalizedOrderData) {
-      await dbServer.orderDb.create(normalizedOrderData);
+      await dbServer.orderDb.create(normalizedOrderData).catch(() => normalizedOrderData);
       order = normalizedOrderData;
     }
 
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     if (!patient && patientData) {
       try {
-        await dbServer.patientDb.create(patientData);
+        await dbServer.patientDb.create(patientData).catch(() => patientData);
       } catch { /* may already exist */ }
       patient = patientData;
     }
