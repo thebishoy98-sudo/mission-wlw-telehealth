@@ -25,7 +25,9 @@ import crypto from "crypto";
 
 function verifyLifeFileSignature(body: string, signature: string, secret: string): boolean {
   const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
 export async function POST(req: NextRequest) {
@@ -33,8 +35,13 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-lifefile-signature") ?? "";
   const secret = process.env.LIFEFILE_WEBHOOK_SECRET ?? "";
 
-  // Verify signature in production
-  if (secret && signature && !verifyLifeFileSignature(body, signature, secret)) {
+  if (!secret && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "LIFEFILE_WEBHOOK_SECRET is not configured" }, { status: 500 });
+  }
+  if (secret && !signature) {
+    return NextResponse.json({ error: "Missing signature" }, { status: 401 });
+  }
+  if (secret && !verifyLifeFileSignature(body, signature, secret)) {
     console.warn("Life File webhook: invalid signature");
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }

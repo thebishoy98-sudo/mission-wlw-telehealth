@@ -144,8 +144,8 @@ export default function IntegrationsPage() {
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">How the Platform Connects</h1>
           <p className="mt-2 text-gray-500 max-w-2xl">
-            This platform doesn't work in isolation — it talks to several specialised tools behind the scenes.
-            Here's what each one does and how they fit together.
+            This platform doesn&apos;t work in isolation — it talks to several specialised tools behind the scenes.
+            Here&apos;s what each one does and how they fit together.
           </p>
         </div>
 
@@ -169,7 +169,7 @@ export default function IntegrationsPage() {
                       {cfg.smsTemplates.map((t) => (
                         <div key={t.trigger} className="bg-orange-50 rounded-lg px-3 py-2">
                           <p className="text-xs text-orange-600 font-medium mb-0.5">{t.trigger}</p>
-                          <p className="text-sm text-gray-700 italic">"{t.message}"</p>
+                          <p className="text-sm text-gray-700 italic">&quot;{t.message}&quot;</p>
                         </div>
                       ))}
                     </div>

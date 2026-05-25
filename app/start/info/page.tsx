@@ -67,7 +67,7 @@ export default function PatientInfo() {
       {/* Product Selection */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Choose Your Treatment</h2>
-        <p className="text-gray-500 text-sm mb-6">Select the treatment you're interested in</p>
+        <p className="text-gray-500 text-sm mb-6">Select the treatment you&apos;re interested in</p>
 
         <Select
           label="Treatment"

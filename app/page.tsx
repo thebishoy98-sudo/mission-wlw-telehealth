@@ -218,7 +218,7 @@ export default function Home() {
                 Real science.<br />Real results.
               </h2>
               <p className="text-gray-500 leading-relaxed mb-8">
-                Tirzepatide is a dual-action GLP-1/GIP receptor agonist that works with your body's natural hormones — reducing appetite, slowing digestion, and regulating blood sugar.
+                Tirzepatide is a dual-action GLP-1/GIP receptor agonist that works with your body&apos;s natural hormones — reducing appetite, slowing digestion, and regulating blood sugar.
               </p>
               <div className="grid grid-cols-2 gap-4 mb-8">
                 {[

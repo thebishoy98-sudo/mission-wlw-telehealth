@@ -22,7 +22,9 @@ import crypto from "crypto";
 
 function verifySpruceSignature(body: string, signature: string, secret: string): boolean {
   const expected = `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
 export async function POST(req: NextRequest) {
@@ -30,11 +32,22 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-spruce-signature") ?? "";
   const secret = process.env.SPRUCE_WEBHOOK_SECRET ?? "";
 
-  if (secret && signature && !verifySpruceSignature(body, signature, secret)) {
+  if (!secret && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "SPRUCE_WEBHOOK_SECRET is not configured" }, { status: 500 });
+  }
+  if (secret && !signature) {
+    return NextResponse.json({ error: "Missing signature" }, { status: 401 });
+  }
+  if (secret && !verifySpruceSignature(body, signature, secret)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  const payload = JSON.parse(body);
+  let payload: any;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const { event, messageId, patientPhone, replyText, errorCode } = payload;
 
   const messages = db.spruceDb.getAll();

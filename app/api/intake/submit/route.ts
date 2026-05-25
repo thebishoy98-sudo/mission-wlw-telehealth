@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const errors: string[] = [];
 
     try {
-      practiceq.submitIntakePacket(updatedOrder);
+      await practiceq.submitIntakePacket(updatedOrder);
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
     } catch (e) {
       errors.push(`PracticeQ: ${(e as Error).message}`);

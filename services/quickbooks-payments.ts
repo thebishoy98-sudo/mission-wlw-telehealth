@@ -115,6 +115,14 @@ export async function chargeCard(
   }
 
   // ── Real QB Payments API ───────────────────────────────────────────────────
+  if (!paymentDetails.token && process.env.QB_ALLOW_RAW_CARD_CHARGES !== "true") {
+    logPaymentEvent("QB Payments token missing", orderId, patientId, {
+      amount: amountDollars,
+      mode: "live",
+    }, "error");
+    throw new Error("QuickBooks Payments token is required in live mode. Configure Intuit client-side tokenization before taking production payments.");
+  }
+
   const accessToken = await getQBAccessToken();
   const requestId = generateId(); // idempotency key
 

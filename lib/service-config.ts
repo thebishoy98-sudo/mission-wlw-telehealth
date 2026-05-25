@@ -17,6 +17,7 @@ export const serviceConfig = {
     useMock: !(all || process.env.USE_REAL_PRACTICEQ === "true"),
     apiKey: process.env.PRACTICEQ_API_KEY ?? "",
     baseUrl: process.env.PRACTICEQ_BASE_URL ?? "https://api.practiceq.com/v2",
+    intakeEndpoint: process.env.PRACTICEQ_INTAKE_ENDPOINT ?? "",
   },
   quickbooks: {
     useMock: !(all || process.env.USE_REAL_QUICKBOOKS === "true"),

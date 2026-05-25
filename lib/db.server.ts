@@ -392,6 +392,60 @@ export const pharmacyOrderDb = {
   },
 };
 
+// ── PracticeQ Packets ────────────────────────────────────────────────────────
+
+export const practiceqPacketDb = {
+  async getById(id: string): Promise<PracticeQPacket | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM practiceq_packets WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToPracticeQPacket(rows[0]) : null;
+  },
+
+  async getByOrder(orderId: string): Promise<PracticeQPacket | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM practiceq_packets WHERE order_id = ${orderId} ORDER BY submitted_at DESC LIMIT 1
+    `;
+    return rows[0] ? rowToPracticeQPacket(rows[0]) : null;
+  },
+
+  async getAll(): Promise<PracticeQPacket[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`SELECT * FROM practiceq_packets ORDER BY submitted_at DESC LIMIT 500`;
+    return rows.map(rowToPracticeQPacket);
+  },
+
+  async create(packet: PracticeQPacket): Promise<PracticeQPacket> {
+    if (!isDbAvailable()) return packet;
+    await sql`
+      INSERT INTO practiceq_packets (id, order_id, patient_id, status, packet_data,
+        last_error, last_sync_at, submitted_at)
+      VALUES (${packet.id}, ${packet.orderId}, ${packet.patientId}, ${packet.status},
+        ${JSON.stringify(packet.packetData)}::jsonb, ${packet.lastError ?? null},
+        ${packet.lastSyncAt ?? null}, ${packet.submittedAt})
+      ON CONFLICT (id) DO UPDATE SET
+        status = EXCLUDED.status,
+        packet_data = EXCLUDED.packet_data,
+        last_error = EXCLUDED.last_error,
+        last_sync_at = EXCLUDED.last_sync_at
+    `;
+    return packet;
+  },
+
+  async update(id: string, data: Partial<PracticeQPacket>): Promise<PracticeQPacket | null> {
+    if (!isDbAvailable()) return null;
+    await sql`
+      UPDATE practiceq_packets SET
+        status = COALESCE(${data.status ?? null}, status),
+        packet_data = COALESCE(${data.packetData ? JSON.stringify(data.packetData) : null}::jsonb, packet_data),
+        last_error = COALESCE(${data.lastError ?? null}, last_error),
+        last_sync_at = COALESCE(${data.lastSyncAt ?? null}, last_sync_at)
+      WHERE id = ${id}
+    `;
+    return this.getById(id);
+  },
+};
+
 // ── Integration Logs ──────────────────────────────────────────────────────────
 
 export const integrationLogDb = {
@@ -605,6 +659,19 @@ function rowToPharmacyOrder(r: any): PharmacyOrder {
     trackingNumber: r.tracking_number ?? undefined,
     shippedAt: r.shipped_at ?? undefined, deliveredAt: r.delivered_at ?? undefined,
     submittedAt: r.submitted_at ?? undefined, lastError: r.last_error ?? undefined,
+  };
+}
+
+function rowToPracticeQPacket(r: any): PracticeQPacket {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    patientId: r.patient_id,
+    submittedAt: r.submitted_at,
+    packetData: r.packet_data,
+    status: r.status,
+    lastSyncAt: r.last_sync_at ?? undefined,
+    lastError: r.last_error ?? undefined,
   };
 }
 

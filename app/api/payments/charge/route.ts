@@ -44,6 +44,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const liveQuickBooks =
+      process.env.USE_REAL_INTEGRATIONS === "true" ||
+      process.env.USE_REAL_QUICKBOOKS === "true";
+    if (liveQuickBooks && !token && process.env.QB_ALLOW_RAW_CARD_CHARGES !== "true") {
+      return NextResponse.json(
+        { error: "Payment token is required. Configure Intuit client-side tokenization before taking live payments." },
+        { status: 400 }
+      );
+    }
+
     // 1. Load order — try server DB first, fall back to localStorage, then inline data
     let order =
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??

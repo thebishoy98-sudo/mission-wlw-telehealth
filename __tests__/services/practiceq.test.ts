@@ -50,9 +50,9 @@ describe("practiceq.submitIntakePacket", () => {
     db.orderDb.create(makeOrder());
   });
 
-  it("creates a PracticeQ packet for valid order", () => {
+  it("creates a PracticeQ packet for valid order", async () => {
     const order = db.orderDb.getById("o1")!;
-    const packet = practiceq.submitIntakePacket(order);
+    const packet = await practiceq.submitIntakePacket(order);
 
     expect(packet.orderId).toBe("o1");
     expect(packet.patientId).toBe("p1");
@@ -61,15 +61,15 @@ describe("practiceq.submitIntakePacket", () => {
     expect(packet.packetData.doseSelected).toBe("2.5mg Starter");
   });
 
-  it("saves packet to practiceqDb", () => {
+  it("saves packet to practiceqDb", async () => {
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     expect(db.practiceqDb.getByOrder("o1")).not.toBeNull();
   });
 
-  it("creates an integration log entry", () => {
+  it("creates an integration log entry", async () => {
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     const logs = db.integrationLogDb.getAll();
     const pqLog = logs.find((l) => l.integrationName === "practiceq");
     expect(pqLog).toBeDefined();
@@ -77,14 +77,14 @@ describe("practiceq.submitIntakePacket", () => {
     expect(pqLog?.orderId).toBe("o1");
   });
 
-  it("throws when patient not found", () => {
+  it("throws when patient not found", async () => {
     const badOrder = { ...makeOrder(), patientId: "nonexistent" };
-    expect(() => practiceq.submitIntakePacket(badOrder)).toThrow("Patient or product not found");
+    await expect(practiceq.submitIntakePacket(badOrder)).rejects.toThrow("Patient or product not found");
   });
 
-  it("throws when product not found", () => {
+  it("throws when product not found", async () => {
     const badOrder = { ...makeOrder(), productId: "nonexistent" };
-    expect(() => practiceq.submitIntakePacket(badOrder)).toThrow("Patient or product not found");
+    await expect(practiceq.submitIntakePacket(badOrder)).rejects.toThrow("Patient or product not found");
   });
 });
 
@@ -95,12 +95,12 @@ describe("practiceq.getPacketStatus", () => {
     expect(result.errors).toBeDefined();
   });
 
-  it("returns submitted status after packet creation", () => {
+  it("returns submitted status after packet creation", async () => {
     db.patientDb.create(makePatient());
     db.productDb.create(makeProduct());
     db.orderDb.create(makeOrder());
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     const result = practiceq.getPacketStatus("o1");
     expect(result.status).toBe("submitted");
   });

@@ -25,16 +25,27 @@ import { getIdentityGate } from "@/lib/identity";
 export async function POST(req: NextRequest) {
   // Verify API key header
   const apiKey = req.headers.get("x-practiceq-key");
+  if (!process.env.PRACTICEQ_WEBHOOK_KEY && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "PRACTICEQ_WEBHOOK_KEY is not configured" }, { status: 500 });
+  }
   if (process.env.PRACTICEQ_WEBHOOK_KEY && apiKey !== process.env.PRACTICEQ_WEBHOOK_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = await req.json();
+  let payload: any;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const { event, packetId, orderId: pqOrderRef, status, notes, rejectionReason } = payload;
 
   // Find the order by PracticeQ packet reference
+  const serverPacket =
+    (packetId ? await dbServer.practiceqPacketDb.getById(packetId).catch(() => null) : null) ??
+    (pqOrderRef ? await dbServer.practiceqPacketDb.getByOrder(pqOrderRef).catch(() => null) : null);
   const packets = db.practiceqDb.getAll();
-  const packet = packets.find((p) => p.id === packetId || p.orderId === pqOrderRef);
+  const packet = serverPacket ?? packets.find((p) => p.id === packetId || p.orderId === pqOrderRef);
   if (!packet) {
     console.warn("PracticeQ webhook: packet not found", packetId);
     return NextResponse.json({ error: "Packet not found" }, { status: 404 });
@@ -55,12 +66,14 @@ export async function POST(req: NextRequest) {
   switch (event) {
     case "intake.reviewed": {
       db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
       log("PracticeQ: provider viewed intake");
       break;
     }
 
     case "intake.approved": {
       db.practiceqDb.update(packet.id, { status: "completed" });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
       const approvalUpdate = {
         status: "sent_to_pharmacy" as const,
         practiceQStatus: "completed" as const,
@@ -93,6 +106,7 @@ export async function POST(req: NextRequest) {
 
     case "intake.rejected": {
       db.practiceqDb.update(packet.id, { status: "error" });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "error", lastError: rejectionReason, lastSyncAt: new Date().toISOString() }).catch(() => null);
       db.orderDb.update(orderId, { status: "rejected", practiceQStatus: "error", rejectionReason });
       await dbServer.orderDb.update(orderId, { status: "rejected", rejectionReason }).catch(() => {});
 
