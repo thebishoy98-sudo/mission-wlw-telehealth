@@ -40,6 +40,9 @@ export const serviceConfig = {
     prescriberLastName: process.env.LIFEFILE_PRESCRIBER_LAST_NAME ?? "",
     prescriberFirstName: process.env.LIFEFILE_PRESCRIBER_FIRST_NAME ?? "",
     prescriberPhone: process.env.LIFEFILE_PRESCRIBER_PHONE ?? "",
+    prescriberEmail: process.env.LIFEFILE_PRESCRIBER_EMAIL ?? "",
+    prescriberLicenseState: process.env.LIFEFILE_PRESCRIBER_LICENSE_STATE ?? "",
+    prescriberLicenseNumber: process.env.LIFEFILE_PRESCRIBER_LICENSE_NUMBER ?? "",
     shippingServiceId: parseInt(process.env.LIFEFILE_SHIPPING_SERVICE_ID ?? "999", 10),
   },
   spruce: {

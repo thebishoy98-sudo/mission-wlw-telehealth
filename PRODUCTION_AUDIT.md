@@ -227,6 +227,7 @@ See `PROD_ENV_REQUIREMENTS.md` for the complete value-by-value list. The short l
 - Intuit client app key for payment tokenization.
 - QuickBooks service item IDs and a non-PHI accounting design.
 - Life File webhook secret and complete prescriber env.
+- Life File/1stChoiceRx order status return path. The provided OpenAPI PDF does not define inbound webhooks or a `GET /order` polling endpoint; it only defines order create/update calls from us to Life File.
 - Spruce webhook secret if inbound Spruce webhooks are used.
 
 ## Final Recommendation

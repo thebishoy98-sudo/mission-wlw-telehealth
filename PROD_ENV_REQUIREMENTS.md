@@ -81,13 +81,15 @@ Webhook URL configured in PracticeQ:
 | `LIFEFILE_BASE_URL` | Life File API host | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Verify production vs sandbox host. |
 | `LIFEFILE_VENDOR_ID`, `LIFEFILE_LOCATION_ID`, `LIFEFILE_API_NETWORK_ID` | Required Life File headers | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Required. |
 | `LIFEFILE_PRACTICE_ID` | Practice reference | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Required. |
-| `LIFEFILE_PRESCRIBER_NPI`, `LIFEFILE_PRESCRIBER_FIRST_NAME`, `LIFEFILE_PRESCRIBER_LAST_NAME`, `LIFEFILE_PRESCRIBER_PHONE` | Prescriber block | `lib/service-config.ts`, `services/lifefile.ts` | NPI/name present; phone missing in Vercel env list | Add real prescriber phone and verify all prescriber data. Code has unsafe fallback placeholders. |
-| `LIFEFILE_PRESCRIBER_LICENSE_NUMBER`, `LIFEFILE_PRESCRIBER_LICENSE_STATE` | License metadata | `lib/service-config.ts` examples/env | Present in Production, Development | Present but not used in order payload today. |
+| `LIFEFILE_PRESCRIBER_NPI`, `LIFEFILE_PRESCRIBER_FIRST_NAME`, `LIFEFILE_PRESCRIBER_LAST_NAME`, `LIFEFILE_PRESCRIBER_PHONE`, `LIFEFILE_PRESCRIBER_EMAIL` | Prescriber block | `lib/service-config.ts`, `services/lifefile.ts` | NPI/name/email present; phone missing in Vercel env list | Add real prescriber phone and verify all prescriber data. Code has unsafe fallback placeholders if phone is missing. |
+| `LIFEFILE_PRESCRIBER_LICENSE_NUMBER`, `LIFEFILE_PRESCRIBER_LICENSE_STATE` | License metadata | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Sent in the Life File prescriber payload. |
 | `LIFEFILE_SHIPPING_SERVICE_ID` | Shipping service | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Required. |
 | `LIFEFILE_WEBHOOK_SECRET` | Inbound webhook signature | `app/api/webhooks/lifefile/route.ts` | Missing in Vercel env list | Required before accepting real webhooks. Production webhook route now fails closed if missing. |
 
 Webhook URL:
 - `https://<production-domain>/api/webhooks/lifefile`
+
+The provided Life File OpenAPI PDF does not document inbound webhooks or a polling/read endpoint for order status. It only documents `POST /order`, `PUT /order/{orderId}/status`, and `PUT /order/{orderId}/shipping`. Status callbacks require separate Life File/1stChoiceRx confirmation.
 
 ## Spruce
 

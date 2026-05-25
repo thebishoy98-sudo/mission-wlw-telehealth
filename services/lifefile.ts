@@ -248,9 +248,12 @@ export const createPharmacyOrder = async (
       },
       prescriber: {
         npi: c.prescriberNpi || "1234567890",
+        licenseState: c.prescriberLicenseState || undefined,
+        licenseNumber: c.prescriberLicenseNumber || undefined,
         lastName: c.prescriberLastName || "Provider",
         firstName: c.prescriberFirstName || "Sample",
         phone: c.prescriberPhone || "(555) 000-0001",
+        email: c.prescriberEmail || undefined,
       },
       practice: {
         id: parseInt(c.practiceId, 10),
