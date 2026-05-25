@@ -87,10 +87,12 @@ Webhook URL configured in PracticeQ:
 | `LIFEFILE_PRESCRIBER_NPI`, `LIFEFILE_PRESCRIBER_FIRST_NAME`, `LIFEFILE_PRESCRIBER_LAST_NAME`, `LIFEFILE_PRESCRIBER_PHONE`, `LIFEFILE_PRESCRIBER_EMAIL` | Prescriber block | `lib/service-config.ts`, `services/lifefile.ts` | NPI/name/email present; phone missing in Vercel env list | Add real prescriber phone and verify all prescriber data. Code has unsafe fallback placeholders if phone is missing. |
 | `LIFEFILE_PRESCRIBER_LICENSE_NUMBER`, `LIFEFILE_PRESCRIBER_LICENSE_STATE` | License metadata | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Sent in the Life File prescriber payload. |
 | `LIFEFILE_SHIPPING_SERVICE_ID` | Shipping service | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Required. |
-| `LIFEFILE_WEBHOOK_SECRET` | Inbound webhook signature | `app/api/webhooks/lifefile/route.ts` | Missing in Vercel env list | Required before accepting real webhooks. Production webhook route now fails closed if missing. |
+| `LIFEFILE_WEBHOOK_SECRET` | Inbound webhook signature | `app/api/webhooks/lifefile/route.ts`, `app/api/webhooks/lifefile/order/[orderId]/status/route.ts` | Required/configured for production webhook rollout | Required before accepting real webhooks. Production webhook routes fail closed if missing. Share only the endpoint with the pharmacy; keep this secret private. |
 
 Webhook URL:
 - `https://<production-domain>/api/webhooks/lifefile`
+- Raw Life File-style order status URL:
+  `https://<production-domain>/api/webhooks/lifefile/order/{orderId}/status`
 
 The provided Life File OpenAPI PDF does not document inbound webhooks or a polling/read endpoint for order status. It only documents `POST /order`, `PUT /order/{orderId}/status`, and `PUT /order/{orderId}/shipping`. Status callbacks require separate Life File/1stChoiceRx confirmation.
 
@@ -119,7 +121,7 @@ Webhook URL:
 
 | Value | Required for | Used in | Current status | Production note |
 | --- | --- | --- | --- | --- |
-| `CRON_SECRET` | Protects `/api/cron/identity-reminders` | `app/api/cron/identity-reminders/route.ts`, `vercel.json` | Missing in current Vercel env list | BLOCKER. Production cron route now fails closed if this is missing. |
+| `CRON_SECRET` | Protects `/api/cron/identity-reminders` | `app/api/cron/identity-reminders/route.ts`, `vercel.json` | Required/configured for production rollout | Production cron route fails closed if this is missing. |
 
 Cron URL:
 - `GET/POST https://<production-domain>/api/cron/identity-reminders`
@@ -127,6 +129,14 @@ Cron URL:
 ## Storage Buckets
 
 No object storage bucket is implemented. Identity uploads are stored as base64 strings in browser intake state and/or the `uploads.base64_data` database column.
+
+## Current Button/Flow Guardrails
+
+- Public product, questionnaire, and status pages now load through server API routes.
+- Admin product buttons now call authenticated server routes and surface database errors.
+- Checkout payment is visibly disabled unless Intuit client-side payment tokenization is configured.
+- Browser-only CMS editing is disabled until content is persisted server-side and rendered by the public site.
+- Refill and dose-increase requests are disabled until a real refill/payment/pharmacy workflow is implemented.
 
 Production requirement:
 - Add a BAA-covered private object storage bucket for identity images/videos.

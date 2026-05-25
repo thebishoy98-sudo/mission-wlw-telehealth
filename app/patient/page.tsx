@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Navbar } from "@/components/layout/Navbar";
@@ -12,16 +11,7 @@ import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime, formatCurrency } from "@/lib/utils";
-import { Package, RefreshCcw, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
-
-const REORDERABLE_STATUSES: Types.OrderStatus[] = [
-  "approved",
-  "sent_to_pharmacy",
-  "processing",
-  "fulfilled",
-  "shipped",
-  "delivered",
-];
+import { Package, Clock, CheckCircle2 } from "lucide-react";
 
 function StatusIcon({ status }: { status: Types.OrderStatus }) {
   if (status === "delivered" || status === "fulfilled") {
@@ -32,7 +22,6 @@ function StatusIcon({ status }: { status: Types.OrderStatus }) {
 
 function PatientPortalContent() {
   const { user } = useAuth();
-  const router = useRouter();
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [products, setProducts] = useState<Record<string, Types.Product>>({});
 
@@ -63,10 +52,6 @@ function PatientPortalContent() {
       o.status !== "draft"
   );
 
-  const mostRecentReorderable = activeOrders.find((o) =>
-    REORDERABLE_STATUSES.includes(o.status)
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="patient" />
@@ -81,50 +66,6 @@ function PatientPortalContent() {
             Manage your prescriptions and refills below.
           </p>
         </div>
-
-        {/* Quick actions if they have an eligible order */}
-        {mostRecentReorderable && (
-          <Card className="mb-8 border-teal-200 bg-teal-50/60">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                  <Package size={18} className="text-teal-700" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm">
-                    Ready to refill?
-                  </p>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    {products[mostRecentReorderable.productId]?.name ??
-                      "Your current prescription"}{" "}
-                    &mdash;{" "}
-                    {products[mostRecentReorderable.productId]?.doses.find(
-                      (d) => d.id === mostRecentReorderable.doseId
-                    )?.label ?? "current dose"}
-                  </p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <Link
-                    href={`/patient/reorder?orderId=${mostRecentReorderable.id}&action=reorder`}
-                  >
-                    <Button size="sm" variant="outline">
-                      <RefreshCcw size={14} className="mr-1.5" />
-                      Reorder
-                    </Button>
-                  </Link>
-                  <Link
-                    href={`/patient/reorder?orderId=${mostRecentReorderable.id}&action=increase_dose`}
-                  >
-                    <Button size="sm">
-                      <TrendingUp size={14} className="mr-1.5" />
-                      Increase Dose
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Order history */}
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -146,8 +87,6 @@ function PatientPortalContent() {
             {activeOrders.map((order) => {
               const product = products[order.productId];
               const dose = product?.doses.find((d) => d.id === order.doseId);
-              const canReorder = REORDERABLE_STATUSES.includes(order.status);
-
               return (
                 <Card key={order.id}>
                   <CardContent className="p-5">
@@ -174,27 +113,6 @@ function PatientPortalContent() {
                           </div>
                         </div>
                       </div>
-
-                      {canReorder && (
-                        <div className="flex gap-2 flex-shrink-0">
-                          <Link
-                            href={`/patient/reorder?orderId=${order.id}&action=reorder`}
-                          >
-                            <Button size="sm" variant="outline">
-                              <RefreshCcw size={13} className="mr-1" />
-                              Reorder
-                            </Button>
-                          </Link>
-                          <Link
-                            href={`/patient/reorder?orderId=${order.id}&action=increase_dose`}
-                          >
-                            <Button size="sm">
-                              <TrendingUp size={13} className="mr-1" />
-                              Increase Dose
-                            </Button>
-                          </Link>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
                 </Card>

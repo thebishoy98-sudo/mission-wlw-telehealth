@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { ChevronLeft } from "lucide-react";
@@ -20,8 +19,15 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (productId) {
-      const found = db.productDb.getById(productId);
-      setProduct(found);
+      fetch("/api/products", { cache: "no-store" })
+        .then((response) => response.json())
+        .then((payload) => {
+          const found = (payload.products ?? []).find((item: Types.Product) =>
+            item.id === productId || item.slug === productId
+          );
+          setProduct(found ?? null);
+        })
+        .catch(() => setProduct(null));
     }
   }, [productId]);
 

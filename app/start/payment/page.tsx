@@ -27,19 +27,31 @@ export default function Payment() {
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const paymentsReady =
+    !!process.env.NEXT_PUBLIC_QB_PAYMENTS_APP_KEY ||
+    process.env.NEXT_PUBLIC_ALLOW_RAW_PAYMENT_FORM === "true";
 
   useEffect(() => {
     if (intakeState.productId) {
-      const p = db.productDb.getById(intakeState.productId);
-      setProduct(p);
-      if (intakeState.doseId && p) {
-        setDose(p.doses.find((d) => d.id === intakeState.doseId) || null);
-      }
+      fetch("/api/products", { cache: "no-store" })
+        .then((response) => response.json())
+        .then((payload) => {
+          const p = (payload.products ?? []).find((item: Types.Product) => item.id === intakeState.productId) ?? null;
+          setProduct(p);
+          if (intakeState.doseId && p) {
+            setDose(p.doses.find((d) => d.id === intakeState.doseId) || null);
+          }
+        })
+        .catch(() => setProduct(null));
     }
-  }, []);
+  }, [intakeState.productId, intakeState.doseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!paymentsReady) {
+      setPaymentError("Online payments are not configured. Please contact support to complete your order.");
+      return;
+    }
     const digits = cardNumber.replace(/\s/g, "");
     if (digits.length < 15 || !cardExpiry || cardCvc.length < 3) return;
     setPaymentError("");
@@ -256,6 +268,12 @@ export default function Payment() {
           </div>
         </div>
 
+        {!paymentsReady && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Online payments are not configured for this environment. We need the Intuit client payment app key before this checkout can take live card payments.
+          </div>
+        )}
+
         <div className="space-y-4">
           <Input
             label="Cardholder Name"
@@ -273,6 +291,7 @@ export default function Payment() {
                 type="text"
                 placeholder="4242 4242 4242 4242"
                 maxLength={19}
+                disabled={!paymentsReady}
                 value={cardNumber}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "");
@@ -291,6 +310,7 @@ export default function Payment() {
                 type="text"
                 placeholder="12/26"
                 maxLength={5}
+                disabled={!paymentsReady}
                 value={cardExpiry}
                 onChange={(e) => {
                   let v = e.target.value.replace(/\D/g, "");
@@ -306,6 +326,7 @@ export default function Payment() {
                 type="password"
                 placeholder="•••"
                 maxLength={4}
+                disabled={!paymentsReady}
                 value={cardCvc}
                 onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
@@ -339,7 +360,7 @@ export default function Payment() {
         <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/uploads")} disabled={processing}>
           Back
         </Button>
-        <Button fullWidth type="submit" disabled={processing || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
+        <Button fullWidth type="submit" disabled={!paymentsReady || processing || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
           {processing ? "Processing..." : `Pay ${formatCurrency(total)}`}
         </Button>
       </div>

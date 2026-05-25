@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -17,7 +16,10 @@ export default function Home() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
-    setProducts(db.productDb.getActive());
+    fetch("/api/products", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => setProducts(payload.products ?? []))
+      .catch(() => setProducts([]));
   }, []);
 
   const steps = [
@@ -149,7 +151,7 @@ export default function Home() {
               { icon: Users, label: "Board-Certified Providers", sub: "Expert medical care" },
               { icon: Shield, label: "FDA-Regulated Pharmacy", sub: "Safe, verified medications" },
               { icon: Truck, label: "Free Overnight Shipping", sub: "Cold-packed to your door" },
-              { icon: CheckCircle, label: "HIPAA Compliant", sub: "Your data stays private" },
+              { icon: CheckCircle, label: "Privacy-first care", sub: "Safeguards for sensitive data" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center flex-shrink-0">

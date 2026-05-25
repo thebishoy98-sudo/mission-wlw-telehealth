@@ -47,8 +47,42 @@ export const productDb = {
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
         ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}::jsonb, ${p.eligibilityNote},
         ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
-      ON CONFLICT (slug) DO NOTHING
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        long_description = EXCLUDED.long_description,
+        starting_price = EXCLUDED.starting_price,
+        image = EXCLUDED.image,
+        doses = EXCLUDED.doses,
+        eligibility_note = EXCLUDED.eligibility_note,
+        is_active = EXCLUDED.is_active,
+        faqs = EXCLUDED.faqs
     `;
+  },
+
+  async update(id: string, data: Partial<Product>): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    await sql`
+      UPDATE products SET
+        name = COALESCE(${data.name ?? null}, name),
+        slug = COALESCE(${data.slug ?? null}, slug),
+        description = COALESCE(${data.description ?? null}, description),
+        long_description = COALESCE(${data.longDescription ?? null}, long_description),
+        starting_price = COALESCE(${data.startingPrice ?? null}, starting_price),
+        image = COALESCE(${data.image ?? null}, image),
+        doses = COALESCE(${data.doses ? JSON.stringify(data.doses) : null}::jsonb, doses),
+        eligibility_note = COALESCE(${data.eligibilityNote ?? null}, eligibility_note),
+        is_active = COALESCE(${data.isActive ?? null}, is_active),
+        faqs = COALESCE(${data.faqs ? JSON.stringify(data.faqs) : null}::jsonb, faqs)
+      WHERE id = ${id}
+    `;
+    return this.getById(id);
+  },
+
+  async archive(id: string): Promise<boolean> {
+    if (!isDbAvailable()) return false;
+    const result = await sql`UPDATE products SET is_active = false WHERE id = ${id}`;
+    return (result.rowCount ?? 0) > 0;
   },
 };
 
@@ -520,6 +554,27 @@ export const messageTemplateDb = {
       subject: rows[0].subject, body: rows[0].body,
       variables: rows[0].variables, createdAt: rows[0].created_at,
     } : null;
+  },
+};
+
+// ── CMS Content ───────────────────────────────────────────────────────────────
+
+export const cmsDb = {
+  async getContent(): Promise<any | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT value FROM cms_content WHERE key = 'site' LIMIT 1`;
+    return rows[0]?.value ?? null;
+  },
+
+  async updateContent(value: any): Promise<any> {
+    if (!isDbAvailable()) return value;
+    await sql`
+      INSERT INTO cms_content (key, value, updated_at)
+      VALUES ('site', ${JSON.stringify(value)}::jsonb, NOW())
+      ON CONFLICT (key)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `;
+    return value;
   },
 };
 

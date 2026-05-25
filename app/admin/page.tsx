@@ -206,11 +206,6 @@ function AdminDashboardContent() {
                 Manage Products
               </Button>
             </Link>
-            <Link href="/admin/cms">
-              <Button fullWidth variant="outline">
-                Edit Content
-              </Button>
-            </Link>
             <Link href="/admin/integrations">
               <Button fullWidth variant="outline">
                 Questionnaire Source

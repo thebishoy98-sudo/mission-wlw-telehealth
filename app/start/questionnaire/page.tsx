@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { AlertTriangle, XCircle } from "lucide-react";
@@ -15,10 +14,16 @@ export default function Questionnaire() {
   const [questions, setQuestions] = useState<Types.Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [ineligibleQuestion, setIneligibleQuestion] = useState<Types.Question | null>(null);
+  const [missingRequired, setMissingRequired] = useState<string[]>([]);
 
   useEffect(() => {
-    const all = db.questionDb.getAll();
-    setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
+    fetch("/api/questions", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        const all = (payload.questions ?? []) as Types.Question[];
+        setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
+      })
+      .catch(() => setQuestions([]));
     setAnswers(getIntakeState().questionnaireAnswers || {});
   }, []);
 
@@ -26,10 +31,21 @@ export default function Questionnaire() {
     setAnswers((prev) => ({ ...prev, [id]: val }));
     // Clear ineligibility if answer changes
     setIneligibleQuestion(null);
+    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const missing = questions
+      .filter((question) => question.required && !answers[question.id]?.trim())
+      .map((question) => question.id);
+
+    if (missing.length) {
+      setMissingRequired(missing);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     // Check eligibility: find any disqualifying answer
     const disqualifier = questions.find(
@@ -103,6 +119,11 @@ export default function Questionnaire() {
         <p className="text-gray-500 text-sm mb-8">
           Please answer honestly - this helps our providers determine if treatment is right for you.
         </p>
+        {missingRequired.length > 0 && (
+          <div className="mb-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Please answer every required question before continuing.
+          </div>
+        )}
 
         {questions.length === 0 ? (
           <div className="text-center py-10">
@@ -156,6 +177,9 @@ export default function Questionnaire() {
                     />
                     <span className="text-sm text-gray-700">Yes</span>
                   </label>
+                )}
+                {missingRequired.includes(question.id) && (
+                  <p className="mt-2 text-sm text-red-500">This question is required.</p>
                 )}
               </div>
             ))}

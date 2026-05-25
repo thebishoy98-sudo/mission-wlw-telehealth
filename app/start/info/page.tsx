@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 
@@ -18,17 +17,20 @@ export default function PatientInfo() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setProducts(db.productDb.getActive());
+    fetch("/api/products", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => setProducts(payload.products ?? []))
+      .catch(() => setProducts([]));
   }, []);
 
   useEffect(() => {
     if (formData.productId) {
-      const product = db.productDb.getById(formData.productId);
+      const product = products.find((item) => item.id === formData.productId);
       if (product && product.doses.length > 0 && !selectedDose) {
         setSelectedDose(product.doses[0].id);
       }
     }
-  }, [formData.productId]);
+  }, [formData.productId, products, selectedDose]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -60,7 +62,7 @@ export default function PatientInfo() {
   const updateAddress = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, address: { ...prev.address, [field]: value } }));
 
-  const selectedProduct = formData.productId ? db.productDb.getById(formData.productId) : null;
+  const selectedProduct = formData.productId ? products.find((item) => item.id === formData.productId) ?? null : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">

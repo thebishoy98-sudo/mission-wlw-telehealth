@@ -50,6 +50,17 @@ The app is demo-ready in places, but not production-ready end to end. The main b
 - Made Life File and Spruce signature comparisons length-safe and added invalid JSON handling.
 - Made identity reminder cron fail closed in production when `CRON_SECRET` is missing.
 - Blocked live QuickBooks Payments charges without an Intuit payment token unless `QB_ALLOW_RAW_CARD_CHARGES=true` is explicitly set.
+- Added server-backed product/question read APIs for public intake and product pages.
+- Wired admin product create/edit/delete buttons to authenticated API routes instead of browser-only storage.
+- Made admin product writes fail visibly if production database persistence fails.
+- Updated product detail pages to resolve both product IDs and slugs, fixing `/products/tirzepatide`.
+- Replaced the public status page localStorage viewer with an order ID + email lookup against `/api/orders/[id]`.
+- Disabled online refill/dose-increase actions until a real refill/payment/pharmacy backend exists.
+- Disabled the old browser-only CMS editor instead of showing a fake "saved" success state.
+- Wired admin integration activity to a server API backed by integration logs.
+- Added required-question validation to the health questionnaire.
+- Disabled the checkout payment form when Intuit client tokenization is not configured, instead of accepting a fake/live-broken payment attempt.
+- Removed the remaining blanket HIPAA-compliance badge copy from the landing page.
 
 ## Critical Blockers
 
@@ -179,7 +190,7 @@ Needed:
 
 - `/api/provider/dashboard` is not server-authenticated.
 - `/api/provider/patients/[id]` returns chart data without server-authenticated provider context.
-- `/api/orders/[id]` exposes partial patient/order status without patient ownership verification.
+- `/api/orders/[id]` exposes partial patient/order status; the public status page now requires matching email, but the API itself still needs real patient/session authorization.
 - `SeedInit` previously seeded demo patients/orders on production client load; fixed to require explicit `NEXT_PUBLIC_ENABLE_DEMO_SEED=true`.
 - `services/lifefile.ts` has fallback prescriber placeholders if env is missing.
 - Admin questionnaire management is currently represented by PracticeQ/IntakeQ integration settings, not an in-app editable questionnaire builder.
@@ -193,8 +204,8 @@ Needed:
 - Lint warnings remain for `<img>` usage where `next/image` would improve LCP.
 - Lint warnings remain for several hook dependency arrays.
 - E2E suite did not complete within tool timeout; needs test stability work.
-- Product and patient portals still rely heavily on localStorage.
-- Admin CMS/product changes do not persist to server DB.
+- Product reads now use server APIs with seeded fallback. Patient portal auth/data still rely heavily on localStorage.
+- Admin CMS is intentionally disabled until content is server-backed and consumed by the public site. Admin product changes are server-backed when Postgres is configured.
 - `README.md` and `INTEGRATIONS.md` still describe the product as a mocked demo in places.
 - Generated screenshots/output files and ad hoc scripts exist as untracked files; do not include them in production commits unless intentionally curated.
 
@@ -222,6 +233,14 @@ Results:
 - Narrow patient Playwright E2E: timed out after 3 minutes with no useful output.
 - Fresh production server smoke on `localhost:3012`: `/`, `/products`, `/start/info`, `/login`, `/login/admin`, `/status` returned 200 with no page errors. `/provider` redirected client-side to `/login/provider`. `/admin` redirected to `/login/admin?redirect=%2Fadmin`.
 - Fresh `/api/health` on `localhost:3012`: returned `practiceq: "mock"`, `quickbooks: "live"`, `lifefile: "live"`, `spruce: "mock"` with the local environment.
+- Fresh local button-flow smoke on `localhost:3016`: `/`, `/products`, `/products/tirzepatide`, `/start/info`, `/start/questionnaire`, `/start/payment`, `/status`, `/patient/reorder`, `/login/admin`, `/admin/products`, `/admin/integrations`, and `/admin/cms` returned 200 and matched expected UI text. Verified questionnaire required validation, status lookup validation, admin login, Add Product form opening, disabled payment button, and disabled CMS notice. One recoverable Next dev console error appeared during admin navigation: RSC payload fetch failed and fell back to browser navigation.
+- `npx tsc --noEmit`: passed on 2026-05-25 after the button-flow patch.
+- `npm test -- --runInBand`: passed on 2026-05-25, 14 suites / 86 tests.
+- `npm run lint`: passed on 2026-05-25 with warnings for `<img>` usage and one hook dependency warning.
+- `npm run build`: passed on 2026-05-25 with the same warnings.
+- Production deployment after commit `a52afdb`: Vercel status `Ready` for `mission-wlw`.
+- Live production smoke on `https://mission-wlw.vercel.app`: `/`, `/products`, `/products/tirzepatide`, `/status`, and `/api/health` returned 200. Mobile browser smoke verified `/`, `/products/tirzepatide`, `/start/questionnaire`, `/start/payment`, and `/status` with no console errors; questionnaire required validation showed; payment button was disabled when Intuit tokenization was not configured.
+- Live Life File raw status endpoint without signature returned `{"error":"Missing signature"}`, confirming it fails closed for unsigned calls.
 
 ## Remaining Production Environment Needs
 

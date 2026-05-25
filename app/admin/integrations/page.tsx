@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Card, CardContent } from "@/components/ui/Card";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -127,10 +126,19 @@ function humanReadableAction(log: Types.IntegrationLog): string {
 export default function IntegrationsPage() {
   const [logs, setLogs] = useState<Types.IntegrationLog[]>([]);
   const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const allLogs = db.integrationLogDb.getAll();
-    setLogs(allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    fetch("/api/admin/integration-logs", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error ?? "Could not load integration activity.");
+        const allLogs = (payload.logs ?? []) as Types.IntegrationLog[];
+        setLogs(allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      })
+      .catch((err) => setError(err.message ?? "Could not load integration activity."))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = filter ? logs.filter((l) => l.integrationName === filter) : logs;
@@ -237,10 +245,16 @@ export default function IntegrationsPage() {
 
           <Card>
             <CardContent className="p-0 divide-y max-h-[480px] overflow-y-auto">
-              {filtered.length === 0 && (
+              {loading && (
+                <p className="text-center text-gray-400 py-12 text-sm">Loading activity...</p>
+              )}
+              {!loading && error && (
+                <p className="text-center text-red-500 py-12 text-sm">{error}</p>
+              )}
+              {!loading && !error && filtered.length === 0 && (
                 <p className="text-center text-gray-400 py-12 text-sm">No activity found.</p>
               )}
-              {filtered.map((log) => {
+              {!loading && !error && filtered.map((log) => {
                 const cfg = INTEGRATIONS[log.integrationName] ?? INTEGRATIONS.system;
                 const isOk = log.status === "success";
                 return (
