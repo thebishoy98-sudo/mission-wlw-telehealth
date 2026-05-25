@@ -60,6 +60,7 @@ function ProviderDashboardContent() {
       patient &&
       product &&
       dose &&
+      getIdentityGate(order).canDispatch &&
       shipping?.street1 &&
       shipping?.city &&
       shipping?.state &&
@@ -84,22 +85,6 @@ function ProviderDashboardContent() {
     try {
       for (const order of bulkApprovalTargets) {
         const patient = patients[order.patientId];
-
-        if (!getIdentityGate(order).canDispatch) {
-          const identityRes = await fetch("/api/identity/approve", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: order.id,
-              reviewedBy: "Dr. Provider",
-              notes: "Identity manually approved by provider",
-            }),
-          });
-          if (!identityRes.ok) {
-            const message = await identityRes.text();
-            throw new Error(message || `Identity approval failed for order ${order.id.slice(-6)}`);
-          }
-        }
 
         if (order.status === "pending_review") {
           const reviewRes = await fetch("/api/provider/review", {
@@ -226,7 +211,7 @@ function ProviderDashboardContent() {
                           )}
                           {!getIdentityGate(order).canDispatch && (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
-                              Identity review
+                              Admin identity review required
                             </span>
                           )}
                           {order.status === "approved" && order.pharmacyStatus === "error" && (
@@ -240,11 +225,6 @@ function ProviderDashboardContent() {
                         </p>
                       </div>
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                        {!getIdentityGate(order).canDispatch && (
-                          <Link href={`/provider/identity/${order.id}`}>
-                            <Button size="sm" variant="outline" className="w-full sm:w-auto">Review Identity</Button>
-                          </Link>
-                        )}
                         <Link href={`/provider/patients/${order.patientId}`}>
                           <Button size="sm" className="w-full sm:w-auto">Review Chart</Button>
                         </Link>

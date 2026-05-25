@@ -43,16 +43,16 @@ export function LoginForm({ role }: { role: UserRole }) {
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
     setLoading(true);
 
-    const result = login(email, password, role);
-    setLoading(false);
+    const result = await login(email, password, role);
 
     if (!result.success) {
       setError(result.error || "Sign in failed.");
+      setLoading(false);
       return;
     }
 

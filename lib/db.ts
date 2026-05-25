@@ -376,7 +376,7 @@ export const getDefaultCMSContent = (): Types.CMSContent => ({
     disclaimerText:
       "GLP-1 medications are contraindicated for patients with personal or family history of thyroid cancer or MEN 2, and are not suitable during pregnancy or breastfeeding. Eligibility and dosage decisions are made by licensed providers.",
     privacyNote:
-      "All data is HIPAA-compliant and encrypted in transit and at rest. We never sell or share your information.",
+      "We use privacy and security safeguards for sensitive health data, including encrypted transport and restricted operational access. Full HIPAA readiness also depends on signed BAAs, production auth, storage, and operating policies.",
   },
   footer: {
     copyrightText: "© 2025 Mission Wellness & Weight Loss. All rights reserved.",

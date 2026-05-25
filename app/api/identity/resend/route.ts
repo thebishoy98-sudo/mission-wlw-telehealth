@@ -3,8 +3,12 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { buildIdentityUploadUrl, createIdentityUploadToken } from "@/lib/identity";
 import * as spruceServer from "@/services/spruce.server";
+import { requireAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const { orderId } = await req.json();
     if (!orderId) {

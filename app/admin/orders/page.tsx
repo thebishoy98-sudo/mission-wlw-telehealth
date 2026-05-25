@@ -121,6 +121,53 @@ export default function OrdersManagement() {
     }
   };
 
+  const handleApproveIdentity = async (order: Types.Order) => {
+    try {
+      const response = await fetch("/api/identity/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          reviewedBy: "admin",
+          notes: "Manually approved by admin",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Identity approval failed");
+
+      await loadOrders();
+      setSelectedOrder((current) =>
+        current?.id === order.id
+          ? {
+              ...current,
+              identityStatus: "manual_approved",
+              identityReason: "Manually approved by admin",
+              identityReviewedAt: new Date().toISOString(),
+              identityReviewedBy: "admin",
+            }
+          : current
+      );
+      setToast({ message: "Identity approved by admin.", type: "success" });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
+  const handleResendIdentityReminder = async (order: Types.Order) => {
+    try {
+      const response = await fetch("/api/identity/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Verification reminder failed");
+      setToast({ message: "Verification reminder sent to patient.", type: "success" });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
 
@@ -222,32 +269,14 @@ export default function OrdersManagement() {
                           <Button
                             fullWidth
                             variant="outline"
-                            onClick={() => {
-                              db.orderDb.update(selectedOrder.id, {
-                                identityStatus: "manual_approved",
-                                identityReason: "Manually approved by admin",
-                                identityReviewedAt: new Date().toISOString(),
-                                identityReviewedBy: "admin",
-                              });
-                              const patch = { ...selectedOrder, identityStatus: "manual_approved" as const, identityReason: "Manually approved by admin" };
-                              setSelectedOrder(patch);
-                              setOrders((prev) => prev.map((order) => order.id === selectedOrder.id ? patch : order));
-                            }}
+                            onClick={() => handleApproveIdentity(selectedOrder)}
                           >
                             Manually Approve Identity
                           </Button>
                           <Button
                             fullWidth
                             variant="outline"
-                            onClick={() => {
-                              const patient = patients[selectedOrder.patientId] ?? db.patientDb.getById(selectedOrder.patientId);
-                              if (!patient) {
-                                setToast({ message: "Patient not found.", type: "error" });
-                                return;
-                              }
-                              spruceService.sendMessage(patient.id, "identity_verification_required", { orderId: selectedOrder.id });
-                              setToast({ message: "Verification reminder sent to patient.", type: "success" });
-                            }}
+                            onClick={() => handleResendIdentityReminder(selectedOrder)}
                           >
                             Resend Verification Reminder
                           </Button>

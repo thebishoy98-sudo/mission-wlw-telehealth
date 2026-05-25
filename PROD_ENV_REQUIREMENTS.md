@@ -30,15 +30,18 @@ Required database setup:
 
 | Value | Required for | Used in | Current status | Production note |
 | --- | --- | --- | --- | --- |
-| `ADMIN_SECRET` | Middleware protection for `/admin` | `middleware.ts` | Missing in Vercel env list | BLOCKER. Without real auth, production admin access is not acceptable. Middleware now denies production admin access when this is missing, but client login is still demo-only. |
+| `ADMIN_SECRET` | Middleware/API protection for `/admin` and admin-only identity actions | `middleware.ts`, `lib/server-auth.ts`, `app/api/auth/admin-login/route.ts`, `app/api/identity/*` | Present in Production | Required until real auth replaces it. Admin login now sets the protected httpOnly cookie after successful sign-in, but the username/password pair is still demo-grade and must be replaced. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin sign-in credentials for the temporary admin login bridge | `app/api/auth/admin-login/route.ts` | Missing in Vercel env list | BLOCKER. Set real values immediately or replace with proper IdP auth. Without these, the code falls back to demo credentials. |
 | Provider auth secret/client IDs | Provider dashboard/API protection | Not implemented | Missing | BLOCKER. Provider pages and `/api/provider/*` need real session auth/authorization. |
 | Patient auth client/session config | Patient portal access | `lib/auth.tsx` currently uses localStorage and demo passwords | Missing | BLOCKER. Replace with a real auth provider or PracticeQ-auth handoff. |
 
 Current auth is not production-grade:
-- Staff credentials are hardcoded in `lib/auth.tsx`.
+- Admin/provider credentials are still demo credentials.
 - Patient password is hardcoded as `patient123`.
 - Session state is client-side `localStorage`.
 - API routes do not consistently enforce server-side authorization.
+- Admin dashboard and identity review APIs now require the `ADMIN_SECRET` cookie/header.
+- Identity approval/resend is admin-only. Provider can view submitted questionnaire answers in the patient chart, but provider identity review has been removed from the provider flow.
 
 ## QuickBooks / Intuit
 
@@ -123,7 +126,7 @@ Cron URL:
 
 ## Storage Buckets
 
-No object storage bucket is implemented. Identity uploads are stored as base64 strings in localStorage and/or the `uploads.base64_data` database column.
+No object storage bucket is implemented. Identity uploads are stored as base64 strings in browser intake state and/or the `uploads.base64_data` database column.
 
 Production requirement:
 - Add a BAA-covered private object storage bucket for identity images/videos.

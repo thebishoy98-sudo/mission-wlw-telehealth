@@ -1,5 +1,6 @@
 -- Mission WLW — PostgreSQL Schema
--- HIPAA-compliant. Compatible with Vercel Postgres / Neon.
+-- Sensitive health data schema. HIPAA readiness also requires BAAs, access controls,
+-- audit controls, encryption controls, policies, and operational review.
 --
 -- HIPAA Technical Safeguards:
 --   § 164.312(a)(1)  Access Control     — patient_id FKs enforce ownership

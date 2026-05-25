@@ -94,7 +94,7 @@ export default function Home() {
     },
     {
       q: "How is my health data protected?",
-      a: "All data is HIPAA-compliant, encrypted in transit and at rest. We never sell or share your information with third parties.",
+      a: "We use privacy and security safeguards for sensitive health data, including encrypted transport and restricted operational access. Full HIPAA readiness also depends on signed BAAs, production auth, storage, and operating policies.",
     },
   ];
 
@@ -135,7 +135,7 @@ export default function Home() {
             <div className="flex flex-wrap gap-x-6 gap-y-2 mt-8 text-sm text-slate-500">
               <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />Free overnight shipping</span>
               <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />No enrollment fees</span>
-              <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />HIPAA-compliant</span>
+              <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />Privacy-first care</span>
             </div>
           </div>
         </div>

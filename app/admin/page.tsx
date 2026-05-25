@@ -211,9 +211,9 @@ function AdminDashboardContent() {
                 Edit Content
               </Button>
             </Link>
-            <Link href="/admin/questionnaire">
+            <Link href="/admin/integrations">
               <Button fullWidth variant="outline">
-                Edit Questions
+                Questionnaire Source
               </Button>
             </Link>
             <Link href="/admin/integrations">

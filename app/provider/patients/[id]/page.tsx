@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText, X } from "lucide-react";
+import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -48,7 +48,6 @@ export default function PatientDetail() {
   const [approvalSteps, setApprovalSteps] = useState<{ label: string; status: "pending" | "done" | "running" }[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
-  const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
 
   useEffect(() => {
     if (!patientId) return;
@@ -202,7 +201,7 @@ export default function PatientDetail() {
     );
   }
 
-  const { patient, selectedOrder, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review } = chart;
+  const { patient, selectedOrder, questionnaire, answers, consent, payment, pharmacyOrder, review } = chart;
   const chartMarkedViewed = !!review?.chartViewedAt;
 
   return (
@@ -300,38 +299,6 @@ export default function PatientDetail() {
                 </CardContent>
               </Card>
             )}
-
-            <Card>
-              <CardContent className="p-5 sm:p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Identity Documents</h3>
-                {uploads.length > 0 ? (
-                  <div className="space-y-3">
-                    {uploads.map((upload) => (
-                      <div key={upload.id} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl flex-wrap gap-3">
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{upload.type === "driver_license" ? "Driver's License / ID" : "Identity Video"}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{upload.filename}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="success">Uploaded</Badge>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedUpload(upload)}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            View proof
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No identity files uploaded yet.</p>
-                )}
-              </CardContent>
-            </Card>
 
             {selectedOrder.status === "pending_review" || selectedOrder.status === "approved" ? (
               <Card>
@@ -479,61 +446,6 @@ export default function PatientDetail() {
         </div>
       </div>
 
-      {selectedUpload && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="identity-proof-title"
-        >
-          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-4 sm:p-5">
-              <div>
-                <h2 id="identity-proof-title" className="text-lg font-bold text-gray-900">
-                  {selectedUpload.type === "driver_license" ? "Driver's License / ID" : "Identity Video"}
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">{selectedUpload.filename}</p>
-                <p className="mt-0.5 text-xs text-gray-400">Uploaded {formatDateTime(selectedUpload.uploadedAt)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedUpload(null)}
-                className="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-                aria-label="Close proof preview"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="max-h-[75vh] overflow-auto p-4 sm:p-5">
-              {selectedUpload.mimeType.startsWith("video/") ? (
-                <video
-                  controls
-                  playsInline
-                  className="max-h-[65vh] w-full rounded-xl bg-black"
-                  src={selectedUpload.base64Data}
-                />
-              ) : selectedUpload.mimeType.startsWith("image/") ? (
-                <img
-                  src={selectedUpload.base64Data}
-                  alt={selectedUpload.type === "driver_license" ? "Uploaded government ID proof" : "Uploaded identity proof"}
-                  className="max-h-[65vh] w-full rounded-xl bg-gray-50 object-contain"
-                />
-              ) : (
-                <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
-                  This proof file cannot be previewed in the browser.
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end border-t border-gray-100 p-4 sm:p-5">
-              <Button type="button" variant="outline" onClick={() => setSelectedUpload(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

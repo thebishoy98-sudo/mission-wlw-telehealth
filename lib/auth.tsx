@@ -29,7 +29,7 @@ interface AuthContextValue {
     email: string,
     password: string,
     role: UserRole
-  ) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -63,12 +63,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = (
+  const login = async (
     email: string,
     password: string,
     role: UserRole
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const normalized = email.toLowerCase().trim();
+
+    if (role === "admin") {
+      const response = await fetch("/api/auth/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, error: payload.error ?? "Invalid email or password." };
+      }
+      setUser(payload.user);
+      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
+      return { success: true };
+    }
 
     if (role === "patient") {
       if (password !== PATIENT_PORTAL_PASSWORD) {
@@ -112,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem(AUTH_KEY);
+    void fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
   };
 
   return (

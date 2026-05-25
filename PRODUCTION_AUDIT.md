@@ -22,6 +22,14 @@ The app is demo-ready in places, but not production-ready end to end. The main b
   - `app/start/info/page.tsx`
 - Fixed `/admin` middleware redirect from non-existent `/admin/login` to `/login/admin`.
 - Changed middleware so missing `ADMIN_SECRET` no longer silently opens admin routes in production.
+- Added an admin login bridge that sets the httpOnly `admin_secret` cookie required by middleware.
+- Made `/api/admin/dashboard` require admin authorization.
+- Made identity approval/review/resend APIs admin-only.
+- Removed provider identity approval/resend actions and redirected the old provider identity-review route to admin orders.
+- Kept provider chart review focused on clinical questionnaire, consent, payment, and pharmacy details; identity proof review is now admin-owned.
+- Removed public health endpoint disclosure of integration mock/live mode.
+- Removed public copy that stated blanket HIPAA compliance before the remaining BAA/auth/storage blockers are resolved.
+- Replaced the dead `/admin/questionnaire` dashboard link with the existing integrations/questionnaire source view.
 - Disabled browser demo seeding in production unless `NEXT_PUBLIC_ENABLE_DEMO_SEED=true`.
 - Updated `app/api/orders/[id]/route.ts` to read from server Postgres first, then local fallback, instead of only reading the local mock DB from a server route.
 - Replaced hardcoded PracticeQ mock constants with an env-driven live submission path:
@@ -56,11 +64,12 @@ Files:
 - `app/api/orders/*`
 
 Findings:
-- Staff credentials are hardcoded.
+- Admin/provider credentials are still demo credentials.
 - Patient password is hardcoded as `patient123`.
 - Sessions are stored in browser `localStorage`.
 - `ProtectedRoute` is client-side only and does not protect API data.
-- Provider/admin API routes return PHI without server-side session authorization.
+- `/api/admin/dashboard` and identity APIs now require the admin cookie/header.
+- Provider API routes still return PHI without server-side session authorization.
 
 Needed:
 - Real auth provider or PracticeQ-backed SSO/session model.
@@ -168,13 +177,13 @@ Needed:
 
 ## High Priority Issues
 
-- `/api/admin/dashboard` and `/api/provider/dashboard` are not server-authenticated.
+- `/api/provider/dashboard` is not server-authenticated.
 - `/api/provider/patients/[id]` returns chart data without server-authenticated provider context.
 - `/api/orders/[id]` exposes partial patient/order status without patient ownership verification.
 - `SeedInit` previously seeded demo patients/orders on production client load; fixed to require explicit `NEXT_PUBLIC_ENABLE_DEMO_SEED=true`.
 - `services/lifefile.ts` has fallback prescriber placeholders if env is missing.
-- `app/admin/page.tsx` links to `/admin/questionnaire`, but no such route exists.
-- `app/api/health/route.ts` reveals integration mode publicly.
+- Admin questionnaire management is currently represented by PracticeQ/IntakeQ integration settings, not an in-app editable questionnaire builder.
+- `app/api/health/route.ts` no longer reveals integration mode publicly.
 - CSP allows `unsafe-inline` and `unsafe-eval`.
 - Rate limiting uses in-memory Edge maps; this is not reliable across Vercel instances.
 - `npm audit` reports 5 vulnerabilities after adding lint packages; review dependency risk before production.

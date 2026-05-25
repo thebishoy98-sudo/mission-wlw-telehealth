@@ -52,7 +52,7 @@ const INTEGRATIONS: Record<
     label: "Spruce Messaging",
     color: "bg-orange-100 text-orange-700",
     dot: "bg-orange-500",
-    description: "A HIPAA-compliant platform for sending text messages to patients.",
+    description: "A healthcare messaging platform for patient text communication.",
     role: "Patients receive a plain-English text at every key moment in their order journey — no need to log in to find out what's happening.",
     smsTemplates: [
       { trigger: "Intake submitted", message: "We've received your intake. A provider will review shortly." },
