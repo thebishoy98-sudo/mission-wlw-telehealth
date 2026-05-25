@@ -3,15 +3,17 @@
  *
  * PracticeQ posts updates when provider reviews change status.
  *
- * Events:
- *   intake.reviewed     — provider has reviewed the intake
- *   intake.approved     — provider approved
- *   intake.rejected     — provider rejected with reason
+ * Supported events:
+ *   IntakeQ submission webhook payloads:
+ *     { IntakeId, Type: "Intake Submitted", ClientId, ExternalClientId }
+ *   Internal/provider payloads:
+ *     intake.reviewed, intake.approved, intake.rejected
  *
  * Setup:
  *   Add webhook URL in PracticeQ Settings → Integrations → Webhooks:
  *   https://<your-domain>/api/webhooks/practiceq
- *   Header: X-PracticeQ-Key: <your api key>
+ *   Use a secret query string because IntakeQ form webhooks only configure a URL:
+ *   https://<your-domain>/api/webhooks/practiceq?key=<PRACTICEQ_WEBHOOK_KEY>
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -24,7 +26,7 @@ import { getIdentityGate } from "@/lib/identity";
 
 export async function POST(req: NextRequest) {
   // Verify API key header
-  const apiKey = req.headers.get("x-practiceq-key");
+  const apiKey = req.headers.get("x-practiceq-key") ?? req.nextUrl.searchParams.get("key");
   if (!process.env.PRACTICEQ_WEBHOOK_KEY && process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "PRACTICEQ_WEBHOOK_KEY is not configured" }, { status: 500 });
   }
@@ -38,16 +40,19 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { event, packetId, orderId: pqOrderRef, status, notes, rejectionReason } = payload;
+  const incomingEvent = payload.event ?? payload.Type;
+  const incomingPacketId = payload.packetId ?? payload.IntakeId;
+  const incomingOrderRef = payload.orderId ?? payload.ExternalClientId;
+  const { status, notes, rejectionReason } = payload;
 
   // Find the order by PracticeQ packet reference
   const serverPacket =
-    (packetId ? await dbServer.practiceqPacketDb.getById(packetId).catch(() => null) : null) ??
-    (pqOrderRef ? await dbServer.practiceqPacketDb.getByOrder(pqOrderRef).catch(() => null) : null);
+    (incomingPacketId ? await dbServer.practiceqPacketDb.getById(incomingPacketId).catch(() => null) : null) ??
+    (incomingOrderRef ? await dbServer.practiceqPacketDb.getByOrder(incomingOrderRef).catch(() => null) : null);
   const packets = db.practiceqDb.getAll();
-  const packet = serverPacket ?? packets.find((p) => p.id === packetId || p.orderId === pqOrderRef);
+  const packet = serverPacket ?? packets.find((p) => p.id === incomingPacketId || p.orderId === incomingOrderRef);
   if (!packet) {
-    console.warn("PracticeQ webhook: packet not found", packetId);
+    console.warn("PracticeQ webhook: packet not found", incomingPacketId);
     return NextResponse.json({ error: "Packet not found" }, { status: 404 });
   }
 
@@ -57,13 +62,22 @@ export async function POST(req: NextRequest) {
     const entry = {
       id: generateId(), timestamp: new Date().toISOString(),
       integrationName: "practiceq" as const, action, orderId, patientId,
-      status: logStatus, details: { event, packetId, notes },
+      status: logStatus, details: { event: incomingEvent, packetId: incomingPacketId, notes },
     };
     db.integrationLogDb.create(entry);
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
-  switch (event) {
+  switch (incomingEvent) {
+    case "Intake Submitted": {
+      db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
+      db.orderDb.update(orderId, { practiceQStatus: "completed" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "completed" }).catch(() => {});
+      log("PracticeQ: intake submitted by patient");
+      break;
+    }
+
     case "intake.reviewed": {
       db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
       await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
@@ -124,7 +138,7 @@ export async function POST(req: NextRequest) {
     }
 
     default:
-      console.warn("PracticeQ webhook: unknown event", event);
+      console.warn("PracticeQ webhook: unknown event", incomingEvent);
   }
 
   return NextResponse.json({ received: true });

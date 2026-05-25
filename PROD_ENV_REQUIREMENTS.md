@@ -64,12 +64,13 @@ HIPAA note: QuickBooks Online should not receive PHI. Current code sends patient
 | --- | --- | --- | --- | --- |
 | `USE_REAL_PRACTICEQ` | Enables live PracticeQ submission | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production, Development | Real mode now calls the configured PracticeQ endpoint and fails loudly if credentials/config are missing. |
 | `PRACTICEQ_API_KEY` | PracticeQ API auth | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production, Development | Required when `USE_REAL_PRACTICEQ=true`. Rotate any key that was pasted into chat or logs. |
-| `PRACTICEQ_BASE_URL` | PracticeQ API base URL | `lib/service-config.ts`, `services/practiceq.ts` | Missing in Vercel env list; default is `https://api.practiceq.com/v2` | Required unless `PRACTICEQ_INTAKE_ENDPOINT` is a full endpoint URL. Confirm with PracticeQ docs/account. |
-| `PRACTICEQ_INTAKE_ENDPOINT` | Exact intake submit endpoint override | `lib/service-config.ts`, `services/practiceq.ts` | Missing | Recommended until the real PracticeQ API path is confirmed. If unset, code posts to `<PRACTICEQ_BASE_URL>/intake/submit`. |
-| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation | `app/api/webhooks/practiceq/route.ts` | Missing in Vercel env list | Required before enabling webhooks. Production webhook route now fails closed if missing. |
+| `PRACTICEQ_BASE_URL` | PracticeQ/IntakeQ API base URL | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Required. Official API base is `https://intakeq.com/api/v1`. |
+| `PRACTICEQ_INTAKE_ENDPOINT` | Send-questionnaire endpoint override | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Set to `https://intakeq.com/api/v1/intakes/send`. |
+| `PRACTICEQ_QUESTIONNAIRE_ID` | Questionnaire template used for Mission WLW intake sends | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Set to the PracticeQ `Medical: Brief Intake Form` template ID. |
+| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation | `app/api/webhooks/practiceq/route.ts` | Present in Production | Required. Configure the PracticeQ Intake Form Webhook URL as `https://<production-domain>/api/webhooks/practiceq?key=<secret>`. |
 
-Webhook URL to configure in PracticeQ after real integration:
-- `https://<production-domain>/api/webhooks/practiceq`
+Webhook URL configured in PracticeQ:
+- `https://<production-domain>/api/webhooks/practiceq?key=<PRACTICEQ_WEBHOOK_KEY>`
 
 ## Life File
 

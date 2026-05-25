@@ -17,6 +17,9 @@ type PacketOverrides = {
 };
 
 type PracticeQApiResponse = {
+  Id?: string;
+  Status?: string;
+  ClientId?: number;
   id?: string;
   packetId?: string;
   status?: string;
@@ -25,7 +28,7 @@ type PracticeQApiResponse = {
 
 const normalizeEndpoint = () => {
   if (serviceConfig.practiceq.intakeEndpoint) return serviceConfig.practiceq.intakeEndpoint;
-  return `${serviceConfig.practiceq.baseUrl.replace(/\/$/, "")}/intake/submit`;
+  return `${serviceConfig.practiceq.baseUrl.replace(/\/$/, "")}/intakes/send`;
 };
 
 export const submitIntakePacket = async (
@@ -63,31 +66,24 @@ export const submitIntakePacket = async (
 
   const endpoint = normalizeEndpoint();
   try {
+    const client = await savePracticeQClient(patient, order);
+    if (!serviceConfig.practiceq.questionnaireId) {
+      throw new Error("PRACTICEQ_QUESTIONNAIRE_ID is required to send an intake package in live PracticeQ mode");
+    }
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${serviceConfig.practiceq.apiKey}`,
+        "X-Auth-Key": serviceConfig.practiceq.apiKey,
         "Content-Type": "application/json",
-        "Idempotency-Key": packet.id,
       },
       body: JSON.stringify({
-        externalOrderId: order.id,
-        externalPatientId: patient.id,
-        patient: packet.packetData.patientInfo,
-        intake: {
-          questionnaireAnswers: packet.packetData.questionnaireAnswers,
-          consentRecord: packet.packetData.consentRecord,
-          uploads: packet.packetData.uploads.map((upload) => ({
-            id: upload.id,
-            type: upload.type,
-            filename: upload.filename,
-            mimeType: upload.mimeType,
-            fileSize: upload.fileSize,
-            status: upload.status,
-          })),
-          productRequested: packet.packetData.productRequested,
-          doseSelected: packet.packetData.doseSelected,
-        },
+        QuestionnaireId: serviceConfig.practiceq.questionnaireId,
+        ClientId: client.ClientId,
+        ClientName: `${patient.firstName} ${patient.lastName}`,
+        ClientEmail: patient.email,
+        ClientPhone: patient.phone,
+        ExternalClientId: order.id,
       }),
     });
 
@@ -99,13 +95,14 @@ export const submitIntakePacket = async (
 
     const saved = persistPacket({
       ...packet,
-      id: result?.packetId ?? result?.id ?? packet.id,
-      status: result?.status === "completed" ? "completed" : "submitted",
+      id: result?.Id ?? result?.packetId ?? result?.id ?? packet.id,
+      status: result?.Status === "Completed" || result?.status === "completed" ? "completed" : "submitted",
       lastSyncAt: new Date().toISOString(),
     });
     logPacketEvent("Intake packet submitted", saved, patient, product, {
       mode: "live",
       endpoint,
+      clientId: client.ClientId,
       requestId: result?.requestId,
     });
     return saved;
@@ -202,6 +199,39 @@ async function parsePracticeQResponse(response: Response): Promise<PracticeQApiR
   } catch {
     return { status: text };
   }
+}
+
+async function savePracticeQClient(patient: Types.Patient, order: Types.Order): Promise<PracticeQApiResponse> {
+  const response = await fetch(`${serviceConfig.practiceq.baseUrl.replace(/\/$/, "")}/clients`, {
+    method: "POST",
+    headers: {
+      "X-Auth-Key": serviceConfig.practiceq.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      FirstName: patient.firstName,
+      LastName: patient.lastName,
+      Name: `${patient.firstName} ${patient.lastName}`,
+      Email: patient.email,
+      Phone: patient.phone,
+      DateOfBirth: Date.parse(`${patient.dateOfBirth}T00:00:00Z`),
+      Gender: patient.gender,
+      StreetAddress: patient.address.street1,
+      UnitNumber: patient.address.street2 ?? "",
+      City: patient.address.city,
+      StateShort: patient.address.state,
+      PostalCode: patient.address.zipCode,
+      Country: patient.address.country,
+      ExternalClientId: order.id,
+      AdditionalInformation: `Mission WLW order ${order.id}. Product ${order.productId}, dose ${order.doseId}.`,
+    }),
+  });
+  const result = await parsePracticeQResponse(response);
+  if (!response.ok) {
+    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
+    throw new Error(`PracticeQ client sync failed: ${message}`);
+  }
+  return result ?? {};
 }
 
 function logPacketEvent(

@@ -29,6 +29,13 @@ The app is demo-ready in places, but not production-ready end to end. The main b
   - `PRACTICEQ_API_KEY`
   - `PRACTICEQ_BASE_URL`
   - optional `PRACTICEQ_INTAKE_ENDPOINT`
+- Updated PracticeQ live mode to match the official IntakeQ API contract:
+  - Base URL `https://intakeq.com/api/v1`
+  - Auth header `X-Auth-Key`
+  - Client sync through `/clients`
+  - Intake package send through `/intakes/send`
+- Added `PRACTICEQ_QUESTIONNAIRE_ID` for selecting the PracticeQ intake template.
+- Configured the PracticeQ Intake Form Webhook URL to call production with a secret query key.
 - Added server Postgres persistence helpers for `practiceq_packets`.
 - Made PracticeQ webhook updates persist to server Postgres when available.
 - Made PracticeQ, Life File, and Spruce webhooks fail closed in production when webhook secrets are missing.
@@ -69,13 +76,11 @@ Files:
 
 Findings:
 - The hardcoded mock URL/key were removed.
-- Live mode now posts intake data to the configured PracticeQ endpoint.
-- The exact PracticeQ production endpoint/payload still needs vendor confirmation and an authenticated end-to-end test.
+- Live mode now syncs the client and sends the configured questionnaire through the official IntakeQ API.
+- Production Vercel has been configured with the PracticeQ API base URL, send endpoint, questionnaire ID, API key, and webhook key.
 
 Needed:
-- PracticeQ API contract for creating/updating intake packets.
-- Real base URL, auth method, required payload fields, and webhook event schema.
-- Configure `PRACTICEQ_INTAKE_ENDPOINT` if the vendor path is not `/intake/submit`.
+- Run one real checkout/intake in production and confirm the client/form appears in PracticeQ and the webhook log receives the submitted intake event.
 
 ### 3. Payment flow is not PCI-safe
 
