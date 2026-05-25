@@ -167,13 +167,15 @@ Files:
 
 Findings:
 - Identity images/video frames are stored in browser state/localStorage during intake.
-- Server schema stores upload base64 in Postgres.
-- No BAA-covered object storage, signed URLs, retention cleanup, malware checks, or file-size enforcement are in place.
+- Fixed for new server-side persistence: production identity uploads now require a configured storage provider before persistence or payment charge.
+- Fixed for new S3-backed uploads: Postgres stores object references/metadata and not base64 payloads.
+- Browser intake state still holds identity media before submit; this must be reduced before real patient launch.
+- No BAA-covered object storage credentials, signed read URLs, retention cleanup, or malware scanning are configured yet.
 
 Needed:
-- Private object storage bucket with BAA.
+- Private object storage bucket with BAA and `IDENTITY_STORAGE_PROVIDER=s3`.
 - Signed upload/read URLs.
-- Store metadata and storage keys in DB, not raw base64 payloads.
+- Retention lifecycle and malware/file validation.
 
 ### 7. Cron route requires `CRON_SECRET` in production
 

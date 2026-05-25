@@ -23,15 +23,19 @@ import * as spruce from "@/services/spruce";
 import * as lifefile from "@/services/lifefile";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
+import { validateSharedSecret } from "@/lib/webhook-auth";
 
 export async function POST(req: NextRequest) {
   // Verify API key header
   const apiKey = req.headers.get("x-practiceq-key") ?? req.nextUrl.searchParams.get("key");
-  if (!process.env.PRACTICEQ_WEBHOOK_KEY && process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "PRACTICEQ_WEBHOOK_KEY is not configured" }, { status: 500 });
-  }
-  if (process.env.PRACTICEQ_WEBHOOK_KEY && apiKey !== process.env.PRACTICEQ_WEBHOOK_KEY) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = validateSharedSecret({
+    configuredSecret: process.env.PRACTICEQ_WEBHOOK_KEY,
+    providedSecret: apiKey,
+    serviceName: "PracticeQ",
+    envName: "PRACTICEQ_WEBHOOK_KEY",
+  });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   let payload: any;

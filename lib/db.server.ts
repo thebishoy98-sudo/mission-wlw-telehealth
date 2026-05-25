@@ -242,7 +242,7 @@ export const uploadDb = {
       INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
         storage_url, base64_data, uploaded_at, status, verification_notes)
       VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
-        ${upload.fileSize}, ${upload.mimeType}, ${""}, ${upload.base64Data ?? ""},
+        ${upload.fileSize}, ${upload.mimeType}, ${upload.storageUrl ?? upload.storageKey ?? ""}, ${upload.base64Data ?? ""},
         ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
       ON CONFLICT (id) DO NOTHING
     `;
@@ -662,6 +662,8 @@ function rowToUpload(r: any): Upload {
     filename: r.filename,
     fileSize: r.file_size,
     mimeType: r.mime_type,
+    storageUrl: r.storage_url ?? undefined,
+    storageKey: r.storage_url?.startsWith("s3://") ? r.storage_url.split("/").slice(3).join("/") : undefined,
     base64Data: r.base64_data ?? "",
     uploadedAt: r.uploaded_at,
     status: r.status,

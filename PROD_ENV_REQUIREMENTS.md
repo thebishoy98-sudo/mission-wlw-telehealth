@@ -65,12 +65,12 @@ HIPAA note: QuickBooks Online should not receive PHI. Current code sends patient
 
 | Value | Required for | Used in | Current status | Production note |
 | --- | --- | --- | --- | --- |
-| `USE_REAL_PRACTICEQ` | Enables live PracticeQ submission | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production, Development | Real mode now calls the configured PracticeQ endpoint and fails loudly if credentials/config are missing. |
-| `PRACTICEQ_API_KEY` | PracticeQ API auth | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production, Development | Required when `USE_REAL_PRACTICEQ=true`. Rotate any key that was pasted into chat or logs. |
-| `PRACTICEQ_BASE_URL` | PracticeQ/IntakeQ API base URL | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Required. Official API base is `https://intakeq.com/api/v1`. |
-| `PRACTICEQ_INTAKE_ENDPOINT` | Send-questionnaire endpoint override | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Set to `https://intakeq.com/api/v1/intakes/send`. |
-| `PRACTICEQ_QUESTIONNAIRE_ID` | Questionnaire template used for Mission WLW intake sends | `lib/service-config.ts`, `services/practiceq.ts` | Present in Production | Set to the PracticeQ `Medical: Brief Intake Form` template ID. |
-| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation | `app/api/webhooks/practiceq/route.ts` | Present in Production | Required. Configure the PracticeQ Intake Form Webhook URL as `https://<production-domain>/api/webhooks/practiceq?key=<secret>`. |
+| `USE_REAL_PRACTICEQ` | Enables live PracticeQ submission | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Real mode calls the configured PracticeQ endpoint and fails loudly if credentials/config are missing. |
+| `PRACTICEQ_API_KEY` | PracticeQ API auth | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Required when `USE_REAL_PRACTICEQ=true`. Rotate any key that was pasted into chat or logs. |
+| `PRACTICEQ_BASE_URL` | PracticeQ/IntakeQ API base URL | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Required. Official API base is `https://intakeq.com/api/v1`. |
+| `PRACTICEQ_INTAKE_ENDPOINT` | Send-questionnaire endpoint override | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Set to `https://intakeq.com/api/v1/intakes/send`. |
+| `PRACTICEQ_QUESTIONNAIRE_ID` | Questionnaire template used for Mission WLW intake sends | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Set to the PracticeQ `Medical: Brief Intake Form` template ID. |
+| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation | `app/api/webhooks/practiceq/route.ts`, `lib/webhook-auth.ts` | Missing on live `mission-wlw` during production probe | Required. Configure the PracticeQ Intake Form Webhook URL as `https://<production-domain>/api/webhooks/practiceq?key=<secret>`. |
 
 Webhook URL configured in PracticeQ:
 - `https://<production-domain>/api/webhooks/practiceq?key=<PRACTICEQ_WEBHOOK_KEY>`
@@ -128,19 +128,30 @@ Cron URL:
 
 ## Storage Buckets
 
-No object storage bucket is implemented. Identity uploads are stored as base64 strings in browser intake state and/or the `uploads.base64_data` database column.
+Identity upload storage now has a production storage boundary. In production, `app/api/identity/upload/route.ts` and `app/api/payments/charge/route.ts` refuse identity media before persistence/payment unless `IDENTITY_STORAGE_PROVIDER` is configured.
+
+| Value | Required for | Used in | Current status | Production note |
+| --- | --- | --- | --- | --- |
+| `IDENTITY_STORAGE_PROVIDER` | Selects identity media storage backend | `services/identity-storage.ts` | Missing | Set to `s3` for production. `database` is rejected in production. |
+| `IDENTITY_STORAGE_BUCKET` | Private identity media bucket | `services/identity-storage.ts` | Missing | Required for `IDENTITY_STORAGE_PROVIDER=s3`. Use a BAA-covered bucket. |
+| `IDENTITY_STORAGE_REGION` | S3 signing region | `services/identity-storage.ts` | Missing | Required for `IDENTITY_STORAGE_PROVIDER=s3`. |
+| `IDENTITY_STORAGE_ACCESS_KEY_ID` | S3 write credential | `services/identity-storage.ts` | Missing | Required for `IDENTITY_STORAGE_PROVIDER=s3`. Use least-privilege write/read lifecycle permissions. |
+| `IDENTITY_STORAGE_SECRET_ACCESS_KEY` | S3 write credential secret | `services/identity-storage.ts` | Missing | Required for `IDENTITY_STORAGE_PROVIDER=s3`. |
+| `IDENTITY_STORAGE_ENDPOINT` | S3-compatible endpoint override | `services/identity-storage.ts` | Optional | Leave unset for AWS S3. |
+| `IDENTITY_STORAGE_FORCE_PATH_STYLE` | S3-compatible path-style addressing | `services/identity-storage.ts` | Optional | Only needed for some S3-compatible providers. |
 
 ## Current Button/Flow Guardrails
 
 - Public product, questionnaire, and status pages now load through server API routes.
 - Admin product buttons now call authenticated server routes and surface database errors.
 - Checkout payment is visibly disabled unless Intuit client-side payment tokenization is configured.
+- Checkout refuses identity media before charging when production object storage is not configured.
 - Browser-only CMS editing is disabled until content is persisted server-side and rendered by the public site.
 - Refill and dose-increase requests are disabled until a real refill/payment/pharmacy workflow is implemented.
 
 Production requirement:
-- Add a BAA-covered private object storage bucket for identity images/videos.
-- Store only signed/private object references in Postgres.
+- Add the BAA-covered private object storage credentials above.
+- Store only signed/private object references in Postgres for new identity uploads.
 - Add malware/file type/size validation and retention cleanup.
 
 ## Deployment Settings

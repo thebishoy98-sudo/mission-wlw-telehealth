@@ -31,7 +31,8 @@ import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, sta
 import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { verifyIdentityUploads } from "@/services/identity-verification";
-import type { Payment, Upload } from "@/types";
+import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
+import type { Payment } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
@@ -162,6 +163,17 @@ export async function POST(req: NextRequest) {
     }
 
     const auditCtx = actorFromHeaders(req.headers);
+    const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
+    if (submittedIdentityMedia) {
+      try {
+        assertIdentityStorageReady();
+      } catch (error) {
+        return NextResponse.json(
+          { error: (error as Error).message },
+          { status: 503 }
+        );
+      }
+    }
 
     // Audit: PHI accessed for payment processing
     logPhiAccess({
@@ -213,36 +225,16 @@ export async function POST(req: NextRequest) {
 
     // 7. Verify identity when patient submitted usable media. Missing/uncertain identity blocks pharmacy dispatch.
     const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
-    const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
-    const submittedUploads: Upload[] = submittedIdentityMedia
-      ? [
-          {
-            id: generateId(),
-            orderId,
-            type: "driver_license",
-            filename: "identity-document.jpg",
-            fileSize: identityUploads.licenseImageData.length,
-            mimeType: "image/jpeg",
-            base64Data: identityUploads.licenseImageData,
-            uploadedAt: new Date().toISOString(),
-            status: "uploaded",
-          },
-          {
-            id: generateId(),
-            orderId,
-            type: "selfie_video",
-            filename: "identity-video.webm",
-            fileSize: (identityUploads.identityVideoData ?? identityUploads.selfieFrameData).length,
-            mimeType: identityUploads.identityVideoData ? "video/webm" : "image/jpeg",
-            base64Data: identityUploads.identityVideoData ?? identityUploads.selfieFrameData,
-            uploadedAt: new Date().toISOString(),
-            status: "uploaded",
-          },
-        ]
-      : [];
-    const identityAiUploads = submittedUploads.map((upload) =>
-      upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: identityUploads.selfieFrameData } : upload
-    );
+    const identityUploadBuild = submittedIdentityMedia
+      ? await buildIdentityUploads({
+          orderId,
+          idImageData: identityUploads.licenseImageData,
+          selfieFrameData: identityUploads.selfieFrameData,
+          identityVideoData: identityUploads.identityVideoData,
+        })
+      : { uploads: [], aiUploads: [] };
+    const submittedUploads = identityUploadBuild.uploads;
+    const identityAiUploads = identityUploadBuild.aiUploads;
 
     if (submittedUploads.length) {
       submittedUploads.forEach((upload) => db.uploadDb.create(upload));

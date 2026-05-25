@@ -171,7 +171,9 @@ export interface Upload {
   filename: string;
   fileSize: number;
   mimeType: string;
-  base64Data: string; // For demo, store base64 instead of file
+  storageUrl?: string;
+  storageKey?: string;
+  base64Data: string;
   uploadedAt: string;
   status: "uploaded" | "verified" | "rejected";
   verificationNotes?: string;
