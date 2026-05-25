@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
@@ -17,6 +18,13 @@ type DashboardData = {
   patients: Types.Patient[];
   products: Types.Product[];
   reviews: Types.ProviderReview[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    q: string;
+  };
 };
 
 function ProviderDashboardContent() {
@@ -27,12 +35,27 @@ function ProviderDashboardContent() {
   const [approvingAll, setApprovingAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+    q: "",
+  });
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/provider/dashboard", { cache: "no-store" });
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pagination.pageSize),
+      });
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      const response = await fetch(`/api/provider/dashboard?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Provider dashboard failed: ${response.status}`);
       const data = (await response.json()) as DashboardData;
       const allOrders = [...data.orders].sort(
@@ -42,14 +65,27 @@ function ProviderDashboardContent() {
       setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
       setProducts(Object.fromEntries(data.products.map((product) => [product.id, product])));
       setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
+      setPagination(data.pagination ?? { page, pageSize: 25, total: allOrders.length, totalPages: 1, q: searchQuery });
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
+  }, [page, pagination.pageSize, searchQuery]);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    setSearchQuery(searchInput.trim());
   };
 
-  useEffect(() => { void reload(); }, []);
+  const clearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(1);
+  };
 
   const canBulkDispatch = (order: Types.Order) => {
     const patient = patients[order.patientId];
@@ -140,6 +176,33 @@ function ProviderDashboardContent() {
             <CardContent className="p-6 text-gray-600">Loading real provider orders...</CardContent>
           </Card>
         )}
+
+        <Card className="mb-6">
+          <CardContent className="p-4 sm:p-5">
+            <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Input
+                  label="Search patients or orders"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Name, email, phone, order ID, status"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit">Search</Button>
+                {searchQuery && (
+                  <Button type="button" variant="outline" onClick={clearSearch}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </form>
+            <p className="mt-3 text-sm text-gray-500">
+              Showing {orders.length} of {pagination.total} matching orders
+              {searchQuery ? ` for "${searchQuery}"` : ""}.
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
@@ -255,7 +318,7 @@ function ProviderDashboardContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {orders.slice(0, 10).map((order) => {
+                  {orders.map((order) => {
                     const patient = patients[order.patientId];
                     const rev = reviews[order.id];
                     return (
@@ -297,7 +360,7 @@ function ProviderDashboardContent() {
 
         {/* Mobile cards */}
         <div className="sm:hidden space-y-3">
-          {orders.slice(0, 10).map((order) => {
+          {orders.map((order) => {
             const patient = patients[order.patientId];
             const rev = reviews[order.id];
             return (
@@ -331,6 +394,30 @@ function ProviderDashboardContent() {
               </Card>
             );
           })}
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-gray-500">
+            Page {pagination.page} of {pagination.totalPages}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pagination.page <= 1 || loading}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pagination.page >= pagination.totalPages || loading}
+              onClick={() => setPage((value) => value + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </div>
     </div>

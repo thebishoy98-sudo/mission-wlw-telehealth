@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -19,6 +19,13 @@ type AdminDashboardData = {
   products: Types.Product[];
   payments: Types.Payment[];
   pharmacyOrders: Types.PharmacyOrder[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    q: string;
+  };
 };
 
 export default function OrdersManagement() {
@@ -32,11 +39,26 @@ export default function OrdersManagement() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+    q: "",
+  });
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pagination.pageSize),
+      });
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      const response = await fetch(`/api/admin/dashboard?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text());
       const data = (await response.json()) as AdminDashboardData;
       const sortedOrders = [...data.orders].sort(
@@ -48,6 +70,7 @@ export default function OrdersManagement() {
       setPayments(Object.fromEntries(data.payments.map((payment) => [payment.orderId, payment])));
       setPharmacyOrders(Object.fromEntries(data.pharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
       setSelectedOrder((current) => current ? sortedOrders.find((order) => order.id === current.id) ?? current : current);
+      setPagination(data.pagination ?? { page, pageSize: 25, total: sortedOrders.length, totalPages: 1, q: searchQuery });
     } catch {
       const localOrders = db.orderDb.getAll().sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -56,12 +79,25 @@ export default function OrdersManagement() {
       setPatients(Object.fromEntries(localOrders.map((order) => [order.patientId, db.patientDb.getById(order.patientId)]).filter((entry) => entry[1])));
       setPayments(Object.fromEntries(localOrders.map((order) => [order.id, db.paymentDb.getByOrder(order.id)]).filter((entry) => entry[1])));
       setPharmacyOrders(Object.fromEntries(localOrders.map((order) => [order.id, db.pharmacyOrderDb.getByOrder(order.id)]).filter((entry) => entry[1])));
+      setPagination({ page: 1, pageSize: 25, total: localOrders.length, totalPages: 1, q: "" });
     } finally {
       setLoading(false);
     }
+  }, [page, pagination.pageSize, searchQuery]);
+
+  useEffect(() => { void loadOrders(); }, [loadOrders]);
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    setSearchQuery(searchInput.trim());
   };
 
-  useEffect(() => { void loadOrders(); }, []);
+  const clearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(1);
+  };
 
   const handleSendToPharmacy = async (order: Types.Order) => {
     try {
@@ -178,6 +214,33 @@ export default function OrdersManagement() {
         <div className="container-max py-8 sm:py-12">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Order Management</h1>
 
+          <Card className="mb-6">
+            <CardContent className="p-4 sm:p-5">
+              <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Input
+                    label="Search patients or orders"
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="Name, email, phone, order ID, status"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit">Search</Button>
+                  {searchQuery && (
+                    <Button type="button" variant="outline" onClick={clearSearch}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </form>
+              <p className="mt-3 text-sm text-gray-500">
+                Showing {orders.length} of {pagination.total} matching orders
+                {searchQuery ? ` for "${searchQuery}"` : ""}.
+              </p>
+            </CardContent>
+          </Card>
+
           {loading && (
             <Card className="mb-6">
               <CardContent className="p-5 text-sm text-gray-600">Loading admin order data...</CardContent>
@@ -238,6 +301,29 @@ export default function OrdersManagement() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-gray-500">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pagination.page <= 1 || loading}
+                        onClick={() => setPage((value) => Math.max(1, value - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pagination.page >= pagination.totalPages || loading}
+                        onClick={() => setPage((value) => value + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
