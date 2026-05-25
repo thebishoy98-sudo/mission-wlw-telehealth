@@ -1,7 +1,7 @@
 /**
  * QuickBooks Payments Integration Service
  *
- * Uses the Intuit Payments API (v4) to tokenize and charge cards — same OAuth
+ * Uses the Intuit Payments API (v4) to tokenize and charge cards - same OAuth
  * token as the QuickBooks accounting API.
  *
  * Production setup:
@@ -29,8 +29,8 @@ interface QBChargeRequest {
   amount: string; // e.g. "299.00"
   currency: "USD";
   capture: boolean;
-  token?: string;         // card token from qbpayments.js (preferred — no PCI scope)
-  card?: {                // raw card — only for server-to-server, requires PCI compliance
+  token?: string;         // card token from qbpayments.js (preferred - no PCI scope)
+  card?: {                // raw card - only for server-to-server, requires PCI compliance
     number: string;
     expMonth: string;
     expYear: string;

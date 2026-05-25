@@ -49,6 +49,11 @@ export interface DoseOption {
   strength: string;
   quantity: number;
   price: number;
+  durationWeeks?: number;
+  weeklyDoseMg?: number;
+  injectionUnits?: number;
+  prescriptionLabel?: string;
+  patientDescription?: string;
 }
 
 export interface FAQ {

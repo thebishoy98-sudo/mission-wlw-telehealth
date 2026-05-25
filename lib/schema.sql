@@ -1,13 +1,13 @@
--- Mission WLW — PostgreSQL Schema
+-- Mission WLW - PostgreSQL Schema
 -- Sensitive health data schema. HIPAA readiness also requires BAAs, access controls,
 -- audit controls, encryption controls, policies, and operational review.
 --
 -- HIPAA Technical Safeguards:
---   § 164.312(a)(1)  Access Control     — patient_id FKs enforce ownership
---   § 164.312(b)     Audit Controls     — phi_audit_logs (immutable, 6yr retention)
---   § 164.312(c)(1)  Integrity          — NOT NULL, FK constraints, CHECK constraints
---   § 164.312(e)(1)  Transmission Sec.  — TLS enforced by Neon/Vercel Postgres
---   Data Retention   § 164.530(j)       — retention_delete_after set at INSERT time
+--   § 164.312(a)(1)  Access Control     - patient_id FKs enforce ownership
+--   § 164.312(b)     Audit Controls     - phi_audit_logs (immutable, 6yr retention)
+--   § 164.312(c)(1)  Integrity          - NOT NULL, FK constraints, CHECK constraints
+--   § 164.312(e)(1)  Transmission Sec.  - TLS enforced by Neon/Vercel Postgres
+--   Data Retention   § 164.530(j)       - retention_delete_after set at INSERT time
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -183,7 +183,7 @@ ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_review_required BOOLEAN NOT NULL DEFAULT false;
 
 -- ── PHI Audit Logs ─────────────────────────────────────────────────────────────
--- HIPAA § 164.312(b) — INSERT ONLY. Never UPDATE or DELETE rows here.
+-- HIPAA § 164.312(b) - INSERT ONLY. Never UPDATE or DELETE rows here.
 -- Retain for 6 years from timestamp.
 CREATE TABLE IF NOT EXISTS phi_audit_logs (
   id            TEXT PRIMARY KEY,

@@ -72,7 +72,7 @@ Base your assessment on:
 - Appropriateness for weight management therapy
 - Any answers that warrant follow-up questions
 
-Be conservative — flag anything that warrants provider attention.`;
+Be conservative - flag anything that warrants provider attention.`;
 
   try {
     const message = await anthropic.messages.create({

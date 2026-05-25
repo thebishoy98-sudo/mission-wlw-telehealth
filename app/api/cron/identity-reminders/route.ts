@@ -7,7 +7,7 @@
  *   - submitted 1 or 2 days ago
  *
  * Sends a day-1 or day-2 SMS reminder via Spruce.
- * Stops after 2 days — admin follow-up required beyond that.
+ * Stops after 2 days - admin follow-up required beyond that.
  *
  * Protected via CRON_SECRET env var (Vercel sets Authorization header automatically).
  */
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (!process.env.POSTGRES_URL) {
-      // No server DB — nothing to do in dev without Postgres
+      // No server DB - nothing to do in dev without Postgres
       return NextResponse.json({ skipped: "No POSTGRES_URL configured", results: [] });
     }
 
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
     for (const row of rows) {
       const days = daysSince(row.submitted_at);
-      // Day 1 window: 20h–47h, Day 2 window: 47h–72h
+      // Day 1 window: 20h-47h, Day 2 window: 47h-72h
       const reminderDay = days < 2 ? 1 : 2;
       const templateKey = reminderDay === 1 ? "identity_reminder_day1" : "identity_reminder_day2";
 

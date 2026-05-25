@@ -69,7 +69,7 @@ export default function Products() {
                       <ul className="space-y-1 text-sm text-gray-600">
                         {product.doses.map((dose) => (
                           <li key={dose.id}>
-                            • {dose.label} - {formatCurrency(dose.price)}
+                            - {dose.label}: {dose.patientDescription ?? dose.strength} - {formatCurrency(dose.price)}
                           </li>
                         ))}
                       </ul>

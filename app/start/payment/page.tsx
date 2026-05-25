@@ -244,8 +244,9 @@ export default function Payment() {
             <span className="font-semibold text-gray-900">{formatCurrency(total)}</span>
           </div>
           {dose && (
-            <div className="flex justify-between items-center text-xs text-gray-400">
-              <span>{dose.label}</span>
+            <div className="space-y-1 text-xs text-gray-500">
+              <p>{dose.label}</p>
+              {dose.patientDescription && <p>{dose.patientDescription}</p>}
             </div>
           )}
           <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
@@ -254,7 +255,7 @@ export default function Payment() {
           </div>
         </div>
         <div className="mt-5 p-4 bg-teal-50 rounded-xl text-sm text-gray-600">
-          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy — no additional approval steps needed.
+          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy - no additional approval steps needed.
         </div>
       </div>
 
@@ -352,7 +353,7 @@ export default function Payment() {
             </svg>
             <span className="font-semibold text-gray-800 text-sm">{processingStep}</span>
           </div>
-          <p className="text-xs text-gray-400">Setting up your order — please don&apos;t close this page</p>
+          <p className="text-xs text-gray-400">Setting up your order - please don&apos;t close this page</p>
         </div>
       )}
 

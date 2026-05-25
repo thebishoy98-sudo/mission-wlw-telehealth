@@ -99,7 +99,7 @@ export default function ProductDetail() {
                           {dose.label}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {dose.quantity} units
+                          {dose.patientDescription ?? `${dose.quantity} units`}
                         </p>
                       </div>
                       <p className="text-lg font-bold text-teal-600">

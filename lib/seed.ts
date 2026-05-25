@@ -16,7 +16,7 @@ const daysAgo = (days: number) =>
 export const initializeDemo = (): void => {
   if (typeof window === "undefined") return;
 
-  // Always ensure all SMS templates exist (additive — safe to run on every startup)
+  // Always ensure all SMS templates exist (additive - safe to run on every startup)
   const existingTemplateKeys = db.messageTemplateDb.getAll().map((t) => t.key);
   seedMessageTemplates
     .filter((t) => !existingTemplateKeys.includes(t.key))

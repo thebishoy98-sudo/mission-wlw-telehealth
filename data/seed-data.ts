@@ -1,65 +1,13 @@
 import * as Types from "@/types";
 import { generateId } from "@/lib/utils";
+import { tirzepatideProduct } from "@/data/products";
 
 const now = new Date();
 const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
 // Products
 export const seedProducts: Types.Product[] = [
-  {
-    id: generateId(),
-    name: "Tirzepatide (GLP-1 Injectable)",
-    slug: "tirzepatide",
-    description: "Weekly injectable treatment for weight management",
-    longDescription:
-      "Tirzepatide is a dual GIP/GLP-1 receptor agonist designed to support sustainable weight management when combined with lifestyle modifications.",
-    startingPrice: 299,
-    image: "/product-tirzepatide.svg",
-    doses: [
-      {
-        id: generateId(),
-        label: "2.5mg Weekly",
-        strength: "2.5mg",
-        quantity: 4,
-        price: 299,
-      },
-      {
-        id: generateId(),
-        label: "5mg Weekly",
-        strength: "5mg",
-        quantity: 4,
-        price: 399,
-      },
-      {
-        id: generateId(),
-        label: "7.5mg Weekly",
-        strength: "7.5mg",
-        quantity: 4,
-        price: 499,
-      },
-    ],
-    eligibilityNote:
-      "Must be 18+, BMI 27+, or diagnosed with type 2 diabetes. Final eligibility determined by provider.",
-    isActive: true,
-    faqs: [
-      {
-        id: generateId(),
-        question: "How often do I inject?",
-        answer: "Once per week, on the same day each week. You can self-administer.",
-      },
-      {
-        id: generateId(),
-        question: "What are common side effects?",
-        answer: "Nausea, vomiting, and constipation are most common and often decrease over time.",
-      },
-      {
-        id: generateId(),
-        question: "How long does it take to work?",
-        answer: "Most people see results within 2-4 weeks. Maximum effects typically occur at 16-20 weeks.",
-      },
-    ],
-    createdAt: now.toISOString(),
-  },
+  { ...tirzepatideProduct, createdAt: now.toISOString() },
 ];
 
 // Patients

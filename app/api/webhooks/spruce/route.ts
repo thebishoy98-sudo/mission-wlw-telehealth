@@ -4,9 +4,9 @@
  * Spruce posts delivery status updates for outbound messages.
  *
  * Events:
- *   message.delivered  — SMS confirmed delivered
- *   message.failed     — SMS delivery failed
- *   message.reply      — Patient replied to an SMS
+ *   message.delivered  - SMS confirmed delivered
+ *   message.failed     - SMS delivery failed
+ *   message.reply      - Patient replied to an SMS
  *
  * Setup:
  *   Add webhook URL in Spruce Settings → Integrations:

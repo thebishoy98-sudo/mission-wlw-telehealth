@@ -1,5 +1,6 @@
 import * as lifefile from "@/services/lifefile";
 import * as db from "@/lib/db";
+import { tirzepatideProduct } from "@/data/products";
 
 const seed = () => {
   db.patientDb.create({
@@ -16,24 +17,13 @@ const seed = () => {
     updatedAt: new Date().toISOString(),
   });
 
-  db.productDb.create({
-    id: "prod_1",
-    name: "Tirzepatide",
-    slug: "tirzepatide",
-    description: "GLP-1",
-    startingPrice: 299,
-    image: "/img.svg",
-    doses: [{ id: "dose_1", label: "2.5mg Starter", strength: "2.5mg", quantity: 1, price: 299 }],
-    eligibilityNote: "BMI ≥ 27",
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  });
+  db.productDb.create({ ...tirzepatideProduct, id: "prod_1" });
 
   db.orderDb.create({
     id: "o1",
     patientId: "p1",
     productId: "prod_1",
-    doseId: "dose_1",
+    doseId: "tirzepatide_20mg_8_week",
     status: "sent_to_pharmacy",
     paymentStatus: "completed",
     pharmacyStatus: "draft",
@@ -60,7 +50,8 @@ describe("lifefile.createPharmacyOrder", () => {
           drugName: "TIRZEPATIDE/PYRIDOXINE",
           drugStrength: "20MG/25MG/ML (2 ML)",
           quantity: 1,
-          directions: "Inject 2.5mg subcutaneously once weekly as directed by prescriber",
+          directions: "Inject 12.5 units (2.5mg) SbQ weekly.",
+          daysSupply: 56,
         }),
         expect.objectContaining({
           drugName: "ALCOHOL SWABS",
@@ -76,25 +67,20 @@ describe("lifefile.createPharmacyOrder", () => {
     );
   });
 
-  it("calculates tirzepatide vial quantity from the weekly dose", async () => {
+  it("uses explicit tirzepatide label directions for higher 8-week doses", async () => {
     const order = db.orderDb.create({
       ...db.orderDb.getById("o1")!,
       id: "o_high",
-      doseId: "dose_high",
+      doseId: "tirzepatide_60mg_8_week",
     });
-    const product = db.productDb.update("prod_1", {
-      doses: [
-        { id: "dose_1", label: "2.5mg Starter", strength: "2.5mg", quantity: 1, price: 299 },
-        { id: "dose_high", label: "15mg Weekly", strength: "15mg", quantity: 1, price: 599 },
-      ],
-    })!;
 
-    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product });
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product: { ...tirzepatideProduct, id: "prod_1" } });
     expect(pharmacyOrder.payload.order.rxs[0]).toEqual(
       expect.objectContaining({
         drugName: "TIRZEPATIDE/PYRIDOXINE",
-        quantity: 2,
-        directions: "Inject 15mg subcutaneously once weekly as directed by prescriber",
+        quantity: 1,
+        directions: "Inject 37.5 units (7.5mg) SbQ weekly.",
+        daysSupply: 56,
       })
     );
   });

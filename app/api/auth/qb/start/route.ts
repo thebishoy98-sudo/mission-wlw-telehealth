@@ -1,5 +1,5 @@
 /**
- * QuickBooks OAuth 2.0 — Step 1: Redirect to Intuit authorization page.
+ * QuickBooks OAuth 2.0 - Step 1: Redirect to Intuit authorization page.
  * Visit /api/auth/qb/start to begin the flow.
  * REMOVE this route after obtaining your refresh token.
  */

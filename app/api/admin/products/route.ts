@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/server-auth";
 import { generateId } from "@/lib/utils";
 import type { Product } from "@/types";
 import { seedProducts } from "@/data/seed-data";
+import { normalizeProducts } from "@/data/products";
 
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -20,7 +21,9 @@ export async function GET(req: NextRequest) {
 
   const products = await dbServer.productDb.getAll().catch(() => []);
   const localProducts = db.productDb.getAll();
-  return NextResponse.json({ products: products.length ? products : (localProducts.length ? localProducts : seedProducts) });
+  return NextResponse.json({
+    products: normalizeProducts(products.length ? products : (localProducts.length ? localProducts : seedProducts)),
+  });
 }
 
 export async function POST(req: NextRequest) {

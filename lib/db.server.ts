@@ -746,7 +746,7 @@ function rowToSpruceMessage(r: any): SpruceMessage {
 }
 
 // ── PHI Audit Logs ────────────────────────────────────────────────────────────
-// HIPAA § 164.312(b) — INSERT ONLY. Never update or delete rows in this table.
+// HIPAA § 164.312(b) - INSERT ONLY. Never update or delete rows in this table.
 
 export const phiAuditDb = {
   async create(entry: {

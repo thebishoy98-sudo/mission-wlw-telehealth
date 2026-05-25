@@ -1,5 +1,5 @@
 /**
- * QuickBooks OAuth 2.0 — Step 2: Exchange code for tokens.
+ * QuickBooks OAuth 2.0 - Step 2: Exchange code for tokens.
  * Intuit redirects here after user authorizes.
  * REMOVE this route after obtaining your refresh token.
  */
@@ -74,7 +74,7 @@ QB_CLIENT_ID=${QB_CLIENT_ID}
 QB_CLIENT_SECRET=${QB_CLIENT_SECRET}
 USE_REAL_QUICKBOOKS=true
 </pre>
-<p style="color:#6b7280;font-size:13px">⚠️ The access token expires in 1 hour — the refresh token lasts 100 days and gets auto-renewed.</p>
+<p style="color:#6b7280;font-size:13px">⚠️ The access token expires in 1 hour - the refresh token lasts 100 days and gets auto-renewed.</p>
 <p style="color:#dc2626;font-size:13px">🔒 Delete /api/auth/qb/ routes after saving these values.</p>
 </body>
 </html>`;

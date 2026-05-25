@@ -68,7 +68,7 @@ async function handleEntity(entity: any, realmId: string) {
   };
 
   switch (name) {
-    // ── QB Payments — Charge events ───────────────────────────────────────────
+    // ── QB Payments - Charge events ───────────────────────────────────────────
     case "Payment": {
       if (operation === "Create" || operation === "Update") {
         // A payment was created or updated in QB
@@ -84,7 +84,7 @@ async function handleEntity(entity: any, realmId: string) {
       }
 
       if (operation === "Delete") {
-        // Payment was voided/deleted — mark as refunded
+        // Payment was voided/deleted - mark as refunded
         const payments = db.paymentDb.getAll ? db.paymentDb.getAll() : [];
         const payment = payments.find((p: any) => p.transactionId === id);
 
@@ -97,10 +97,10 @@ async function handleEntity(entity: any, realmId: string) {
       break;
     }
 
-    // ── QB Accounting — Invoice events ────────────────────────────────────────
+    // ── QB Accounting - Invoice events ────────────────────────────────────────
     case "Invoice": {
       if (operation === "Update") {
-        // Invoice was updated — could be paid via QB's hosted payment link
+        // Invoice was updated - could be paid via QB's hosted payment link
         const qbRecords = db.quickbooksDb.getAll ? db.quickbooksDb.getAll() : [];
         const record = qbRecords.find((r: any) => r.invoiceId === id);
 
@@ -123,7 +123,7 @@ async function handleEntity(entity: any, realmId: string) {
       break;
     }
 
-    // ── QB Accounting — CreditMemo (refund) ───────────────────────────────────
+    // ── QB Accounting - CreditMemo (refund) ───────────────────────────────────
     case "CreditMemo": {
       if (operation === "Create") {
         log("QB credit memo (refund) created", "success");
@@ -144,7 +144,7 @@ async function handleEntity(entity: any, realmId: string) {
   }
 }
 
-// QB webhook verification endpoint (GET) — Intuit sends a challenge to verify
+// QB webhook verification endpoint (GET) - Intuit sends a challenge to verify
 export async function GET(req: NextRequest) {
   const challenge = req.nextUrl.searchParams.get("challenge");
   if (challenge) {

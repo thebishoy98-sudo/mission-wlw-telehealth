@@ -31,7 +31,7 @@ const INTEGRATIONS: Record<
     color: "bg-blue-100 text-blue-700",
     dot: "bg-blue-500",
     description: "A medical records and patient management platform used by licensed healthcare providers.",
-    role: "When a patient completes their intake form, their full profile — questionnaire answers, signed consents, and uploaded documents — is automatically packaged and delivered to the reviewing provider inside PracticeQ.",
+    role: "When a patient completes their intake form, their full profile - questionnaire answers, signed consents, and uploaded documents - is automatically packaged and delivered to the reviewing provider inside PracticeQ.",
   },
   quickbooks: {
     label: "QuickBooks",
@@ -45,14 +45,14 @@ const INTEGRATIONS: Record<
     color: "bg-purple-100 text-purple-700",
     dot: "bg-purple-500",
     description: "A compounding pharmacy partner that prepares and ships medications directly to patients.",
-    role: "Once a provider approves a prescription, the full order — drug, dose, quantity, and the patient's shipping address — is transmitted directly to Life File. Status updates and tracking numbers flow back automatically.",
+    role: "Once a provider approves a prescription, the full order - drug, dose, quantity, and the patient's shipping address - is transmitted directly to Life File. Status updates and tracking numbers flow back automatically.",
   },
   spruce: {
     label: "Spruce Messaging",
     color: "bg-orange-100 text-orange-700",
     dot: "bg-orange-500",
     description: "A healthcare messaging platform for patient text communication.",
-    role: "Patients receive a plain-English text at every key moment in their order journey — no need to log in to find out what's happening.",
+    role: "Patients receive a plain-English text at every key moment in their order journey - no need to log in to find out what's happening.",
     smsTemplates: [
       { trigger: "Intake submitted", message: "We've received your intake. A provider will review shortly." },
       { trigger: "Payment captured", message: "We've received your payment. Order ID confirmed." },
@@ -67,14 +67,14 @@ const FLOW_STEPS = [
   {
     step: "1",
     title: "Patient Completes Intake",
-    body: "The patient fills out their health questionnaire, signs consent forms, uploads their ID, and pays online — all in one flow.",
+    body: "The patient fills out their health questionnaire, signs consent forms, uploads their ID, and pays online - all in one flow.",
     system: "Platform",
     detail: "Triggers: PracticeQ + QuickBooks",
   },
   {
     step: "2",
     title: "Records Sent to Provider via PracticeQ",
-    body: "The moment intake is complete, the patient's full profile — answers, consent, and uploaded files — is packaged and sent to the reviewing provider inside PracticeQ.",
+    body: "The moment intake is complete, the patient's full profile - answers, consent, and uploaded files - is packaged and sent to the reviewing provider inside PracticeQ.",
     system: "PracticeQ",
     detail: "Trigger: Patient submits intake",
   },
@@ -95,7 +95,7 @@ const FLOW_STEPS = [
   {
     step: "5",
     title: "Prescription Sent to Pharmacy",
-    body: "Once approved, the prescription — including drug, dose, quantity, and the patient's shipping address — is transmitted directly to Life File Pharmacy.",
+    body: "Once approved, the prescription - including drug, dose, quantity, and the patient's shipping address - is transmitted directly to Life File Pharmacy.",
     system: "Life File",
     detail: "Trigger: Provider approves order",
   },
@@ -152,7 +152,7 @@ export default function IntegrationsPage() {
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">How the Platform Connects</h1>
           <p className="mt-2 text-gray-500 max-w-2xl">
-            This platform doesn&apos;t work in isolation — it talks to several specialised tools behind the scenes.
+            This platform doesn&apos;t work in isolation - it talks to several specialised tools behind the scenes.
             Here&apos;s what each one does and how they fit together.
           </p>
         </div>
@@ -190,7 +190,7 @@ export default function IntegrationsPage() {
 
         {/* Step-by-step flow */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Journey — Step by Step</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Journey - Step by Step</h2>
           <div className="relative">
             {/* connecting line */}
             <div className="hidden md:block absolute left-6 top-6 bottom-6 w-0.5 bg-teal-200" />

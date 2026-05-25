@@ -367,7 +367,7 @@ export const getDefaultCMSContent = (): Types.CMSContent => ({
   landing: {
     heroHeadline: "Your Journey to a Healthier, Happier You Starts Here",
     heroSubheadline:
-      "Medical weight management with GLP-1 therapy — personalized, supervised, and shipped directly to your door. No office visits. No waiting.",
+      "Medical weight management with GLP-1 therapy - personalized, supervised, and shipped directly to your door. No office visits. No waiting.",
     heroImage: "/hero-placeholder.svg",
     ctaButtonText: "Get Started Today",
     howItWorksTitle: "How It Works",

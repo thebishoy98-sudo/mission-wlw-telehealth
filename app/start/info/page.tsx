@@ -82,14 +82,17 @@ export default function PatientInfo() {
         {selectedProduct && (
           <div className="mt-4">
             <Select
-              label="Dosage"
+              label="Prescription option"
               options={selectedProduct.doses.map((d) => ({
                 value: d.id,
-                label: `${d.label} - $${d.price}/month`,
+                label: `${d.label} - ${d.patientDescription ?? d.strength} - $${d.price}`,
               }))}
               value={selectedDose}
               onChange={(e) => setSelectedDose(e.target.value)}
             />
+            <p className="mt-2 text-xs text-gray-500">
+              These are 8-week prescription options. Your provider reviews the dose before the order is sent.
+            </p>
           </div>
         )}
       </div>

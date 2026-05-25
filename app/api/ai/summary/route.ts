@@ -54,7 +54,7 @@ Write a concise clinical summary (3-5 sentences) that:
 3. Notes anything the provider should verify before approving
 4. Ends with a brief recommendation
 
-Be clinical, neutral, and brief. No disclaimers. No "As an AI..." — just the summary.`;
+Be clinical, neutral, and brief. No disclaimers. No "As an AI..." - just the summary.`;
 
   const message = await anthropic.messages.create({
     model: "claude-opus-4-6",

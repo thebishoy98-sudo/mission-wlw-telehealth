@@ -1,5 +1,5 @@
 /**
- * Service configuration — controls mock vs real integrations.
+ * Service configuration - controls mock vs real integrations.
  *
  * Set environment variables to switch to real APIs:
  *   USE_REAL_PRACTICEQ=true

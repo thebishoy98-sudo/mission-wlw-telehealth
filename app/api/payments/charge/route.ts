@@ -1,5 +1,5 @@
 /**
- * Payment Route — QuickBooks Payments
+ * Payment Route - QuickBooks Payments
  *
  * Flow:
  *   1. Client tokenizes card via qbpayments.js → sends token here
@@ -26,6 +26,7 @@ import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
 import * as spruceServer from "@/services/spruce.server";
 import { checkEligibility } from "@/lib/eligibility";
+import { normalizeProduct } from "@/data/products";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
@@ -54,25 +55,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Load order — try server DB first, fall back to localStorage, then inline data
+    // 1. Load order - try server DB first, fall back to localStorage, then inline data
     let order =
       (await dbServer.orderDb.getById(orderId).catch(() => null)) ??
       db.orderDb.getById(orderId);
 
     // Resolve product/dose against the server product row. Browser demo products
     // have generated IDs, but server orders must reference stable Postgres IDs.
-    let persistedProduct = productData?.slug
-      ? await dbServer.productDb.getBySlug(productData.slug).catch(() => null)
+    const submittedProduct = productData ? normalizeProduct(productData) : null;
+    if (submittedProduct) {
+      await dbServer.productDb.upsert(submittedProduct).catch(() => {});
+    }
+    let persistedProduct = submittedProduct?.slug
+      ? await dbServer.productDb.getBySlug(submittedProduct.slug).catch(() => null)
       : null;
-    if (productData) {
+    if (submittedProduct) {
       if (!persistedProduct) {
-        await dbServer.productDb.upsert(productData).catch(() => {});
+        await dbServer.productDb.upsert(submittedProduct).catch(() => {});
         persistedProduct =
-          (await dbServer.productDb.getBySlug(productData.slug).catch(() => null)) ??
-          (await dbServer.productDb.getById(productData.id).catch(() => null));
+          (await dbServer.productDb.getBySlug(submittedProduct.slug).catch(() => null)) ??
+          (await dbServer.productDb.getById(submittedProduct.id).catch(() => null));
       }
     }
-    const requestedDose = productData?.doses?.find((dose: any) => dose.id === orderData?.doseId);
+    const requestedDose = submittedProduct?.doses?.find((dose: any) => dose.id === orderData?.doseId);
     const persistedDose = requestedDose && persistedProduct
       ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
       : null;
@@ -140,7 +145,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Load patient — create from submitted data if not in server DB
+    // 4. Load patient - create from submitted data if not in server DB
     let patient =
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
@@ -279,12 +284,12 @@ export async function POST(req: NextRequest) {
     const errors: string[] = [];
     const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
 
-    // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
+    // 8. QuickBooks accounting - customer record + invoice (payment already in QB Payments)
     try {
       const qbCustomerId = await quickbooks.createCustomerRecord(patient);
       const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
         patient,
-        product: productData ?? null,
+        product: submittedProduct ?? null,
         qbCustomerId,
       });
       await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
@@ -308,9 +313,9 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    // 9. PracticeQ — intake packet for provider chart
+    // 9. PracticeQ - intake packet for provider chart
     try {
-      await practiceq.submitIntakePacket(updatedOrder, { patient, product: productData ?? null });
+      await practiceq.submitIntakePacket(updatedOrder, { patient, product: submittedProduct ?? null });
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);
@@ -319,10 +324,10 @@ export async function POST(req: NextRequest) {
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor, "error", (e as Error).message);
     }
 
-    // 10. Life File — pharmacy prescription order
+    // 10. Life File - pharmacy prescription order
     if (dispatchGate.canDispatch) {
       try {
-        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: submittedProduct ?? null });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
@@ -350,7 +355,7 @@ export async function POST(req: NextRequest) {
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "draft" }).catch(() => {});
     }
 
-    // 11. Spruce SMS — "payment received, order processing"
+    // 11. Spruce SMS - "payment received, order processing"
     try {
       await spruceServer.sendMessage(
         patient,

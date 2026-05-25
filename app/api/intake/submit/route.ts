@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // 2. Duplicate submission guard — if already processed, return current state
+    // 2. Duplicate submission guard - if already processed, return current state
     if (order.status !== "draft" && order.status !== "pending_review") {
       return NextResponse.json(
         { error: "Order has already been processed", orderStatus: order.status },
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const updatedOrder = db.orderDb.getById(orderId)!;
 
-    // 6. Run integration chain — collect errors but don't fail the whole request
+    // 6. Run integration chain - collect errors but don't fail the whole request
     const errors: string[] = [];
 
     try {

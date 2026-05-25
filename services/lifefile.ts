@@ -7,9 +7,9 @@
  * Headers : X-Vendor-ID, X-Location-ID, X-API-Network-ID (all int32)
  *
  * Endpoints used:
- *   POST /order                          — create order
- *   PUT  /order/{orderId}/status         — update status
- *   PUT  /order/{orderId}/shipping       — update shipping address/service
+ *   POST /order                          - create order
+ *   PUT  /order/{orderId}/status         - update status
+ *   PUT  /order/{orderId}/shipping       - update shipping address/service
  *
  * Set USE_REAL_LIFEFILE=true in env to switch from mock to live calls.
  */
@@ -21,7 +21,7 @@ import { generateId } from "@/lib/utils";
 
 // ── Sandbox product ID map (slug / partial name → LF lfProductID) ─────────────
 const LF_PRODUCT_MAP: Record<string, number> = {
-  tirzepatide: 305492221,     // Acetaminophen 500mg — closest sandbox match
+  tirzepatide: 305492221,     // Acetaminophen 500mg - closest sandbox match
   semaglutide: 305492220,     // Acarbose 50mg
   "benzocaine-lidocaine-tetracaine": 305157968,
   "baclofen-dexamethasone-flurbiprofen": 305492218,
@@ -56,7 +56,7 @@ function mapGender(gender: string): "m" | "f" | "u" {
 }
 
 function formatPhone(phone: string): string {
-  // Life File format: (987) 654-3210 — try to reformat if digits-only input
+  // Life File format: (987) 654-3210 - try to reformat if digits-only input
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
@@ -95,18 +95,16 @@ function isTirzepatide(product: Types.Product): boolean {
 }
 
 function parseWeeklyDoseMg(dose: Types.DoseOption): number {
+  if (dose.weeklyDoseMg) return dose.weeklyDoseMg;
   const match = `${dose.strength} ${dose.label}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
   return match ? Number(match[1]) : 0;
 }
 
-function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
+function getTirzepatideDirections(dose: Types.DoseOption): string {
+  if (dose.prescriptionLabel) return dose.prescriptionLabel;
   const weeklyMg = parseWeeklyDoseMg(dose);
-  if (!weeklyMg || Number.isNaN(weeklyMg)) return 1;
-
-  const monthlyMg = weeklyMg * 4;
-  const mgPerMl = 20;
-  const vialMl = 2;
-  return Math.max(1, Math.ceil(monthlyMg / (mgPerMl * vialMl)));
+  const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
+  return `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`;
 }
 
 function buildPharmacyRxs(
@@ -116,8 +114,7 @@ function buildPharmacyRxs(
   dateWritten: string
 ): LfRxPayload[] {
   if (isTirzepatide(product)) {
-    const weeklyMg = parseWeeklyDoseMg(dose);
-    const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
+    const daysSupply = (dose.durationWeeks ?? 8) * 7;
     return [
       {
         rxType: "new",
@@ -125,12 +122,12 @@ function buildPharmacyRxs(
         drugStrength: "20MG/25MG/ML (2 ML)",
         drugForm: "INJECTABLE",
         lfProductID: lfProductId,
-        quantity: String(calculateTirzepatideVialQuantity(dose)),
+        quantity: String(dose.quantity),
         quantityUnits: "each",
-        directions: `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`,
+        directions: getTirzepatideDirections(dose),
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "L",
       },
       {
@@ -143,7 +140,7 @@ function buildPharmacyRxs(
         directions: "Use as directed with injection",
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "O",
       },
       {
@@ -156,7 +153,7 @@ function buildPharmacyRxs(
         directions: "Use as directed with injection",
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "O",
       },
     ];
@@ -226,7 +223,7 @@ export const createPharmacyOrder = async (
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) {
-    throw new Error("Invalid order data — missing patient, product or dose");
+    throw new Error("Invalid order data - missing patient, product or dose");
   }
 
   const c = cfg();
@@ -412,7 +409,7 @@ export const createPharmacyOrder = async (
 
 // ── updateOrderStatus ─────────────────────────────────────────────────────────
 // Called inbound (e.g. from webhook) or by admin to push a status update.
-// PUT /order/{orderId}/status  — body: { status: string }
+// PUT /order/{orderId}/status  - body: { status: string }
 
 export const updateOrderStatus = async (
   orderId: string,
@@ -432,7 +429,7 @@ export const updateOrderStatus = async (
         body: JSON.stringify({ status }),
       });
       if (body.type === "error") {
-        // Log but don't fail — status update is best-effort from our side
+        // Log but don't fail - status update is best-effort from our side
       }
     } catch { /* log silently */ }
   }
@@ -456,7 +453,7 @@ export const updateOrderStatus = async (
 
 // ── addTrackingNumber ─────────────────────────────────────────────────────────
 // Called from the inbound Life File webhook when a shipment is created.
-// Tracking is pushed TO us — we don't send it to Life File.
+// Tracking is pushed TO us - we don't send it to Life File.
 
 export const addTrackingNumber = async (
   orderId: string,
@@ -488,7 +485,7 @@ export const addTrackingNumber = async (
 };
 
 // ── updateShipping ────────────────────────────────────────────────────────────
-// PUT /order/{orderId}/shipping — update recipient/address after order is placed.
+// PUT /order/{orderId}/shipping - update recipient/address after order is placed.
 
 export const updateShipping = async (
   orderId: string,
@@ -528,7 +525,7 @@ export const updateShipping = async (
     }
   }
 
-  return true; // mock — always succeeds
+  return true; // mock - always succeeds
 };
 
 // ── getOrderStatus ────────────────────────────────────────────────────────────
