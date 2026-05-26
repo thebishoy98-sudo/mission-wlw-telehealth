@@ -12,7 +12,7 @@ describe("validateSharedSecret", () => {
   });
 
   it("returns a controlled service unavailable error when a production webhook secret is missing", () => {
-    setNodeEnv("production");
+    process.env.VERCEL_ENV = "production";
     delete process.env.PRACTICEQ_WEBHOOK_KEY;
 
     const result = validateSharedSecret({
@@ -30,7 +30,7 @@ describe("validateSharedSecret", () => {
   });
 
   it("rejects invalid webhook secrets when configured", () => {
-    setNodeEnv("production");
+    process.env.VERCEL_ENV = "production";
 
     const result = validateSharedSecret({
       configuredSecret: "expected",
@@ -46,10 +46,3 @@ describe("validateSharedSecret", () => {
     });
   });
 });
-
-function setNodeEnv(value: string) {
-  Object.defineProperty(process.env, "NODE_ENV", {
-    value,
-    configurable: true,
-  });
-}

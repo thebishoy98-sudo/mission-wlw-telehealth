@@ -88,11 +88,17 @@ Webhook URL configured in PracticeQ:
 | `LIFEFILE_PRESCRIBER_LICENSE_NUMBER`, `LIFEFILE_PRESCRIBER_LICENSE_STATE` | License metadata | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Sent in the Life File prescriber payload. |
 | `LIFEFILE_SHIPPING_SERVICE_ID` | Shipping service | `lib/service-config.ts`, `services/lifefile.ts` | Present in Production, Development | Required. |
 | `LIFEFILE_WEBHOOK_SECRET` | Inbound webhook signature | `app/api/webhooks/lifefile/route.ts`, `app/api/webhooks/lifefile/order/[orderId]/status/route.ts` | Required/configured for production webhook rollout | Required before accepting real webhooks. Production webhook routes fail closed if missing. Share only the endpoint with the pharmacy; keep this secret private. |
+| `USE_PHARMACY_TRACKING_SCRIPT` | Enables Google Apps Script tracking bridge | `services/pharmacy-tracking-script.ts`, `app/api/cron/pharmacy-tracking-sync/route.ts` | Missing | Set to `true` after the script endpoint is ready for sync/forward payloads. |
+| `PHARMACY_TRACKING_SCRIPT_URL` | Google Apps Script endpoint pharmacy is using for tracking | `services/pharmacy-tracking-script.ts` | Missing | Store from the pharmacy-provided webhook details. Do not hardcode. |
+| `PHARMACY_TRACKING_SCRIPT_USERNAME` | Basic auth username for script endpoint | `services/pharmacy-tracking-script.ts` | Missing | Store as secret. Rotate because it was shared in screenshot/chat. |
+| `PHARMACY_TRACKING_SCRIPT_PASSWORD` | Basic auth password for script endpoint | `services/pharmacy-tracking-script.ts` | Missing | Store as secret. Rotate because it was shared in screenshot/chat. |
 
 Webhook URL:
 - `https://<production-domain>/api/webhooks/lifefile`
 - Raw Life File-style order status URL:
   `https://<production-domain>/api/webhooks/lifefile/order/{orderId}/status`
+- Google Apps Script sync bridge:
+  `GET/POST https://<production-domain>/api/cron/pharmacy-tracking-sync`
 
 The provided Life File OpenAPI PDF does not document inbound webhooks or a polling/read endpoint for order status. It only documents `POST /order`, `PUT /order/{orderId}/status`, and `PUT /order/{orderId}/shipping`. Status callbacks require separate Life File/1stChoiceRx confirmation.
 

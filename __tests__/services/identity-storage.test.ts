@@ -12,21 +12,25 @@ describe("identity-storage", () => {
     process.env = originalEnv;
   });
 
-  it("refuses to persist identity media in production without a configured storage provider", async () => {
-    setNodeEnv("production");
+  it("falls back to database media storage when S3 is not configured", async () => {
+    process.env.VERCEL_ENV = "production";
     delete process.env.IDENTITY_STORAGE_PROVIDER;
 
-    await expect(
-      buildIdentityUploads({
-        orderId: "order_1",
-        idImageData: "data:image/jpeg;base64,aGVsbG8=",
-        selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
-      })
-    ).rejects.toThrow("IDENTITY_STORAGE_PROVIDER is required");
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await buildIdentityUploads({
+      orderId: "order_1",
+      idImageData: "data:image/jpeg;base64,aGVsbG8=",
+      selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
+    });
+
+    expect(result.uploads).toHaveLength(2);
+    expect(result.uploads.every((upload) => upload.base64Data.startsWith("data:image/jpeg;base64,"))).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("IDENTITY_STORAGE_PROVIDER is not 's3'"));
+    warn.mockRestore();
   });
 
   it("stores only metadata for S3-backed identity media and keeps base64 only for AI verification", async () => {
-    setNodeEnv("production");
+    process.env.VERCEL_ENV = "production";
     process.env.IDENTITY_STORAGE_PROVIDER = "s3";
     process.env.IDENTITY_STORAGE_BUCKET = "mission-identity";
     process.env.IDENTITY_STORAGE_REGION = "us-east-1";
@@ -55,10 +59,3 @@ describe("identity-storage", () => {
     (global as unknown as { fetch?: unknown }).fetch = undefined;
   });
 });
-
-function setNodeEnv(value: string) {
-  Object.defineProperty(process.env, "NODE_ENV", {
-    value,
-    configurable: true,
-  });
-}

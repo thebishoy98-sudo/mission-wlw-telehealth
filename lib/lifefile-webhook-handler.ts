@@ -6,6 +6,7 @@ import * as spruceServer from "@/services/spruce.server";
 import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { normalizeLifeFileWebhookPayload } from "@/lib/lifefile-webhook";
+import { forwardTrackingToScript } from "@/services/pharmacy-tracking-script";
 
 function verifyLifeFileSignature(body: string, signature: string, secret: string): boolean {
   const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -41,6 +42,10 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
     req.nextUrl.searchParams.get("orderId") ??
     req.nextUrl.searchParams.get("lifeFileOrderId") ??
     routeOrderId;
+  return applyLifeFileWebhookPayload(payload, queryOrderId);
+}
+
+export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "") {
   const { event, lifeFileOrderId, trackingNumber, lifeFileError, rawStatus } =
     normalizeLifeFileWebhookPayload(payload, queryOrderId);
 
@@ -116,6 +121,29 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
       if (patient) {
         spruceServer.sendMessage(patient, "order_shipped", { orderId, trackingNumber: trackingNumber ?? "" }).catch(() => {});
       }
+      forwardTrackingToScript({
+        event,
+        lifeFileOrderId,
+        orderId,
+        trackingNumber,
+        rawStatus,
+        receivedAt: now,
+        payload,
+      }).then((result) => {
+        if ("error" in result) {
+          dbServer.integrationLogDb.create({
+            id: generateId(),
+            timestamp: new Date().toISOString(),
+            integrationName: "lifefile",
+            action: "Tracking script forward failed",
+            orderId,
+            patientId,
+            status: "error",
+            details: { lifeFileOrderId, trackingNumber },
+            error: result.error,
+          }).catch(() => {});
+        }
+      }).catch(() => {});
       break;
     }
 
