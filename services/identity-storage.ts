@@ -112,15 +112,21 @@ async function storeIdentityMedia(input: IdentityMediaInput): Promise<Upload> {
   };
 }
 
+// Vercel sets NODE_ENV=production on ALL deployments (including dev/preview branches).
+// Use VERCEL_ENV to distinguish actual production from dev/preview deployments.
+function isVercelProduction() {
+  return process.env.VERCEL_ENV === "production";
+}
+
 function getStorageProvider(): "database" | "s3" {
   const provider = process.env.IDENTITY_STORAGE_PROVIDER?.trim().toLowerCase();
   if (!provider) {
-    if (process.env.NODE_ENV === "production") {
+    if (isVercelProduction()) {
       throw new Error("IDENTITY_STORAGE_PROVIDER is required in production before storing identity media");
     }
     return "database";
   }
-  if (provider === "database" && process.env.NODE_ENV === "production") {
+  if (provider === "database" && isVercelProduction()) {
     throw new Error("IDENTITY_STORAGE_PROVIDER=database is not allowed in production for identity media");
   }
   if (provider === "database" || provider === "s3") return provider;
