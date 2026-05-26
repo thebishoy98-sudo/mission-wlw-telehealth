@@ -1,4 +1,4 @@
-import { validateSharedSecret } from "@/lib/webhook-auth";
+import { validateBasicAuth, validateSharedSecret } from "@/lib/webhook-auth";
 
 describe("validateSharedSecret", () => {
   const originalEnv = process.env;
@@ -40,6 +40,32 @@ describe("validateSharedSecret", () => {
     });
 
     expect(result).toEqual({
+      ok: false,
+      status: 401,
+      error: "Unauthorized",
+    });
+  });
+
+  it("accepts valid Basic Auth credentials", () => {
+    const header = `Basic ${Buffer.from("pharmacy:secret").toString("base64")}`;
+
+    expect(validateBasicAuth({
+      authorizationHeader: header,
+      configuredUsername: "pharmacy",
+      configuredPassword: "secret",
+      serviceName: "Pharmacy",
+    })).toEqual({ ok: true });
+  });
+
+  it("rejects invalid Basic Auth credentials", () => {
+    const header = `Basic ${Buffer.from("pharmacy:wrong").toString("base64")}`;
+
+    expect(validateBasicAuth({
+      authorizationHeader: header,
+      configuredUsername: "pharmacy",
+      configuredPassword: "secret",
+      serviceName: "Pharmacy",
+    })).toEqual({
       ok: false,
       status: 401,
       error: "Unauthorized",
