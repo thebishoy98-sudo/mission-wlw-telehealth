@@ -11,54 +11,70 @@ export default function PrivacyPage() {
 
         <div className="space-y-6 text-sm leading-6">
           <p>
-            Mission WLW operates a telehealth and medication access platform. We collect and use information needed to
-            provide intake, eligibility review, payment, pharmacy coordination, patient communication, and support.
+            Mission WLW provides online intake, care coordination, payment coordination, pharmacy coordination, and
+            patient communication tools. This Privacy Policy explains what information we collect, how we use it, and
+            how we protect it.
           </p>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Information We Collect</h2>
             <p>
-              We may collect account details, contact information, shipping information, questionnaire responses,
-              consent records, identity verification materials, order details, payment status, and technical data such
-              as device, browser, and request metadata.
+              We collect information you provide directly, information generated through your use of Mission WLW, and
+              information received from connected services. This may include contact details, account information,
+              shipping information, questionnaire responses, consent records, identity verification materials, order
+              details, payment status, messages, support requests, and technical information such as browser, device,
+              log, and request data.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">How We Use Information</h2>
             <p>
-              We use information to operate the service, support patient intake, coordinate provider review, process or
-              record payments, create accounting records, submit approved pharmacy orders, send operational messages,
-              detect misuse, troubleshoot issues, and comply with legal or regulatory obligations.
+              We use information to operate Mission WLW, manage patient intake, support provider review, coordinate
+              pharmacy orders, send service-related messages, process or record payment activity, maintain accounting
+              records, troubleshoot issues, improve reliability, protect against misuse, and meet legal, regulatory, and
+              contractual obligations.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">QuickBooks and Intuit Data</h2>
+            <h2 className="mb-2 text-lg font-semibold text-gray-950">QuickBooks Information</h2>
             <p>
-              When you connect QuickBooks, we use Intuit APIs only for authorized accounting, invoicing, payment
-              reconciliation, and related operational workflows. We do not sell QuickBooks data. Access tokens and
-              integration credentials are treated as confidential and are used only to provide the connected service.
+              If an authorized admin connects QuickBooks Online, Mission WLW may receive and use QuickBooks company
+              information needed to support the connected accounting workflow. This can include customer, invoice,
+              payment, transaction, and company identifiers. We use QuickBooks information to create or update accounting
+              records, reconcile payment activity, troubleshoot sync issues, maintain audit records, and support the
+              integration. We do not sell QuickBooks information or use it for advertising.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-lg font-semibold text-gray-950">Connected Account Credentials</h2>
+            <p>
+              Tokens, API keys, and integration credentials are used to operate authorized connections and are restricted
+              to personnel and systems that need access to provide the service. We do not ask users to share QuickBooks
+              passwords with Mission WLW.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Sharing Information</h2>
             <p>
-              We share information with service providers only as needed to operate the platform. These may include
-              payment, accounting, pharmacy, messaging, identity verification, hosting, database, support, and analytics
-              providers. Health-related information should be shared only with vendors that are appropriate for the
-              workflow and under required agreements.
+              We share information with service providers and partners only as needed to operate Mission WLW and complete
+              requested workflows. These may include hosting, database, payment, accounting, pharmacy, messaging,
+              identity verification, analytics, and support providers. We may also share information when required by
+              law, to protect rights and safety, or as part of a business transaction. Health-related information should
+              be shared only through appropriate workflows and vendor arrangements.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Security</h2>
             <p>
-              We use administrative, technical, and physical safeguards designed to protect information, including
-              encrypted transport, restricted operational access, environment-based secrets, and audit logging where
-              applicable. No system is completely secure, and production readiness depends on proper configuration,
-              vendor agreements, access control, monitoring, and operational policies.
+              We use safeguards designed to protect information, including encrypted transport, restricted operational
+              access, environment-managed secrets, monitoring, and audit logging where appropriate. No system can be
+              guaranteed completely secure, but we work to maintain controls that are appropriate for the type of
+              information processed and the services we provide.
             </p>
           </section>
 

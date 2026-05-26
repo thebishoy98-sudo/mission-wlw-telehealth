@@ -11,60 +11,76 @@ export default function TermsPage() {
 
         <div className="space-y-6 text-sm leading-6">
           <p>
-            These Terms of Service and End User License Agreement govern access to and use of the Mission WLW platform.
-            By using the service, you agree to these terms and any additional notices presented in the product.
+            These Terms of Service and End User License Agreement apply to your use of Mission WLW, including our
+            website, intake tools, patient communications, payment coordination, and connected business software
+            features. By accessing or using Mission WLW, you agree to these terms.
           </p>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Service Description</h2>
             <p>
-              Mission WLW provides online intake, eligibility workflow, payment and accounting coordination, provider
-              review support, pharmacy order coordination, and patient communication tools. Medical decisions are made
-              by licensed providers, not by the software.
+              Mission WLW supports online intake, eligibility review workflows, provider review coordination, patient
+              messaging, payment coordination, accounting workflows, and pharmacy order coordination. The platform is an
+              administrative and care coordination tool. Medical decisions, including eligibility, prescriptions,
+              dosage, and follow-up care, are made by qualified healthcare professionals.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">License and Restrictions</h2>
             <p>
-              We grant authorized users a limited, revocable, non-transferable license to access the service for its
-              intended business or care coordination purpose. Users may not reverse engineer the service, misuse APIs,
-              interfere with security controls, upload malicious content, or use the service unlawfully.
+              We grant authorized users a limited, non-exclusive, non-transferable right to access Mission WLW for its
+              intended business, patient intake, and care coordination purposes. You may not copy, resell, reverse
+              engineer, interfere with, or misuse the platform; attempt to bypass security controls; upload malicious
+              content; or use Mission WLW for any unlawful purpose.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">QuickBooks Connection</h2>
             <p>
-              If you connect QuickBooks or Intuit services, you authorize Mission WLW to access and use the connected
-              company data only for accounting, invoicing, payment reconciliation, and related operational workflows.
-              You may revoke access through QuickBooks or the disconnect flow at any time.
+              When an authorized admin connects a QuickBooks Online company, Mission WLW may access and update the
+              QuickBooks records needed to perform the requested accounting workflow, such as creating customers,
+              preparing invoices, recording payment status, and reconciling order activity. Mission WLW does not use the
+              QuickBooks connection for unrelated purposes. The connection can be revoked from QuickBooks or through the
+              Mission WLW disconnect page.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-lg font-semibold text-gray-950">Third-Party Services</h2>
+            <p>
+              Mission WLW may rely on third-party services for hosting, payment processing, accounting, pharmacy
+              coordination, secure communications, analytics, and support. Your use of those connected services may also
+              be governed by their own terms and policies. Mission WLW is not affiliated with or endorsed by Intuit.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">User Responsibilities</h2>
             <p>
-              Users are responsible for providing accurate information, maintaining account confidentiality, using the
-              service only for lawful purposes, and ensuring they have authority to submit information or connect third
-              party services such as QuickBooks.
+              You are responsible for providing accurate information, keeping account credentials secure, maintaining
+              authority to act on behalf of your organization, and ensuring that any third-party account you connect,
+              including QuickBooks, is connected by an authorized user.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Medical and Pharmacy Disclaimer</h2>
             <p>
-              The platform supports administrative and care coordination workflows. It does not replace medical advice,
-              diagnosis, treatment, or provider judgment. Eligibility, prescriptions, dosage decisions, and pharmacy
-              fulfillment are handled by qualified professionals and applicable third parties.
+              Mission WLW does not provide medical advice, diagnose conditions, prescribe medication, or operate as a
+              pharmacy. The platform supports administrative workflows used by patients, providers, staff, and pharmacy
+              partners. Clinical decisions and pharmacy fulfillment remain the responsibility of the applicable licensed
+              professionals and third-party providers.
             </p>
           </section>
 
           <section>
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Availability and Changes</h2>
             <p>
-              We may update, suspend, or discontinue parts of the service as needed for security, compliance,
-              maintenance, legal obligations, or business reasons. We may update these terms from time to time.
+              We may update, suspend, or discontinue parts of Mission WLW as needed for security, maintenance,
+              compliance, legal, operational, or business reasons. We may also update these terms from time to time.
+              Continued use of the service after an update means you accept the updated terms.
             </p>
           </section>
 
