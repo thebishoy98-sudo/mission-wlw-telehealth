@@ -141,9 +141,6 @@ export const sendMessage = (
       templateKey: templateKey,
       phone: patient.phone,
       messageLength: messageText.length,
-      // In production:
-      // apiEndpoint: `${API_BASE_URL}/message/send`,
-      // spruceMessageId: "msg_12345"
     },
   });
 
@@ -213,9 +210,6 @@ export const scheduleMessage = (
       templateKey: templateKey,
       phone: patient.phone,
       scheduledFor: scheduledFor,
-      // In production:
-      // apiEndpoint: `${API_BASE_URL}/message/schedule`,
-      // spruceMessageId: "msg_12345"
     },
   });
 
@@ -308,35 +302,3 @@ export const updateMessageTemplate = (
   return template;
 };
 
-/**
- * PRODUCTION NOTES:
- *
- * Replace with actual Spruce API implementation:
- *
- * export const sendMessage = async (patientId, templateKey, variables) => {
- *   const response = await fetch(`${API_BASE_URL}/message/send`, {
- *     method: "POST",
- *     headers: {
- *       "Authorization": `Bearer ${API_KEY}`,
- *       "Content-Type": "application/json",
- *     },
- *     body: JSON.stringify({
- *       patientId,
- *       templateKey,
- *       variables,
- *     }),
- *   });
- *
- *   if (!response.ok) {
- *     throw new Error(`Spruce API error: ${response.statusText}`);
- *   }
- *
- *   const result = await response.json();
- *   // Save with real Spruce message ID...
- *   return result;
- * };
- *
- * export const scheduleMessage = async (...) => {
- *   // Similar to sendMessage but use /message/schedule endpoint
- * };
- */

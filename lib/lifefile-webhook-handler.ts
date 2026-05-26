@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 import { normalizeLifeFileWebhookPayload } from "@/lib/lifefile-webhook";
 
@@ -18,7 +18,7 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
   const signature = req.headers.get("x-lifefile-signature") ?? "";
   const secret = process.env.LIFEFILE_WEBHOOK_SECRET ?? "";
 
-  if (!secret && process.env.NODE_ENV === "production") {
+  if (!secret && process.env.VERCEL_ENV === "production") {
     return NextResponse.json({ error: "LIFEFILE_WEBHOOK_SECRET is not configured" }, { status: 500 });
   }
   if (secret && !signature) {
@@ -78,6 +78,10 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
+  const getPatient = async () => {
+    return (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId);
+  };
+
   switch (event) {
     case "order.received": {
       db.pharmacyOrderDb.update(pharmacyOrder.id, { status: "received" });
@@ -94,7 +98,10 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
       await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, { status: "processing" }).catch(() => {});
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "processing" }).catch(() => {});
       log("Pharmacy processing order");
-      try { spruce.sendMessage(patientId, "order_processing", { orderId }); } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "order_processing", { orderId }).catch(() => {});
+      }
       break;
     }
 
@@ -105,9 +112,10 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
       await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, { status: "shipped", trackingNumber, shippedAt: now }).catch(() => {});
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "shipped", status: "shipped" }).catch(() => {});
       log("Pharmacy shipped order");
-      try {
-        spruce.sendMessage(patientId, "order_shipped", { orderId, trackingNumber: trackingNumber ?? "" });
-      } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "order_shipped", { orderId, trackingNumber: trackingNumber ?? "" }).catch(() => {});
+      }
       break;
     }
 
@@ -118,11 +126,11 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
       await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, { status: "delivered", deliveredAt: now }).catch(() => {});
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "delivered", status: "delivered" }).catch(() => {});
       log("Pharmacy delivered order");
-      try { spruce.sendMessage(patientId, "order_delivered", { orderId }); } catch {}
-      try {
-        const reorderDate = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString();
-        spruce.scheduleMessage(patientId, "reorder_reminder", reorderDate, { orderId });
-      } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "order_delivered", { orderId }).catch(() => {});
+        spruceServer.sendMessage(patient, "reorder_reminder", { orderId }).catch(() => {});
+      }
       break;
     }
 

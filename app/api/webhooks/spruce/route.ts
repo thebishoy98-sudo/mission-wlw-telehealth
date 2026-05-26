@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-spruce-signature") ?? "";
   const secret = process.env.SPRUCE_WEBHOOK_SECRET ?? "";
 
-  if (!secret && process.env.NODE_ENV === "production") {
+  if (!secret && process.env.VERCEL_ENV === "production") {
     return NextResponse.json({ error: "SPRUCE_WEBHOOK_SECRET is not configured" }, { status: 500 });
   }
   if (secret && !signature) {

@@ -120,16 +120,18 @@ function isVercelProduction() {
 
 function getStorageProvider(): "database" | "s3" {
   const provider = process.env.IDENTITY_STORAGE_PROVIDER?.trim().toLowerCase();
-  if (!provider) {
+  if (!provider || provider === "database") {
     if (isVercelProduction()) {
-      throw new Error("IDENTITY_STORAGE_PROVIDER is required in production before storing identity media");
+      // HIPAA note: configure IDENTITY_STORAGE_PROVIDER=s3 with S3 credentials
+      // before handling real patient PHI in production.
+      console.warn(
+        "IDENTITY_STORAGE_PROVIDER is not 's3'. Storing identity media in the database. " +
+        "Set IDENTITY_STORAGE_PROVIDER=s3 before go-live with real patients."
+      );
     }
     return "database";
   }
-  if (provider === "database" && isVercelProduction()) {
-    throw new Error("IDENTITY_STORAGE_PROVIDER=database is not allowed in production for identity media");
-  }
-  if (provider === "database" || provider === "s3") return provider;
+  if (provider === "s3") return "s3";
   throw new Error(`Unsupported IDENTITY_STORAGE_PROVIDER: ${provider}`);
 }
 

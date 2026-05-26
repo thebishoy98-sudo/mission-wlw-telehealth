@@ -14,6 +14,8 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   order_delivered: "Your order has been delivered.",
   identity_review_received: "Your payment and identity verification were received. Your provider will review everything before pharmacy dispatch.",
   identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and 10-second identity video here: {{uploadUrl}}",
+  identity_reminder_day1: "Reminder: We still need your identity verification to send your prescription to the pharmacy. Please upload your ID and complete the 10-second video here: {{uploadUrl}}",
+  identity_reminder_day2: "Final reminder: Your prescription is on hold pending identity verification. Complete your ID upload here: {{uploadUrl}} — contact support if you need help.",
   reorder_reminder: "It may be time to request your next refill. Log in to your patient portal to reorder.",
 };
 

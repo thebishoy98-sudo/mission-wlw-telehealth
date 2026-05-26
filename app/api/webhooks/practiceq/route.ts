@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import * as lifefile from "@/services/lifefile";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   const incomingEvent = payload.event ?? payload.Type;
   const incomingPacketId = payload.packetId ?? payload.IntakeId;
   const incomingOrderRef = payload.orderId ?? payload.ExternalClientId;
-  const { status, notes, rejectionReason } = payload;
+  const { notes, rejectionReason } = payload;
 
   // Find the order by PracticeQ packet reference
   const serverPacket =
@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
     };
     db.integrationLogDb.create(entry);
     dbServer.integrationLogDb.create(entry).catch(() => {});
+  };
+
+  const getPatient = async () => {
+    return (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId);
   };
 
   switch (incomingEvent) {
@@ -109,15 +113,31 @@ export async function POST(req: NextRequest) {
           status: "approved", reviewedAt: new Date().toISOString(),
           reviewedBy: "provider-via-practiceq", notes,
         });
+        await dbServer.providerReviewDb.update(review.id, {
+          status: "approved", reviewedAt: new Date().toISOString(),
+          reviewedBy: "provider-via-practiceq",
+        }).catch(() => {});
       }
 
       // Trigger pharmacy order if not already sent
-      const order = db.orderDb.getById(orderId);
-      if (order && getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(orderId) === null) {
-        try { await lifefile.createPharmacyOrder(order); } catch {}
+      const order =
+        (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+      if (order && getIdentityGate(order).canDispatch) {
+        const existingPharmacyOrder =
+          (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
+          db.pharmacyOrderDb.getByOrder(orderId);
+        if (!existingPharmacyOrder) {
+          try {
+            const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+            await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
+          } catch {}
+        }
       }
 
-      try { spruce.sendMessage(patientId, "approved", { orderId }); } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "approved", { orderId }).catch(() => {});
+      }
       log("PracticeQ: order approved by provider");
       break;
     }
@@ -134,9 +154,16 @@ export async function POST(req: NextRequest) {
           status: "rejected", reviewedAt: new Date().toISOString(),
           reviewedBy: "provider-via-practiceq", rejectionReason, notes,
         });
+        await dbServer.providerReviewDb.update(review.id, {
+          status: "rejected", reviewedAt: new Date().toISOString(),
+          reviewedBy: "provider-via-practiceq", rejectionReason,
+        }).catch(() => {});
       }
 
-      try { spruce.sendMessage(patientId, "rejected", { orderId }); } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "rejected", { orderId }).catch(() => {});
+      }
       log("PracticeQ: order rejected by provider", "error");
       break;
     }

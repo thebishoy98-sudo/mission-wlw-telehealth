@@ -15,7 +15,7 @@ export function validateSharedSecret({
   serviceName,
   envName,
 }: SharedSecretValidationInput): SharedSecretValidationResult {
-  if (!configuredSecret && process.env.NODE_ENV === "production") {
+  if (!configuredSecret && process.env.VERCEL_ENV === "production") {
     console.error(`${envName} is not configured`);
     return {
       ok: false,
