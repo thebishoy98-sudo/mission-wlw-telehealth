@@ -1,5 +1,6 @@
 import * as practiceq from "@/services/practiceq";
 import * as db from "@/lib/db";
+import { serviceConfig } from "@/lib/service-config";
 import type { Order, Patient, Product } from "@/types";
 
 const makePatient = (): Patient => ({
@@ -103,5 +104,104 @@ describe("practiceq.getPacketStatus", () => {
     await practiceq.submitIntakePacket(order);
     const result = practiceq.getPacketStatus("o1");
     expect(result.status).toBe("submitted");
+  });
+});
+
+describe("practiceq live mirror helpers", () => {
+  const originalFetch = global.fetch;
+  const originalConfig = { ...serviceConfig.practiceq };
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    Object.assign(serviceConfig.practiceq, originalConfig);
+    jest.restoreAllMocks();
+  });
+
+  it("fetches a full intake by id with PracticeQ authentication", async () => {
+    serviceConfig.practiceq.apiKey = "test-api-key";
+    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ Id: "intake_123", Status: "Completed" }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const intake = await practiceq.getIntakeById("intake_123");
+
+    expect(fetchMock).toHaveBeenCalledWith("https://intakeq.com/api/v1/intakes/intake_123", {
+      headers: {
+        "X-Auth-Key": "test-api-key",
+        "Content-Type": "application/json",
+      },
+    });
+    expect(intake).toMatchObject({ Id: "intake_123", Status: "Completed" });
+  });
+
+  it("returns unavailable mirror data when PracticeQ API key is missing", async () => {
+    serviceConfig.practiceq.apiKey = "";
+    const order = { ...makeOrder(), practiceqClientId: "12345" };
+
+    const mirror = await practiceq.getPracticeQMirrorForOrder(order);
+
+    expect(mirror.available).toBe(false);
+    expect(mirror.reason).toBe("PRACTICEQ_API_KEY is not configured");
+    expect(mirror.clientId).toBe("12345");
+  });
+
+  it("normalizes PracticeQ client and intake answers for an order", async () => {
+    serviceConfig.practiceq.apiKey = "test-api-key";
+    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+    const order = { ...makeOrder(), practiceqClientId: "12345" };
+    const packet = {
+      id: "intake_123",
+      orderId: order.id,
+      patientId: order.patientId,
+      submittedAt: "2026-05-26T10:00:00.000Z",
+      status: "submitted" as const,
+      packetData: {
+        patientInfo: {},
+        questionnaireAnswers: [],
+        consentRecord: {},
+        uploads: [],
+        productRequested: "Tirzepatide",
+        doseSelected: "2.5mg Starter",
+      },
+    };
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ ClientId: 12345, Name: "Bob Jones", Email: "bob@example.com" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            Id: "intake_123",
+            ClientId: 12345,
+            Status: "Completed",
+            QuestionnaireName: "Medical: Brief Intake Form",
+            DateSubmitted: 1779793200000,
+            Questions: [
+              { Text: "Current weight", Answer: "210" },
+              { QuestionText: "Medication allergies", Value: "None" },
+            ],
+          }),
+      });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const mirror = await practiceq.getPracticeQMirrorForOrder(order, packet);
+
+    expect(mirror).toMatchObject({
+      available: true,
+      clientId: "12345",
+      intakeId: "intake_123",
+      status: "Completed",
+      questionnaireName: "Medical: Brief Intake Form",
+    });
+    expect(mirror.answers).toEqual([
+      { question: "Current weight", answer: "210" },
+      { question: "Medication allergies", answer: "None" },
+    ]);
   });
 });

@@ -24,6 +24,17 @@ type PracticeQApiResponse = {
   packetId?: string;
   status?: string;
   requestId?: string;
+  [key: string]: unknown;
+};
+
+type PracticeQIntake = PracticeQApiResponse & {
+  Id?: string;
+  ClientId?: number | string;
+  Status?: string;
+  QuestionnaireName?: string;
+  DateSubmitted?: number | string;
+  Questions?: unknown[];
+  questions?: unknown[];
 };
 
 const normalizeEndpoint = () => {
@@ -156,6 +167,61 @@ export const simulateProviderReview = (orderId: string): void => {
   }
 };
 
+export function buildPracticeQUrl(path: string): string {
+  const normalized = path.startsWith("/") || path.startsWith("#") ? path : `/${path}`;
+  return `https://intakeq.com/${normalized}`;
+}
+
+export async function getIntakeById(intakeId: string): Promise<PracticeQIntake | null> {
+  if (!serviceConfig.practiceq.apiKey) return null;
+  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(intakeId)}`, {
+    headers: pqHeaders(),
+  });
+  if (!response.ok) return null;
+  return parsePracticeQResponse(response) as Promise<PracticeQIntake | null>;
+}
+
+export async function getPracticeQMirrorForOrder(
+  order: Types.Order,
+  packet?: Types.PracticeQPacket | null
+): Promise<Types.PracticeQMirror> {
+  const clientId = order.practiceqClientId;
+  const intakeId = packet?.id;
+  const unavailable = (reason: string): Types.PracticeQMirror => ({
+    available: false,
+    reason,
+    clientId: clientId ? String(clientId) : undefined,
+    intakeId,
+    answers: [],
+  });
+
+  if (!serviceConfig.practiceq.apiKey) {
+    return unavailable("PRACTICEQ_API_KEY is not configured");
+  }
+
+  if (!clientId && !intakeId) {
+    return unavailable("No PracticeQ client or intake id is linked to this order");
+  }
+
+  const [client, intake] = await Promise.all([
+    clientId ? getClientById(clientId).catch(() => null) : Promise.resolve(null),
+    intakeId ? getIntakeById(intakeId).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  return {
+    available: true,
+    clientId: clientId ? String(clientId) : intake?.ClientId ? String(intake.ClientId) : undefined,
+    intakeId: intake?.Id ? String(intake.Id) : intakeId,
+    status: intake?.Status ?? packet?.status,
+    questionnaireName: intake?.QuestionnaireName,
+    submittedAt: normalizePracticeQDate(intake?.DateSubmitted) ?? packet?.submittedAt,
+    clientName: client?.Name ?? ([client?.FirstName, client?.LastName].filter(Boolean).join(" ") || undefined),
+    clientEmail: client?.Email,
+    practiceQUrl: intakeId ? buildPracticeQUrl(`#/history/${intakeId}`) : undefined,
+    answers: normalizePracticeQAnswers(intake),
+  };
+}
+
 function buildPacket(
   order: Types.Order,
   patient: Types.Patient,
@@ -182,6 +248,45 @@ function buildPacket(
         "Unknown",
     },
   };
+}
+
+function normalizePracticeQDate(value: unknown): string | undefined {
+  if (typeof value === "number") return new Date(value).toISOString();
+  if (typeof value === "string" && value.trim()) {
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) return new Date(asNumber).toISOString();
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return undefined;
+}
+
+function normalizePracticeQAnswers(intake: PracticeQIntake | null): Types.PracticeQMirrorAnswer[] {
+  const questions = intake?.Questions ?? intake?.questions ?? [];
+  if (!Array.isArray(questions)) return [];
+
+  return questions
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as Record<string, unknown>;
+      const question = firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name);
+      const answer = firstString(entry.Answer, entry.Value, entry.AnswerText, entry.Response);
+      if (!question && !answer) return null;
+      return {
+        question: question || "Question",
+        answer: answer || "",
+      };
+    })
+    .filter((answer): answer is Types.PracticeQMirrorAnswer => Boolean(answer));
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
+  }
+  return "";
 }
 
 function persistPacket(packet: Types.PracticeQPacket): Types.PracticeQPacket {
