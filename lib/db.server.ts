@@ -120,30 +120,25 @@ export const patientDb = {
     return rows[0] ? rowToPatient(rows[0]) : null;
   },
 
-  async create(p: Patient): Promise<Patient> {
+  async create(p: Patient & { practiceqClientId?: string }): Promise<Patient> {
+    // PHI lives in PracticeQ — store only a stub (id + email for dedup + practiceq_client_id)
     await sql`
-      INSERT INTO patients (id, first_name, last_name, date_of_birth, gender, phone, email,
-        address, shipping_address, emergency_contact, created_at, updated_at)
-      VALUES (${p.id}, ${p.firstName}, ${p.lastName}, ${p.dateOfBirth}, ${p.gender},
-        ${p.phone}, ${p.email}, ${JSON.stringify(p.address)}::jsonb, ${JSON.stringify(p.shippingAddress)}::jsonb,
-        ${JSON.stringify(p.emergencyContact ?? null)}::jsonb, ${p.createdAt}, ${p.updatedAt})
-      ON CONFLICT (id) DO NOTHING
+      INSERT INTO patients (id, email, practiceq_client_id, created_at, updated_at)
+      VALUES (${p.id}, ${p.email ?? null}, ${(p as any).practiceqClientId ?? null},
+        ${p.createdAt}, ${p.updatedAt})
+      ON CONFLICT (id) DO UPDATE SET
+        practiceq_client_id = COALESCE(EXCLUDED.practiceq_client_id, patients.practiceq_client_id),
+        updated_at = EXCLUDED.updated_at
     `;
     return p;
   },
 
-  async update(id: string, data: Partial<Patient>): Promise<Patient | null> {
+  async update(id: string, data: Partial<Patient> & { practiceqClientId?: string }): Promise<Patient | null> {
     const now = new Date().toISOString();
     await sql`
       UPDATE patients SET
-        first_name = COALESCE(${data.firstName ?? null}, first_name),
-        last_name  = COALESCE(${data.lastName ?? null}, last_name),
-        date_of_birth = COALESCE(${data.dateOfBirth ?? null}, date_of_birth),
-        gender     = COALESCE(${data.gender ?? null}, gender),
-        phone      = COALESCE(${data.phone ?? null}, phone),
         email      = COALESCE(${data.email ?? null}, email),
-        address    = COALESCE(${data.address ? JSON.stringify(data.address) : null}::jsonb, address),
-        shipping_address = COALESCE(${data.shippingAddress ? JSON.stringify(data.shippingAddress) : null}::jsonb, shipping_address),
+        practiceq_client_id = COALESCE(${(data as any).practiceqClientId ?? null}, practiceq_client_id),
         updated_at = ${now}
       WHERE id = ${id}
     `;
@@ -190,12 +185,12 @@ export const orderDb = {
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, identity_status,
         identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
-        identity_upload_token, created_at, updated_at)
+        identity_upload_token, practiceq_client_id, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
         ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
-        ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
+        ${o.identityUploadToken ?? null}, ${o.practiceqClientId ?? null}, ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
   },
@@ -219,6 +214,7 @@ export const orderDb = {
         identity_reviewed_by = COALESCE(${data.identityReviewedBy ?? null}, identity_reviewed_by),
         identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
         identity_upload_token = COALESCE(${data.identityUploadToken ?? null}, identity_upload_token),
+        practiceq_client_id = COALESCE(${data.practiceqClientId ?? null}, practiceq_client_id),
         updated_at         = ${now}
       WHERE id = ${id}
     `;
@@ -650,6 +646,7 @@ function rowToOrder(r: any): Order {
     identityReviewedBy: r.identity_reviewed_by ?? undefined,
     identityAiResult: r.identity_ai_result ?? undefined,
     identityUploadToken: r.identity_upload_token ?? undefined,
+    practiceqClientId: r.practiceq_client_id ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }

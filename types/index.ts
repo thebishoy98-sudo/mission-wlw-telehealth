@@ -124,6 +124,8 @@ export interface Order {
   identityReviewedBy?: string;
   identityAiResult?: IdentityAiResult;
   identityUploadToken?: string;
+  /** PracticeQ/IntakeQ client ID — used to look up patient PHI from PracticeQ API */
+  practiceqClientId?: string;
 }
 
 // Intake and Medical Information

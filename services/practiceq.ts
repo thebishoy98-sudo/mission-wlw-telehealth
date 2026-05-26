@@ -305,3 +305,105 @@ function persistServerLog(log: Types.IntegrationLog) {
     .then((serverDb) => serverDb?.integrationLogDb.create(log))
     .catch(() => {});
 }
+
+// ── PracticeQ Client API (Patient PHI store) ──────────────────────────────────
+
+type PracticeQClient = {
+  ClientId: number;
+  Name?: string;
+  FirstName?: string;
+  LastName?: string;
+  Email?: string;
+  Phone?: string;
+  DateOfBirth?: number; // Unix ms
+  Gender?: string;
+  Address?: string;
+  City?: string;
+  StateShort?: string;
+  PostalCode?: string;
+  Country?: string;
+};
+
+function pqHeaders() {
+  return {
+    "X-Auth-Key": serviceConfig.practiceq.apiKey,
+    "Content-Type": "application/json",
+  };
+}
+
+const pqBase = () => serviceConfig.practiceq.baseUrl.replace(/\/$/, "");
+
+/** Fetch a single PracticeQ client by their numeric ClientId */
+export async function getClientById(clientId: string | number): Promise<PracticeQClient | null> {
+  if (!serviceConfig.practiceq.apiKey) return null;
+  const res = await fetch(`${pqBase()}/clients/${clientId}`, {
+    headers: pqHeaders(),
+  });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+/** Find a PracticeQ client by email address */
+export async function findClientByEmail(email: string): Promise<PracticeQClient | null> {
+  if (!serviceConfig.practiceq.apiKey) return null;
+  const res = await fetch(`${pqBase()}/clients?search=${encodeURIComponent(email)}`, {
+    headers: pqHeaders(),
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const clients: PracticeQClient[] = Array.isArray(data) ? data : (data?.Clients ?? data?.clients ?? []);
+  return clients.find((c) => c.Email?.toLowerCase() === email.toLowerCase()) ?? null;
+}
+
+/** Create or reuse a PracticeQ client for this patient. Returns the PracticeQ ClientId as string. */
+export async function createOrFindPracticeQClient(
+  patient: Types.Patient,
+  orderId: string
+): Promise<string | null> {
+  if (!serviceConfig.practiceq.apiKey) return null;
+
+  // Try to find existing client by email first
+  const existing = await findClientByEmail(patient.email).catch(() => null);
+  if (existing?.ClientId) return String(existing.ClientId);
+
+  // Create new client
+  const result = await savePracticeQClient(patient, { id: orderId } as Types.Order).catch(() => null);
+  return result?.ClientId ? String(result.ClientId) : null;
+}
+
+/** Map a PracticeQ client record to our Patient shape */
+export function practiceQClientToPatient(client: PracticeQClient, fallbackId: string): Types.Patient {
+  const name = (client.FirstName ?? client.Name ?? "").split(" ");
+  const firstName = client.FirstName ?? name[0] ?? "";
+  const lastName = client.LastName ?? name.slice(1).join(" ") ?? "";
+  let dateOfBirth = "";
+  if (client.DateOfBirth) {
+    const d = new Date(client.DateOfBirth);
+    dateOfBirth = d.toISOString().split("T")[0];
+  }
+  return {
+    id: fallbackId,
+    firstName,
+    lastName,
+    dateOfBirth,
+    gender: (client.Gender?.toLowerCase() ?? "other") as any,
+    phone: client.Phone ?? "",
+    email: client.Email ?? "",
+    address: {
+      street1: client.Address ?? "",
+      city: client.City ?? "",
+      state: client.StateShort ?? "",
+      zipCode: client.PostalCode ?? "",
+      country: client.Country ?? "US",
+    },
+    shippingAddress: {
+      street1: client.Address ?? "",
+      city: client.City ?? "",
+      state: client.StateShort ?? "",
+      zipCode: client.PostalCode ?? "",
+      country: client.Country ?? "US",
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}

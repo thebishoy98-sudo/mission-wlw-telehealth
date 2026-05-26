@@ -83,34 +83,35 @@ export async function POST(req: NextRequest) {
       ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
       : null;
 
-    // Patient must exist before the order because orders.patient_id has an FK. Repeated
-    // checkout retries may reuse the same email with a new browser-generated patient id.
-    let persistedPatient = patientData?.email
-      ? await dbServer.patientDb.getByEmail(patientData.email).catch(() => null)
-      : null;
-    if (patientData) {
-      if (!persistedPatient) {
-        persistedPatient = await dbServer.patientDb.create(patientData).catch(() => null);
-      } else {
-        await dbServer.patientDb.update(persistedPatient.id, {
-          firstName: patientData.firstName,
-          lastName: patientData.lastName,
-          dateOfBirth: patientData.dateOfBirth,
-          gender: patientData.gender,
-          phone: patientData.phone,
-          email: patientData.email,
-          address: patientData.address,
-          shippingAddress: patientData.shippingAddress?.street1 ? patientData.shippingAddress : patientData.address,
-        }).catch(() => persistedPatient);
+    // Patient PHI goes to PracticeQ (HIPAA-compliant). We create or find a PracticeQ
+    // client immediately so we have the ClientId before creating the order in Postgres.
+    // Our patients table stores only a stub (id + practiceq_client_id + email).
+    const patientForOrder = patientData ?? null;
+    let practiceqClientId: string | null = null;
+    if (patientForOrder) {
+      practiceqClientId = await practiceq.createOrFindPracticeQClient(
+        patientForOrder,
+        orderData?.id ?? orderId
+      ).catch(() => null);
+
+      // Upsert a minimal patient stub in Postgres (required for FK constraint)
+      await dbServer.patientDb.create({
+        ...patientForOrder,
+        practiceqClientId: practiceqClientId ?? undefined,
+      } as any).catch(() => {});
+
+      if (practiceqClientId) {
+        await dbServer.patientDb.update(patientForOrder.id, { practiceqClientId } as any).catch(() => {});
       }
     }
-    const effectivePatient = persistedPatient ?? patientData;
-    const normalizedOrderData = orderData && effectivePatient
+
+    const normalizedOrderData = orderData && patientForOrder
       ? {
           ...orderData,
-          patientId: effectivePatient.id,
+          patientId: patientForOrder.id,
           productId: persistedProduct?.id ?? orderData.productId,
           doseId: persistedDose?.id ?? orderData.doseId,
+          practiceqClientId: practiceqClientId ?? undefined,
         }
       : orderData;
 
@@ -146,17 +147,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Load patient - create from submitted data if not in server DB
-    let patient =
-      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
-      db.patientDb.getById(order.patientId);
+    // 4. Resolve patient — PracticeQ is the source of truth for PHI
+    const { resolvePatient } = await import("@/lib/patient-resolver");
+    const orderWithPracticeQId = { ...order, practiceqClientId: practiceqClientId ?? order.practiceqClientId };
+    let patient = await resolvePatient(orderWithPracticeQId).catch(() => null);
 
-    if (!patient && patientData) {
-      try {
-        await dbServer.patientDb.create(patientData).catch(() => patientData);
-      } catch { /* may already exist */ }
-      patient = patientData;
-    }
+    // Final fallback: use the submitted patientData directly (it's still in memory)
+    if (!patient) patient = patientForOrder;
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
@@ -266,6 +263,7 @@ export async function POST(req: NextRequest) {
       identityReason: identityAiResult.summary,
       identityAiResult,
       identityUploadToken,
+      practiceqClientId: practiceqClientId ?? undefined,
       submittedAt: new Date().toISOString(),
     };
     db.orderDb.update(orderId, orderUpdates);

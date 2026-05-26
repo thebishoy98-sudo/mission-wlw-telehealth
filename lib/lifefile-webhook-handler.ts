@@ -3,6 +3,7 @@ import crypto from "crypto";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
+import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { normalizeLifeFileWebhookPayload } from "@/lib/lifefile-webhook";
 
@@ -78,9 +79,8 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
-  const getPatient = async () => {
-    return (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId);
-  };
+  const order = (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+  const getPatient = async () => resolvePatient({ patientId, practiceqClientId: order?.practiceqClientId });
 
   switch (event) {
     case "order.received": {

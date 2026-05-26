@@ -83,6 +83,19 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_by TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_upload_token TEXT;
 
+-- ── PracticeQ-as-PHI-store migration ──────────────────────────────────────────
+-- Patient PHI lives in PracticeQ (HIPAA-compliant, BAA-signed).
+-- Our patients table is now a minimal stub: id + practiceq_client_id only.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS practiceq_client_id TEXT;
+ALTER TABLE patients ALTER COLUMN first_name DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN last_name DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN date_of_birth DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN gender DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN phone DROP NOT NULL;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS practiceq_client_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_patients_practiceq_client_id ON patients(practiceq_client_id);
+CREATE INDEX IF NOT EXISTS idx_orders_practiceq_client_id ON orders(practiceq_client_id);
+
 -- ── Payments ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS payments (
   id                TEXT PRIMARY KEY,

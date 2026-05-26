@@ -21,6 +21,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
 import * as lifefile from "@/services/lifefile";
+import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
 import { validateSharedSecret } from "@/lib/webhook-auth";
@@ -72,9 +73,8 @@ export async function POST(req: NextRequest) {
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
-  const getPatient = async () => {
-    return (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId);
-  };
+  const orderForResolver = (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+  const getPatient = async () => resolvePatient({ patientId, practiceqClientId: orderForResolver?.practiceqClientId });
 
   switch (incomingEvent) {
     case "Intake Submitted": {
