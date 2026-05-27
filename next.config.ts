@@ -26,7 +26,7 @@ const securityHeaders = [
       "img-src 'self' data: blob:",
       "font-src 'self'",
       "connect-src 'self' https://api.intuit.com https://sandbox.api.intuit.com",
-      "frame-src 'none'",
+      "frame-src https://js.intuit.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -38,6 +38,11 @@ const config: NextConfig = {
   reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: false,
+  },
+  async redirects() {
+    return [
+      { source: "/start", destination: "/start/info", permanent: false },
+    ];
   },
   async headers() {
     return [
