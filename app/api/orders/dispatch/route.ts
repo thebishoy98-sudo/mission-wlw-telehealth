@@ -5,7 +5,68 @@ import * as lifefile from "@/services/lifefile";
 import * as spruceServer from "@/services/spruce.server";
 import { getIdentityGate } from "@/lib/identity";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
+import { preferCompletePatientForIntegrations, resolvePatient } from "@/lib/patient-resolver";
+import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
 import { generateId } from "@/lib/utils";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import type { Patient } from "@/types";
+
+function answerValue(practiceq: Awaited<ReturnType<typeof getPracticeQMirrorForOrder>> | null | undefined, pattern: RegExp): string {
+  const answer = practiceq?.answers.find((item) => pattern.test(item.question.toLowerCase()))?.answer?.trim() ?? "";
+  return answer.toLowerCase() === "no answer" ? "" : answer;
+}
+
+async function hydratePatientFromOrderAnswers(order: NonNullable<Awaited<ReturnType<typeof dbServer.orderDb.getById>>>, patient: any) {
+  if (!patient || (patient.firstName && patient.lastName && patient.phone && patient.address?.street1)) return patient;
+  const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
+  const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
+  if (!practiceq?.available) return patient;
+
+  const hydrated = hydratePatientFromPracticeQ(patient, practiceq);
+  if (!practiceq.answers.length) return hydrated;
+
+  const firstName = hydrated.firstName || answerValue(practiceq, /^first name\b/);
+  const lastName = hydrated.lastName || answerValue(practiceq, /^last name\b/);
+  const phone = hydrated.phone || answerValue(practiceq, /^phone/);
+  const dateOfBirth = hydrated.dateOfBirth || answerValue(practiceq, /date of birth|dob/);
+  const street1 = hydrated.address?.street1 || answerValue(practiceq, /address/);
+  const city = hydrated.address?.city || answerValue(practiceq, /^city\b/);
+  const state = hydrated.address?.state || answerValue(practiceq, /^state\b/);
+  const zipCode = hydrated.address?.zipCode || answerValue(practiceq, /zip/);
+  return {
+    ...hydrated,
+    firstName,
+    lastName,
+    phone,
+    dateOfBirth,
+    address: { ...hydrated.address, street1, city, state, zipCode, country: hydrated.address?.country || "US" },
+    shippingAddress: {
+      ...hydrated.shippingAddress,
+      street1: hydrated.shippingAddress?.street1 || street1,
+      city: hydrated.shippingAddress?.city || city,
+      state: hydrated.shippingAddress?.state || state,
+      zipCode: hydrated.shippingAddress?.zipCode || zipCode,
+      country: hydrated.shippingAddress?.country || "US",
+    },
+  };
+}
+
+function patientStub(order: NonNullable<Awaited<ReturnType<typeof dbServer.orderDb.getById>>>): Patient {
+  const now = new Date().toISOString();
+  return {
+    id: order.patientId,
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
+    gender: "other",
+    phone: "",
+    email: "",
+    address: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+    shippingAddress: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,7 +94,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const patient = patientData ?? await dbServer.patientDb.getById(order.patientId).catch(() => null);
+    const submittedPatient =
+      patientData ??
+      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+      db.patientDb.getById(order.patientId) ??
+      patientStub(order);
+    const patient = await hydratePatientFromOrderAnswers(order, preferCompletePatientForIntegrations(
+      await resolvePatient(order).catch(() => null),
+      submittedPatient
+    ));
     const product = productData ?? await dbServer.productDb.getById(order.productId).catch(() => null);
     const auditCtx = actorFromHeaders(req.headers);
     let pharmacyOrder;

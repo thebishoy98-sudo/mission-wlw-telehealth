@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { Image as ImageIcon, Video } from "lucide-react";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "@/lib/utils";
@@ -19,7 +20,39 @@ type AdminDashboardData = {
   products: Types.Product[];
   payments: Types.Payment[];
   pharmacyOrders: Types.PharmacyOrder[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    q: string;
+  };
 };
+
+type OrderDetailData = {
+  practiceq: Types.PracticeQMirror | null;
+  identity?: {
+    status: Types.IdentityStatus | "missing";
+    reason?: string;
+    reviewedAt?: string;
+    reviewedBy?: string;
+    aiResult?: Types.IdentityAiResult | null;
+    uploads: Types.Upload[];
+  };
+};
+
+const cleanText = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  return text && text.toLowerCase() !== "null" ? text : "";
+};
+
+const patientDisplayName = (patient: Types.Patient | undefined, order: Types.Order) => {
+  const name = [cleanText(patient?.firstName), cleanText(patient?.lastName)].filter(Boolean).join(" ");
+  return name || cleanText(patient?.email) || cleanText(patient?.phone) || (order.practiceqClientId ? `PracticeQ Client ${order.practiceqClientId}` : `Order ${order.id.slice(-8)}`);
+};
+
+const patientSecondaryLine = (patient: Types.Patient | undefined, order: Types.Order) =>
+  cleanText(patient?.email) || cleanText(patient?.phone) || order.id.slice(-8);
 
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
@@ -28,15 +61,33 @@ export default function OrdersManagement() {
   const [products, setProducts] = useState<Record<string, Types.Product>>({});
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
+  const [selectedPracticeQ, setSelectedPracticeQ] = useState<Types.PracticeQMirror | null>(null);
+  const [selectedIdentity, setSelectedIdentity] = useState<OrderDetailData["identity"] | null>(null);
+  const [practiceQLoading, setPracticeQLoading] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+    q: "",
+  });
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pagination.pageSize),
+      });
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      const response = await fetch(`/api/admin/dashboard?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text());
       const data = (await response.json()) as AdminDashboardData;
       const sortedOrders = [...data.orders].sort(
@@ -47,7 +98,8 @@ export default function OrdersManagement() {
       setProducts(Object.fromEntries(data.products.map((product) => [product.id, product])));
       setPayments(Object.fromEntries(data.payments.map((payment) => [payment.orderId, payment])));
       setPharmacyOrders(Object.fromEntries(data.pharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
-      setSelectedOrder((current) => current ? sortedOrders.find((order) => order.id === current.id) ?? current : current);
+      setSelectedOrder((current) => current ? sortedOrders.find((order) => order.id === current.id) ?? current : sortedOrders[0] ?? null);
+      setPagination(data.pagination ?? { page, pageSize: 25, total: sortedOrders.length, totalPages: 1, q: searchQuery });
     } catch {
       const localOrders = db.orderDb.getAll().sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -56,12 +108,60 @@ export default function OrdersManagement() {
       setPatients(Object.fromEntries(localOrders.map((order) => [order.patientId, db.patientDb.getById(order.patientId)]).filter((entry) => entry[1])));
       setPayments(Object.fromEntries(localOrders.map((order) => [order.id, db.paymentDb.getByOrder(order.id)]).filter((entry) => entry[1])));
       setPharmacyOrders(Object.fromEntries(localOrders.map((order) => [order.id, db.pharmacyOrderDb.getByOrder(order.id)]).filter((entry) => entry[1])));
+      setPagination({ page: 1, pageSize: 25, total: localOrders.length, totalPages: 1, q: "" });
     } finally {
       setLoading(false);
     }
+  }, [page, pagination.pageSize, searchQuery]);
+
+  useEffect(() => { void loadOrders(); }, [loadOrders]);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setSelectedPracticeQ(null);
+      setSelectedIdentity(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPracticeQLoading(true);
+    fetch(`/api/orders/${selectedOrder.id}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Order detail unavailable");
+        return (await response.json()) as OrderDetailData;
+      })
+      .then((detail) => {
+        if (!cancelled) {
+          setSelectedPracticeQ(detail.practiceq ?? null);
+          setSelectedIdentity(detail.identity ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedPracticeQ(null);
+          setSelectedIdentity(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPracticeQLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder]);
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    setSearchQuery(searchInput.trim());
   };
 
-  useEffect(() => { void loadOrders(); }, []);
+  const clearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(1);
+  };
 
   const handleSendToPharmacy = async (order: Types.Order) => {
     try {
@@ -121,6 +221,53 @@ export default function OrdersManagement() {
     }
   };
 
+  const handleApproveIdentity = async (order: Types.Order) => {
+    try {
+      const response = await fetch("/api/identity/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          reviewedBy: "admin",
+          notes: "Manually approved by admin",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Identity approval failed");
+
+      await loadOrders();
+      setSelectedOrder((current) =>
+        current?.id === order.id
+          ? {
+              ...current,
+              identityStatus: "manual_approved",
+              identityReason: "Manually approved by admin",
+              identityReviewedAt: new Date().toISOString(),
+              identityReviewedBy: "admin",
+            }
+          : current
+      );
+      setToast({ message: "Identity approved by admin.", type: "success" });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
+  const handleResendIdentityReminder = async (order: Types.Order) => {
+    try {
+      const response = await fetch("/api/identity/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Verification reminder failed");
+      setToast({ message: "Verification reminder sent to patient.", type: "success" });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
 
@@ -131,25 +278,53 @@ export default function OrdersManagement() {
         <div className="container-max py-8 sm:py-12">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Order Management</h1>
 
+          <Card className="mb-6">
+            <CardContent className="p-4 sm:p-5">
+              <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Input
+                    label="Search patients or orders"
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="Name, email, phone, order ID, status"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit">Search</Button>
+                  {searchQuery && (
+                    <Button type="button" variant="outline" onClick={clearSearch}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </form>
+              <p className="mt-3 text-sm text-gray-500">
+                Showing {orders.length} of {pagination.total} matching orders
+                {searchQuery ? ` for "${searchQuery}"` : ""}.
+              </p>
+            </CardContent>
+          </Card>
+
           {loading && (
             <Card className="mb-6">
               <CardContent className="p-5 text-sm text-gray-600">Loading admin order data...</CardContent>
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-            <div className="lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-8">
+            <div className="min-w-0">
               <Card>
                 <CardContent className="p-0">
-                  <div className="max-h-[32rem] overflow-auto">
-                    <table className="w-full min-w-[760px]">
+                  <div className="max-h-[34rem] overflow-auto">
+                    <table className="w-full min-w-[700px]">
                       <thead className="sticky top-0 border-b bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Payment / QB</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Pharmacy</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Identity</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Patient</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Order</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Payment</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">PracticeQ</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Pharmacy</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Identity</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -163,25 +338,30 @@ export default function OrdersManagement() {
                               onClick={() => setSelectedOrder(order)}
                               className={`cursor-pointer hover:bg-gray-50 ${selectedOrder?.id === order.id ? "bg-teal-50" : ""}`}
                             >
-                              <td className="px-6 py-4 text-sm">
-                                <p className="font-semibold">{patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}</p>
-                                <p className="text-xs text-gray-500">{order.id.slice(-8)}</p>
+                              <td className="px-4 py-4 text-sm">
+                                <p className="max-w-[11rem] truncate font-semibold text-gray-900">{patientDisplayName(patient, order)}</p>
+                                <p className="max-w-[11rem] truncate text-xs text-gray-500">{patientSecondaryLine(patient, order)}</p>
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
+                                <p className="mt-1 font-mono text-xs text-gray-500">{order.id.slice(-8)}</p>
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.paymentStatus)}>{getStatusLabel(order.paymentStatus)}</Badge>
                                 <div className="mt-1">
                                   <Badge className={getStatusColor(order.quickbooksStatus)}>{getStatusLabel(order.quickbooksStatus)}</Badge>
                                 </div>
-                                {payment?.transactionId && <p className="mt-1 text-xs text-gray-500">{payment.transactionId}</p>}
+                                {payment?.transactionId && <p className="mt-1 max-w-[10rem] truncate text-xs text-gray-500">{payment.transactionId}</p>}
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
+                                <Badge className={getStatusColor(order.practiceQStatus)}>{getStatusLabel(order.practiceQStatus)}</Badge>
+                                {order.practiceqClientId && <p className="mt-1 text-xs text-gray-500">Client {order.practiceqClientId}</p>}
+                              </td>
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.pharmacyStatus)}>{getStatusLabel(order.pharmacyStatus)}</Badge>
-                                {pharmacyOrder?.lifeFileOrderId && <p className="mt-1 text-xs text-gray-500">LF {pharmacyOrder.lifeFileOrderId}</p>}
+                                {pharmacyOrder?.lifeFileOrderId && <p className="mt-1 max-w-[8rem] truncate text-xs text-gray-500">LF {pharmacyOrder.lifeFileOrderId}</p>}
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
                                   {order.identityStatus ?? "missing"}
                                 </Badge>
@@ -192,12 +372,42 @@ export default function OrdersManagement() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-gray-500">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pagination.page <= 1 || loading}
+                        onClick={() => setPage((value) => Math.max(1, value - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pagination.page >= pagination.totalPages || loading}
+                        onClick={() => setPage((value) => value + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
-            {selectedOrder && (
-              <div className="space-y-6">
+            <div className="space-y-6">
+              {!selectedOrder ? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-gray-500">
+                    Select an order to view details, identity evidence, and PracticeQ linkage.
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
                 <Card>
                   <CardContent className="p-6">
                     <h3 className="font-bold text-gray-900 mb-4">Order Details</h3>
@@ -212,6 +422,7 @@ export default function OrdersManagement() {
                         <p><strong>Payment:</strong> {getStatusLabel(selectedOrder.paymentStatus)}</p>
                         {selectedPayment?.transactionId && <p><strong>QB payment tx:</strong> <span className="font-mono text-xs">{selectedPayment.transactionId}</span></p>}
                         <p><strong>QuickBooks:</strong> {getStatusLabel(selectedOrder.quickbooksStatus)}</p>
+                        <p><strong>PracticeQ:</strong> {getStatusLabel(selectedOrder.practiceQStatus)}</p>
                         <p><strong>Pharmacy:</strong> {getStatusLabel(selectedOrder.pharmacyStatus)}</p>
                         {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>LifeFile ID:</strong> <span className="font-mono text-xs">{selectedPharmacyOrder.lifeFileOrderId}</span></p>}
                         {selectedPharmacyOrder?.lastError && <p className="text-red-600">{selectedPharmacyOrder.lastError}</p>}
@@ -222,32 +433,14 @@ export default function OrdersManagement() {
                           <Button
                             fullWidth
                             variant="outline"
-                            onClick={() => {
-                              db.orderDb.update(selectedOrder.id, {
-                                identityStatus: "manual_approved",
-                                identityReason: "Manually approved by admin",
-                                identityReviewedAt: new Date().toISOString(),
-                                identityReviewedBy: "admin",
-                              });
-                              const patch = { ...selectedOrder, identityStatus: "manual_approved" as const, identityReason: "Manually approved by admin" };
-                              setSelectedOrder(patch);
-                              setOrders((prev) => prev.map((order) => order.id === selectedOrder.id ? patch : order));
-                            }}
+                            onClick={() => handleApproveIdentity(selectedOrder)}
                           >
                             Manually Approve Identity
                           </Button>
                           <Button
                             fullWidth
                             variant="outline"
-                            onClick={() => {
-                              const patient = patients[selectedOrder.patientId] ?? db.patientDb.getById(selectedOrder.patientId);
-                              if (!patient) {
-                                setToast({ message: "Patient not found.", type: "error" });
-                                return;
-                              }
-                              spruceService.sendMessage(patient.id, "identity_verification_required", { orderId: selectedOrder.id });
-                              setToast({ message: "Verification reminder sent to patient.", type: "success" });
-                            }}
+                            onClick={() => handleResendIdentityReminder(selectedOrder)}
                           >
                             Resend Verification Reminder
                           </Button>
@@ -260,6 +453,123 @@ export default function OrdersManagement() {
                         </Button>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-bold text-gray-900 mb-4">Identity Evidence</h3>
+                    <div className="mb-4 space-y-2 text-sm">
+                      <p><strong>Status:</strong> {selectedIdentity?.status ?? selectedOrder.identityStatus ?? "missing"}</p>
+                      {(selectedIdentity?.reason || selectedOrder.identityReason) && (
+                        <p className="text-gray-600">{selectedIdentity?.reason ?? selectedOrder.identityReason}</p>
+                      )}
+                      {selectedIdentity?.reviewedAt && (
+                        <p className="text-xs text-gray-500">
+                          Reviewed {formatDateTime(selectedIdentity.reviewedAt)}
+                          {selectedIdentity.reviewedBy ? ` by ${selectedIdentity.reviewedBy}` : ""}
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedIdentity?.aiResult ? (
+                      <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm">
+                        <p className="font-semibold text-gray-900">AI Analysis</p>
+                        <p className="mt-1 text-gray-700">{selectedIdentity.aiResult.summary}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className={getStatusColor(selectedIdentity.aiResult.status)}>
+                            {getStatusLabel(selectedIdentity.aiResult.status)}
+                          </Badge>
+                          <Badge className="bg-blue-100 text-blue-800">
+                            {Math.round((selectedIdentity.aiResult.confidence ?? 0) * 100)}% confidence
+                          </Badge>
+                        </div>
+                        {selectedIdentity.aiResult.flags?.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-semibold uppercase text-gray-500">Reasons / Flags</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-gray-600">
+                              {selectedIdentity.aiResult.flags.map((flag) => <li key={flag}>{flag}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mb-4 text-sm text-gray-500">No AI identity analysis has been recorded yet.</p>
+                    )}
+
+                    {selectedIdentity?.uploads?.length ? (
+                      <div className="grid grid-cols-1 gap-3">
+                        {selectedIdentity.uploads.map((upload) => (
+                          <div key={upload.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {upload.type === "driver_license" ? "Submitted License" : "Identity Video"}
+                              </p>
+                              {upload.type === "selfie_video" ? <Video className="h-4 w-4 text-gray-400" /> : <ImageIcon className="h-4 w-4 text-gray-400" />}
+                            </div>
+                            <AdminIdentityUploadPreview upload={upload} />
+                            <p className="mt-2 truncate text-xs text-gray-500">{upload.filename}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No ID or identity video has been submitted for this order.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-bold text-gray-900 mb-4">PracticeQ</h3>
+                    {practiceQLoading ? (
+                      <p className="text-sm text-gray-500">Loading PracticeQ details...</p>
+                    ) : !selectedPracticeQ ? (
+                      <p className="text-sm text-gray-500">No PracticeQ record is linked to this order.</p>
+                    ) : !selectedPracticeQ.available ? (
+                      <div className="space-y-2 text-sm">
+                        <Badge className="bg-amber-100 text-amber-800">Unavailable</Badge>
+                        <p className="text-gray-600">{selectedPracticeQ.reason}</p>
+                        {selectedPracticeQ.clientId && <p className="font-mono text-xs text-gray-500">Client {selectedPracticeQ.clientId}</p>}
+                      </div>
+                    ) : (
+                      <div className="space-y-3 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                          {selectedPracticeQ.status && (
+                            <Badge className={getStatusColor(selectedPracticeQ.status.toLowerCase())}>{selectedPracticeQ.status}</Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-gray-600">
+                          {selectedPracticeQ.clientId && <p>Client ID: <span className="font-mono text-xs">{selectedPracticeQ.clientId}</span></p>}
+                          {selectedPracticeQ.intakeId && <p>Intake ID: <span className="font-mono text-xs">{selectedPracticeQ.intakeId}</span></p>}
+                          {selectedPracticeQ.questionnaireName && <p>Form: {selectedPracticeQ.questionnaireName}</p>}
+                          {selectedPracticeQ.submittedAt && <p>Submitted: {formatDateTime(selectedPracticeQ.submittedAt)}</p>}
+                        </div>
+                        {selectedPracticeQ.practiceQUrl && (
+                          <a
+                            href={selectedPracticeQ.practiceQUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex text-sm font-medium text-teal-600 hover:text-teal-700"
+                          >
+                            Open in PracticeQ
+                          </a>
+                        )}
+                        {selectedPracticeQ.answers.length > 0 && (
+                          <div className="border-t pt-3">
+                            <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Answers</p>
+                            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                              {selectedPracticeQ.answers.map((answer, index) => (
+                                <div key={`${answer.question}-${index}`} className="rounded-lg bg-gray-50 p-2">
+                                  <p className="text-xs font-medium text-gray-700">{answer.question}</p>
+                                  <p className="text-xs text-gray-600">{answer.answer || "No answer"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -297,12 +607,30 @@ export default function OrdersManagement() {
                     </CardContent>
                   </Card>
                 )}
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </>
   );
+}
+
+function AdminIdentityUploadPreview({ upload }: { upload: Types.Upload }) {
+  const src = `/api/provider/uploads/${encodeURIComponent(upload.id)}`;
+  if (!upload.base64Data && !upload.storageUrl) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-lg bg-white text-sm text-gray-500">
+        Media is stored securely, but no preview URL is available.
+      </div>
+    );
+  }
+
+  if (upload.mimeType.startsWith("video/")) {
+    return <video controls playsInline src={src} className="aspect-video w-full rounded-lg bg-white object-contain" />;
+  }
+
+  return <img src={src} alt={upload.type === "driver_license" ? "Submitted license" : "Submitted identity capture"} className="aspect-video w-full rounded-lg bg-white object-contain" />;
 }

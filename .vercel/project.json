@@ -1,16 +1,5 @@
 {
-  "projectId": "prj_ndcHmtfDVcdSNgZbjnXd9HjJY84A",
+  "projectId": "prj_LYuXxs1Z7i32IS7PkiX56iIIJxqA",
   "orgId": "team_oHfXaF1wA1N3UB4cHJWT74Ft",
-  "projectName": "mission-wlw-dev",
-  "settings": {
-    "createdAt": 1778692423243,
-    "framework": "nextjs",
-    "devCommand": null,
-    "installCommand": null,
-    "buildCommand": null,
-    "outputDirectory": null,
-    "rootDirectory": null,
-    "directoryListing": false,
-    "nodeVersion": "24.x"
-  }
+  "projectName": "mission-wlw"
 }

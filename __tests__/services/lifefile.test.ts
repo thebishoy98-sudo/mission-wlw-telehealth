@@ -1,5 +1,6 @@
 import * as lifefile from "@/services/lifefile";
 import * as db from "@/lib/db";
+import { tirzepatideProduct } from "@/data/products";
 
 const seed = () => {
   db.patientDb.create({
@@ -16,24 +17,13 @@ const seed = () => {
     updatedAt: new Date().toISOString(),
   });
 
-  db.productDb.create({
-    id: "prod_1",
-    name: "Tirzepatide",
-    slug: "tirzepatide",
-    description: "GLP-1",
-    startingPrice: 299,
-    image: "/img.svg",
-    doses: [{ id: "dose_1", label: "2.5mg Starter", strength: "2.5mg", quantity: 1, price: 299 }],
-    eligibilityNote: "BMI ≥ 27",
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  });
+  db.productDb.create({ ...tirzepatideProduct, id: "prod_1" });
 
   db.orderDb.create({
     id: "o1",
     patientId: "p1",
     productId: "prod_1",
-    doseId: "dose_1",
+    doseId: "tirzepatide_20mg_8_week",
     status: "sent_to_pharmacy",
     paymentStatus: "completed",
     pharmacyStatus: "draft",
@@ -60,7 +50,8 @@ describe("lifefile.createPharmacyOrder", () => {
           drugName: "TIRZEPATIDE/PYRIDOXINE",
           drugStrength: "20MG/25MG/ML (2 ML)",
           quantity: 1,
-          directions: "Inject 2.5mg subcutaneously once weekly as directed by prescriber",
+          directions: "Inject 12.5 units (2.5mg) SbQ weekly.",
+          daysSupply: 56,
         }),
         expect.objectContaining({
           drugName: "ALCOHOL SWABS",
@@ -76,25 +67,20 @@ describe("lifefile.createPharmacyOrder", () => {
     );
   });
 
-  it("calculates tirzepatide vial quantity from the weekly dose", async () => {
+  it("uses explicit tirzepatide label directions for higher 8-week doses", async () => {
     const order = db.orderDb.create({
       ...db.orderDb.getById("o1")!,
       id: "o_high",
-      doseId: "dose_high",
+      doseId: "tirzepatide_60mg_8_week",
     });
-    const product = db.productDb.update("prod_1", {
-      doses: [
-        { id: "dose_1", label: "2.5mg Starter", strength: "2.5mg", quantity: 1, price: 299 },
-        { id: "dose_high", label: "15mg Weekly", strength: "15mg", quantity: 1, price: 599 },
-      ],
-    })!;
 
-    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product });
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product: { ...tirzepatideProduct, id: "prod_1" } });
     expect(pharmacyOrder.payload.order.rxs[0]).toEqual(
       expect.objectContaining({
         drugName: "TIRZEPATIDE/PYRIDOXINE",
-        quantity: 2,
-        directions: "Inject 15mg subcutaneously once weekly as directed by prescriber",
+        quantity: 1,
+        directions: "Inject 37.5 units (7.5mg) SbQ weekly.",
+        daysSupply: 56,
       })
     );
   });
@@ -122,6 +108,104 @@ describe("lifefile.createPharmacyOrder", () => {
   it("throws when product not found", async () => {
     const badOrder = { ...db.orderDb.getById("o1")!, productId: "bad" };
     await expect(lifefile.createPharmacyOrder(badOrder)).rejects.toThrow("Invalid order data");
+  });
+
+  it("posts live sandbox orders to the configured 1stChoiceRx endpoint with Life File headers", async () => {
+    const original = { ...process.env };
+    process.env.USE_REAL_LIFEFILE = "true";
+    process.env.LF_X_VENDOR_ID = "11504";
+    process.env.LF_X_LOCATION_ID = "110285";
+    process.env.LF_X_API_NETWORK_ID = "1421";
+    process.env.LF_API_USERNAME = "sandbox-user";
+    process.env.LF_API_PASSWORD = "sandbox-pass";
+    process.env.LF_ENDPOINT_ORDER_API = "https://host100-7.lifefile.net/lfapi/v1/order";
+    process.env.LIFEFILE_PRACTICE_ID = "1018988";
+    process.env.LIFEFILE_PRESCRIBER_NPI = "1760981450";
+    process.env.LIFEFILE_PRESCRIBER_LICENSE_STATE = "FL";
+    process.env.LIFEFILE_PRESCRIBER_LICENSE_NUMBER = "9231206";
+    process.env.LIFEFILE_PRESCRIBER_FIRST_NAME = "Karen";
+    process.env.LIFEFILE_PRESCRIBER_LAST_NAME = "Dotson";
+    process.env.LIFEFILE_PRESCRIBER_EMAIL = "service@missionwlw.com";
+    process.env.LIFEFILE_SHIPPING_SERVICE_ID = "6230";
+
+    jest.resetModules();
+    const liveLifefile = await import("@/services/lifefile");
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ type: "success", message: "ok", data: { orderId: "900001" } }),
+    } as Response);
+    global.fetch = fetchMock;
+
+    const order = db.orderDb.getById("o1")!;
+    const pharmacyOrder = await liveLifefile.createPharmacyOrder(order);
+
+    expect(pharmacyOrder.lifeFileOrderId).toBe("900001");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://host100-7.lifefile.net/lfapi/v1/order",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Vendor-ID": "11504",
+          "X-Location-ID": "110285",
+          "X-API-Network-ID": "1421",
+          Authorization: `Basic ${Buffer.from("sandbox-user:sandbox-pass").toString("base64")}`,
+        }),
+      })
+    );
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.order.practice.id).toBe(1018988);
+    expect(body.order.patient.dateOfBirth).toBe("1978-03-22");
+    expect(body.order.prescriber).toMatchObject({
+      npi: "1760981450",
+      licenseState: "FL",
+      licenseNumber: "9231206",
+      firstName: "Karen",
+      lastName: "Dotson",
+      email: "service@missionwlw.com",
+    });
+    expect(body.order.shipping.service).toBe(6230);
+
+    process.env = original;
+    (global as unknown as { fetch?: unknown }).fetch = undefined;
+    jest.resetModules();
+  });
+
+  it("normalizes slash-formatted DOB before posting to Life File", async () => {
+    const original = { ...process.env };
+    process.env.USE_REAL_LIFEFILE = "true";
+    process.env.LF_X_VENDOR_ID = "11504";
+    process.env.LF_X_LOCATION_ID = "110285";
+    process.env.LF_X_API_NETWORK_ID = "1421";
+    process.env.LF_API_USERNAME = "sandbox-user";
+    process.env.LF_API_PASSWORD = "sandbox-pass";
+    process.env.LF_ENDPOINT_ORDER_API = "https://host100-7.lifefile.net/lfapi/v1/order";
+    process.env.LIFEFILE_PRACTICE_ID = "1018988";
+    process.env.LIFEFILE_SHIPPING_SERVICE_ID = "6230";
+
+    jest.resetModules();
+    const liveLifefile = await import("@/services/lifefile");
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ type: "success", message: "ok", data: { orderId: "900002" } }),
+    } as Response);
+    global.fetch = fetchMock;
+
+    const order = db.orderDb.getById("o1")!;
+    await liveLifefile.createPharmacyOrder(order, {
+      patient: {
+        ...db.patientDb.getById("p1")!,
+        dateOfBirth: "3/22/1978",
+      },
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.order.patient.dateOfBirth).toBe("1978-03-22");
+
+    process.env = original;
+    (global as unknown as { fetch?: unknown }).fetch = undefined;
+    jest.resetModules();
   });
 });
 
