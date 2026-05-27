@@ -511,11 +511,11 @@ export default function PatientDetail() {
                   controls
                   playsInline
                   className="max-h-[65vh] w-full rounded-xl bg-black"
-                  src={selectedUpload.base64Data}
+                  src={selectedUpload.base64Data || `/api/provider/uploads/${selectedUpload.id}`}
                 />
               ) : selectedUpload.mimeType.startsWith("image/") ? (
                 <img
-                  src={selectedUpload.base64Data}
+                  src={selectedUpload.base64Data || `/api/provider/uploads/${selectedUpload.id}`}
                   alt={selectedUpload.type === "driver_license" ? "Uploaded government ID proof" : "Uploaded identity proof"}
                   className="max-h-[65vh] w-full rounded-xl bg-gray-50 object-contain"
                 />

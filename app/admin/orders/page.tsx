@@ -619,7 +619,7 @@ export default function OrdersManagement() {
 }
 
 function AdminIdentityUploadPreview({ upload }: { upload: Types.Upload }) {
-  const src = `/api/provider/uploads/${encodeURIComponent(upload.id)}`;
+  const src = upload.base64Data || `/api/provider/uploads/${encodeURIComponent(upload.id)}`;
   if (!upload.base64Data && !upload.storageUrl) {
     return (
       <div className="flex aspect-video items-center justify-center rounded-lg bg-white text-sm text-gray-500">

@@ -168,8 +168,8 @@ function IdentityReviewContent() {
                       <FileImage className="h-4 w-4 text-gray-500" />
                       Government ID
                     </div>
-                    {idUpload?.base64Data ? (
-                      <img src={idUpload.base64Data} alt="Uploaded government ID" className="max-h-72 w-full rounded-md object-contain bg-white" />
+                    {idUpload ? (
+                      <img src={idUpload.base64Data || `/api/provider/uploads/${idUpload.id}`} alt="Uploaded government ID" className="max-h-72 w-full rounded-md object-contain bg-white" />
                     ) : (
                       <p className="text-sm text-gray-500">No ID image uploaded.</p>
                     )}
@@ -180,9 +180,9 @@ function IdentityReviewContent() {
                       Identity Video
                     </div>
                     {hasIdentityVideo ? (
-                      <video controls playsInline src={selfieUpload.base64Data} className="max-h-72 w-full rounded-md bg-white" />
-                    ) : selfieUpload?.base64Data ? (
-                      <img src={selfieUpload.base64Data} alt="Uploaded identity video frame" className="max-h-72 w-full rounded-md object-contain bg-white" />
+                      <video controls playsInline src={selfieUpload.base64Data || `/api/provider/uploads/${selfieUpload.id}`} className="max-h-72 w-full rounded-md bg-white" />
+                    ) : selfieUpload ? (
+                      <img src={selfieUpload.base64Data || `/api/provider/uploads/${selfieUpload.id}`} alt="Uploaded identity video frame" className="max-h-72 w-full rounded-md object-contain bg-white" />
                     ) : (
                       <p className="text-sm text-gray-500">No identity video uploaded.</p>
                     )}

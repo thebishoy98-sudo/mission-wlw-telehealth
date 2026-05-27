@@ -195,6 +195,11 @@ export const orderDb = {
 // ── Uploads ───────────────────────────────────────────────────────────────────
 
 export const uploadDb = {
+  async getById(id: string): Promise<Upload | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM uploads WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToUpload(rows[0]) : null;
+  },
   async getByOrder(orderId: string): Promise<Upload[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`
@@ -281,6 +286,15 @@ export const consentDb = {
       SELECT * FROM consent_records WHERE order_id = ${orderId} LIMIT 1
     `;
     return rows[0] ? rowToConsent(rows[0]) : null;
+  },
+  async create(c: ConsentRecord): Promise<ConsentRecord> {
+    await sql`
+      INSERT INTO consent_records (id, order_id, consent_text, acknowledgments, signed_name, signed_at)
+      VALUES (${c.id}, ${c.orderId}, ${c.consentText}, ${JSON.stringify(c.acknowledgments)},
+        ${c.signedName}, ${c.signedAt})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return c;
   },
 };
 

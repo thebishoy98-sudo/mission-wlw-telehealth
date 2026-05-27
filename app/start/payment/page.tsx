@@ -191,6 +191,12 @@ export default function Payment() {
           updatedAt: order.updatedAt,
         },
         productData: product ?? undefined,
+        questionnaireAnswers: qaAnswers,
+        consentData: intakeState.consented && intakeState.signedName ? {
+          signedName: intakeState.signedName,
+          signedAt: new Date().toISOString(),
+          acknowledgments: { telehealth: true, pharmacy: true, payment: true, privacy: true },
+        } : null,
       }),
     });
 

@@ -36,7 +36,7 @@ import type { Payment, Upload } from "@/types";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
 
     if (!orderId || !amount) {
       return NextResponse.json(
@@ -118,8 +118,34 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Server-side eligibility re-check
+    // Persist submitted answers to Postgres so provider chart can read them
+    const submittedAnswerRows = questionnaireAnswers && typeof questionnaireAnswers === "object"
+      ? Object.entries(questionnaireAnswers as Record<string, string>)
+          .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
+          .map(([questionId, answer]) => ({
+            id: `answer_${orderId}_${questionId}`,
+            orderId,
+            questionId,
+            answer,
+            createdAt: new Date().toISOString(),
+          }))
+      : [];
+    if (submittedAnswerRows.length) {
+      await Promise.all(submittedAnswerRows.map((a) => dbServer.answerDb.create(a).catch(() => {}))).catch(() => {});
+    }
+    if (consentData?.signedName) {
+      await dbServer.consentDb.create({
+        id: `consent_${orderId}`,
+        orderId,
+        consentText: "Patient consented to telehealth services and data collection.",
+        acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
+        signedName: consentData.signedName,
+        signedAt: consentData.signedAt ?? new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
-    const fallbackAnswers = answers.length ? answers : db.answerDb.getByOrder(orderId);
+    const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
     const fallbackQuestions = questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions);
