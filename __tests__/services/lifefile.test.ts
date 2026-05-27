@@ -109,6 +109,66 @@ describe("lifefile.createPharmacyOrder", () => {
     const badOrder = { ...db.orderDb.getById("o1")!, productId: "bad" };
     await expect(lifefile.createPharmacyOrder(badOrder)).rejects.toThrow("Invalid order data");
   });
+
+  it("posts live sandbox orders to the configured 1stChoiceRx endpoint with Life File headers", async () => {
+    const original = { ...process.env };
+    process.env.USE_REAL_LIFEFILE = "true";
+    process.env.LF_X_VENDOR_ID = "11504";
+    process.env.LF_X_LOCATION_ID = "110285";
+    process.env.LF_X_API_NETWORK_ID = "1421";
+    process.env.LF_API_USERNAME = "sandbox-user";
+    process.env.LF_API_PASSWORD = "sandbox-pass";
+    process.env.LF_ENDPOINT_ORDER_API = "https://host100-7.lifefile.net/lfapi/v1/order";
+    process.env.LIFEFILE_PRACTICE_ID = "1018988";
+    process.env.LIFEFILE_PRESCRIBER_NPI = "1760981450";
+    process.env.LIFEFILE_PRESCRIBER_LICENSE_STATE = "FL";
+    process.env.LIFEFILE_PRESCRIBER_LICENSE_NUMBER = "9231206";
+    process.env.LIFEFILE_PRESCRIBER_FIRST_NAME = "Karen";
+    process.env.LIFEFILE_PRESCRIBER_LAST_NAME = "Dotson";
+    process.env.LIFEFILE_PRESCRIBER_EMAIL = "service@missionwlw.com";
+    process.env.LIFEFILE_SHIPPING_SERVICE_ID = "6230";
+
+    jest.resetModules();
+    const liveLifefile = await import("@/services/lifefile");
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ type: "success", message: "ok", data: { orderId: "900001" } }),
+    } as Response);
+    global.fetch = fetchMock;
+
+    const order = db.orderDb.getById("o1")!;
+    const pharmacyOrder = await liveLifefile.createPharmacyOrder(order);
+
+    expect(pharmacyOrder.lifeFileOrderId).toBe("900001");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://host100-7.lifefile.net/lfapi/v1/order",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Vendor-ID": "11504",
+          "X-Location-ID": "110285",
+          "X-API-Network-ID": "1421",
+          Authorization: `Basic ${Buffer.from("sandbox-user:sandbox-pass").toString("base64")}`,
+        }),
+      })
+    );
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.order.practice.id).toBe(1018988);
+    expect(body.order.prescriber).toMatchObject({
+      npi: "1760981450",
+      licenseState: "FL",
+      licenseNumber: "9231206",
+      firstName: "Karen",
+      lastName: "Dotson",
+      email: "service@missionwlw.com",
+    });
+    expect(body.order.shipping.service).toBe(6230);
+
+    process.env = original;
+    (global as unknown as { fetch?: unknown }).fetch = undefined;
+    jest.resetModules();
+  });
 });
 
 describe("lifefile.getOrderStatus", () => {

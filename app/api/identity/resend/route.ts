@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { buildIdentityUploadUrl, createIdentityUploadToken } from "@/lib/identity";
+import { loadProviderPatientChart } from "@/lib/provider-chart";
+import { resolvePatient } from "@/lib/patient-resolver";
 import * as spruceServer from "@/services/spruce.server";
-import { requireAdmin } from "@/lib/server-auth";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = requireProviderOrAdmin(req);
   if (denied) return denied;
 
   try {
@@ -22,11 +25,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const patient =
-      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
-      db.patientDb.getById(order.patientId);
+    let patient = await resolvePatient(order).catch(() => null);
+    if (!patient?.phone) {
+      const chart = await loadProviderPatientChart(order.patientId, {
+        patients: dbServer.patientDb,
+        orders: dbServer.orderDb,
+        products: dbServer.productDb,
+        questions: dbServer.questionDb,
+        answers: dbServer.answerDb,
+        consents: dbServer.consentDb,
+        uploads: dbServer.uploadDb,
+        payments: dbServer.paymentDb,
+        pharmacyOrders: dbServer.pharmacyOrderDb,
+        reviews: dbServer.providerReviewDb,
+        practiceqPackets: dbServer.practiceqPacketDb,
+        practiceqMirror: { getForOrder: getPracticeQMirrorForOrder },
+      }).catch(() => null);
+      if (chart?.selectedOrder.id === order.id) patient = chart.patient;
+    }
+    patient = patient ?? db.patientDb.getById(order.patientId);
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+    if (!patient.phone) {
+      return NextResponse.json(
+        { error: "Patient phone number is missing, so the verification text could not be sent." },
+        { status: 400 }
+      );
     }
 
     const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(order.id);

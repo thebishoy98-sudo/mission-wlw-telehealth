@@ -28,6 +28,10 @@ type AdminDashboardData = {
   };
 };
 
+type OrderDetailData = {
+  practiceq: Types.PracticeQMirror | null;
+};
+
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Types.Order | null>(null);
@@ -35,6 +39,8 @@ export default function OrdersManagement() {
   const [products, setProducts] = useState<Record<string, Types.Product>>({});
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
+  const [selectedPracticeQ, setSelectedPracticeQ] = useState<Types.PracticeQMirror | null>(null);
+  const [practiceQLoading, setPracticeQLoading] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -86,6 +92,34 @@ export default function OrdersManagement() {
   }, [page, pagination.pageSize, searchQuery]);
 
   useEffect(() => { void loadOrders(); }, [loadOrders]);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setSelectedPracticeQ(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPracticeQLoading(true);
+    fetch(`/api/orders/${selectedOrder.id}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Order detail unavailable");
+        return (await response.json()) as OrderDetailData;
+      })
+      .then((detail) => {
+        if (!cancelled) setSelectedPracticeQ(detail.practiceq ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedPracticeQ(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPracticeQLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder]);
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -258,6 +292,7 @@ export default function OrdersManagement() {
                           <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold">Payment / QB</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">PracticeQ</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold">Pharmacy</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold">Identity</th>
                         </tr>
@@ -286,6 +321,10 @@ export default function OrdersManagement() {
                                   <Badge className={getStatusColor(order.quickbooksStatus)}>{getStatusLabel(order.quickbooksStatus)}</Badge>
                                 </div>
                                 {payment?.transactionId && <p className="mt-1 text-xs text-gray-500">{payment.transactionId}</p>}
+                              </td>
+                              <td className="px-6 py-4 text-sm">
+                                <Badge className={getStatusColor(order.practiceQStatus)}>{getStatusLabel(order.practiceQStatus)}</Badge>
+                                {order.practiceqClientId && <p className="mt-1 text-xs text-gray-500">Client {order.practiceqClientId}</p>}
                               </td>
                               <td className="px-6 py-4 text-sm">
                                 <Badge className={getStatusColor(order.pharmacyStatus)}>{getStatusLabel(order.pharmacyStatus)}</Badge>
@@ -345,6 +384,7 @@ export default function OrdersManagement() {
                         <p><strong>Payment:</strong> {getStatusLabel(selectedOrder.paymentStatus)}</p>
                         {selectedPayment?.transactionId && <p><strong>QB payment tx:</strong> <span className="font-mono text-xs">{selectedPayment.transactionId}</span></p>}
                         <p><strong>QuickBooks:</strong> {getStatusLabel(selectedOrder.quickbooksStatus)}</p>
+                        <p><strong>PracticeQ:</strong> {getStatusLabel(selectedOrder.practiceQStatus)}</p>
                         <p><strong>Pharmacy:</strong> {getStatusLabel(selectedOrder.pharmacyStatus)}</p>
                         {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>LifeFile ID:</strong> <span className="font-mono text-xs">{selectedPharmacyOrder.lifeFileOrderId}</span></p>}
                         {selectedPharmacyOrder?.lastError && <p className="text-red-600">{selectedPharmacyOrder.lastError}</p>}
@@ -375,6 +415,61 @@ export default function OrdersManagement() {
                         </Button>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-bold text-gray-900 mb-4">PracticeQ</h3>
+                    {practiceQLoading ? (
+                      <p className="text-sm text-gray-500">Loading PracticeQ details...</p>
+                    ) : !selectedPracticeQ ? (
+                      <p className="text-sm text-gray-500">No PracticeQ record is linked to this order.</p>
+                    ) : !selectedPracticeQ.available ? (
+                      <div className="space-y-2 text-sm">
+                        <Badge className="bg-amber-100 text-amber-800">Unavailable</Badge>
+                        <p className="text-gray-600">{selectedPracticeQ.reason}</p>
+                        {selectedPracticeQ.clientId && <p className="font-mono text-xs text-gray-500">Client {selectedPracticeQ.clientId}</p>}
+                      </div>
+                    ) : (
+                      <div className="space-y-3 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                          {selectedPracticeQ.status && (
+                            <Badge className={getStatusColor(selectedPracticeQ.status.toLowerCase())}>{selectedPracticeQ.status}</Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-gray-600">
+                          {selectedPracticeQ.clientId && <p>Client ID: <span className="font-mono text-xs">{selectedPracticeQ.clientId}</span></p>}
+                          {selectedPracticeQ.intakeId && <p>Intake ID: <span className="font-mono text-xs">{selectedPracticeQ.intakeId}</span></p>}
+                          {selectedPracticeQ.questionnaireName && <p>Form: {selectedPracticeQ.questionnaireName}</p>}
+                          {selectedPracticeQ.submittedAt && <p>Submitted: {formatDateTime(selectedPracticeQ.submittedAt)}</p>}
+                        </div>
+                        {selectedPracticeQ.practiceQUrl && (
+                          <a
+                            href={selectedPracticeQ.practiceQUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex text-sm font-medium text-teal-600 hover:text-teal-700"
+                          >
+                            Open in PracticeQ
+                          </a>
+                        )}
+                        {selectedPracticeQ.answers.length > 0 && (
+                          <div className="border-t pt-3">
+                            <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Answers</p>
+                            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                              {selectedPracticeQ.answers.map((answer, index) => (
+                                <div key={`${answer.question}-${index}`} className="rounded-lg bg-gray-50 p-2">
+                                  <p className="text-xs font-medium text-gray-700">{answer.question}</p>
+                                  <p className="text-xs text-gray-600">{answer.answer || "No answer"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

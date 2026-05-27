@@ -51,8 +51,9 @@ export default function TermsPage() {
             <h2 className="mb-2 text-lg font-semibold text-gray-950">Third-Party Services</h2>
             <p>
               Mission WLW may rely on third-party services for hosting, payment processing, accounting, pharmacy
-              coordination, secure communications, analytics, and support. Your use of those connected services may also
-              be governed by their own terms and policies. Mission WLW is not affiliated with or endorsed by Intuit.
+              coordination, secure communications, analytics, and support. Payment processing services may be provided
+              by Intuit Payments Inc. Your use of connected services may also be governed by their own terms and
+              policies. Mission WLW is not affiliated with or endorsed by Intuit.
             </p>
           </section>
 

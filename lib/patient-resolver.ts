@@ -12,6 +12,30 @@ import type { Patient, Order } from "@/types";
 import * as practiceq from "@/services/practiceq";
 import * as db from "@/lib/db";
 
+export function hasIntegrationPatientFields(patient: Patient | null | undefined): patient is Patient {
+  return !!(
+    patient?.id &&
+    patient.firstName &&
+    patient.lastName &&
+    patient.dateOfBirth &&
+    patient.phone &&
+    patient.email &&
+    patient.address?.street1 &&
+    patient.address?.city &&
+    patient.address?.state &&
+    patient.address?.zipCode
+  );
+}
+
+export function preferCompletePatientForIntegrations(
+  resolvedPatient: Patient | null,
+  submittedPatient: Patient | null
+): Patient | null {
+  if (hasIntegrationPatientFields(resolvedPatient)) return resolvedPatient;
+  if (hasIntegrationPatientFields(submittedPatient)) return submittedPatient;
+  return resolvedPatient ?? submittedPatient;
+}
+
 /**
  * Resolve patient data for a given order.
  *

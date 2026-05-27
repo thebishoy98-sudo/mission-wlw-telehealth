@@ -32,20 +32,20 @@ import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
-import type { Payment } from "@/types";
+import { resolveChargeAmount } from "@/lib/payment-amount";
+import type { ConsentRecord, Payment, QuestionnaireAnswer } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads } = body;
+    const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
 
-    if (!orderId || !amount) {
+    if (!orderId) {
       return NextResponse.json(
-        { error: "Missing required fields: orderId, amount" },
+        { error: "Order ID is missing. Please go back one step and try payment again." },
         { status: 400 }
       );
     }
-
     const liveQuickBooks =
       process.env.USE_REAL_INTEGRATIONS === "true" ||
       process.env.USE_REAL_QUICKBOOKS === "true";
@@ -82,23 +82,44 @@ export async function POST(req: NextRequest) {
     const persistedDose = requestedDose && persistedProduct
       ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
       : null;
+    const resolvedAmount = Number(amount) > 0
+      ? Number(amount)
+      : Number(requestedDose?.price ?? persistedDose?.price ?? submittedProduct?.startingPrice ?? persistedProduct?.startingPrice ?? 0);
+    if (!resolvedAmount) {
+      return NextResponse.json(
+        { error: "Treatment price is missing. Please go back and choose a treatment again." },
+        { status: 400 }
+      );
+    }
+    const chargeAmount = resolveChargeAmount(
+      resolvedAmount,
+      process.env.PAYMENT_CHARGE_AMOUNT_OVERRIDE
+    );
 
     // Patient PHI goes to PracticeQ (HIPAA-compliant). We create or find a PracticeQ
     // client immediately so we have the ClientId before creating the order in Postgres.
     // Our patients table stores only a stub (id + practiceq_client_id + email).
-    const patientForOrder = patientData ?? null;
+    let patientForOrder = patientData ?? null;
     let practiceqClientId: string | null = null;
     if (patientForOrder) {
       practiceqClientId = await practiceq.createOrFindPracticeQClient(
         patientForOrder,
-        orderData?.id ?? orderId
+        orderId
       ).catch(() => null);
 
       // Upsert a minimal patient stub in Postgres (required for FK constraint)
-      await dbServer.patientDb.create({
+      const persistedPatient = await dbServer.patientDb.create({
         ...patientForOrder,
         practiceqClientId: practiceqClientId ?? undefined,
-      } as any).catch(() => {});
+      } as any).catch(() => null);
+      if (persistedPatient) {
+        patientForOrder = {
+          ...patientForOrder,
+          id: persistedPatient.id,
+          createdAt: persistedPatient.createdAt ?? patientForOrder.createdAt,
+          updatedAt: persistedPatient.updatedAt ?? patientForOrder.updatedAt,
+        };
+      }
 
       if (practiceqClientId) {
         await dbServer.patientDb.update(patientForOrder.id, { practiceqClientId } as any).catch(() => {});
@@ -108,6 +129,7 @@ export async function POST(req: NextRequest) {
     const normalizedOrderData = orderData && patientForOrder
       ? {
           ...orderData,
+          id: orderId,
           patientId: patientForOrder.id,
           productId: persistedProduct?.id ?? orderData.productId,
           doseId: persistedDose?.id ?? orderData.doseId,
@@ -117,8 +139,9 @@ export async function POST(req: NextRequest) {
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
     if (!order && normalizedOrderData) {
-      await dbServer.orderDb.create(normalizedOrderData).catch(() => normalizedOrderData);
-      order = normalizedOrderData;
+      order = await dbServer.orderDb.create(normalizedOrderData).catch((error) => {
+        throw new Error(`Order could not be saved before payment: ${(error as Error).message}`);
+      });
     }
 
     if (!order) {
@@ -134,10 +157,25 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Server-side eligibility re-check
-    const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
-    const fallbackAnswers = answers.length ? answers : db.answerDb.getByOrder(orderId);
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const fallbackQuestions = questions.length ? questions : db.questionDb.getAll();
+    const submittedAnswers: QuestionnaireAnswer[] = questionnaireAnswers && typeof questionnaireAnswers === "object"
+      ? Object.entries(questionnaireAnswers)
+          .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+          .map(([questionId, answer]) => ({
+            id: `answer_${orderId}_${questionId}`,
+            orderId,
+            questionId,
+            answer,
+            createdAt: new Date().toISOString(),
+          }))
+      : [];
+    const persistedAnswers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
+    const fallbackAnswers = submittedAnswers.length
+      ? submittedAnswers
+      : persistedAnswers.length
+        ? persistedAnswers
+        : db.answerDb.getByOrder(orderId);
 
     const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
     if (!eligibility.eligible) {
@@ -148,12 +186,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Resolve patient — PracticeQ is the source of truth for PHI
-    const { resolvePatient } = await import("@/lib/patient-resolver");
+    const { preferCompletePatientForIntegrations, resolvePatient } = await import("@/lib/patient-resolver");
     const orderWithPracticeQId = { ...order, practiceqClientId: practiceqClientId ?? order.practiceqClientId };
     let patient = await resolvePatient(orderWithPracticeQId).catch(() => null);
 
-    // Final fallback: use the submitted patientData directly (it's still in memory)
-    if (!patient) patient = patientForOrder;
+    // Postgres stores a minimal patient stub; checkout still has the full PHI record
+    // needed for outbound integrations during this request.
+    patient = preferCompletePatientForIntegrations(patient, patientForOrder);
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
@@ -183,7 +222,7 @@ export async function POST(req: NextRequest) {
     // 5. Charge via QuickBooks Payments
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
     try {
-      chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
+      chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
         token,
         cardNumber,
         expMonth,
@@ -206,7 +245,7 @@ export async function POST(req: NextRequest) {
       id: generateId(),
       orderId,
       patientId: patient.id,
-      amount,
+      amount: chargeAmount,
       currency: "USD",
       status: "completed",
       paymentMethod: "credit_card",
@@ -224,10 +263,11 @@ export async function POST(req: NextRequest) {
     const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
     const identityUploadBuild = submittedIdentityMedia
       ? await buildIdentityUploads({
-          orderId,
-          idImageData: identityUploads.licenseImageData,
-          selfieFrameData: identityUploads.selfieFrameData,
-          identityVideoData: identityUploads.identityVideoData,
+        orderId,
+        practiceqClientId: practiceqClientId ?? order.practiceqClientId,
+        idImageData: identityUploads.licenseImageData,
+        selfieFrameData: identityUploads.selfieFrameData,
+        identityVideoData: identityUploads.identityVideoData,
         })
       : { uploads: [], aiUploads: [] };
     const submittedUploads = identityUploadBuild.uploads;
@@ -305,7 +345,23 @@ export async function POST(req: NextRequest) {
 
     // 9. PracticeQ - intake packet for provider chart
     try {
-      await practiceq.submitIntakePacket(updatedOrder, { patient, product: submittedProduct ?? null });
+      const submittedConsent: ConsentRecord | null = consentData
+        ? {
+            id: `consent_${orderId}`,
+            orderId,
+            consentText: "Patient consented to telehealth services and data collection.",
+            acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
+            signedName: consentData.signedName ?? "",
+            signedAt: consentData.signedAt ?? new Date().toISOString(),
+          }
+        : null;
+      await practiceq.submitIntakePacket(updatedOrder, {
+        patient,
+        product: submittedProduct ?? null,
+        answers: fallbackAnswers,
+        questions: fallbackQuestions,
+        consent: submittedConsent,
+      });
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);

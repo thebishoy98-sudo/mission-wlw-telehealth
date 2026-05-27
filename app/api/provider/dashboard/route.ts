@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export const dynamic = "force-dynamic";
 
@@ -59,11 +61,24 @@ export async function GET(req: Request) {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
     const pagedOrders = sortedOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
+    const hydratedPatientMap = new Map(patientMap);
+
+    await Promise.all(
+      pagedOrders.map(async (order) => {
+        const patient = hydratedPatientMap.get(order.patientId);
+        if (!patient) return;
+        const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => db.practiceqDb.getByOrder(order.id));
+        const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
+        if (practiceq?.available) {
+          hydratedPatientMap.set(order.patientId, hydratePatientFromPracticeQ(patient, practiceq));
+        }
+      })
+    );
 
     return NextResponse.json({
       orders: pagedOrders,
       patients: Array.from(
-        new Map(pagedOrders.map((order) => patientMap.get(order.patientId)).filter(Boolean).map((patient) => [patient!.id, patient!])).values()
+        new Map(pagedOrders.map((order) => hydratedPatientMap.get(order.patientId)).filter(Boolean).map((patient) => [patient!.id, patient!])).values()
       ),
       products,
       reviews,

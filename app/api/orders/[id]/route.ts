@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export async function GET(
   _req: NextRequest,
@@ -14,16 +15,18 @@ export async function GET(
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  const [serverPatient, serverProduct, serverPharmacyOrder] = await Promise.all([
+  const [serverPatient, serverProduct, serverPharmacyOrder, serverPracticeQPacket] = await Promise.all([
     dbServer.patientDb.getById(order.patientId).catch(() => null),
     dbServer.productDb.getById(order.productId).catch(() => null),
     dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null),
+    dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null),
   ]);
 
   const patient = serverPatient ?? db.patientDb.getById(order.patientId);
   const product = serverProduct ?? db.productDb.getById(order.productId);
   const pharmacyOrder = serverPharmacyOrder ?? db.pharmacyOrderDb.getByOrder(order.id);
-  const practiceqPacket = db.practiceqDb.getByOrder(order.id);
+  const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
+  const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket).catch(() => null);
 
   return NextResponse.json({
     order,
@@ -43,11 +46,14 @@ export async function GET(
           shippedAt: pharmacyOrder.shippedAt,
         }
       : null,
-    practiceq: practiceqPacket
+    practiceq: practiceqMirror ?? (practiceqPacket
       ? {
+          available: false,
           status: practiceqPacket.status,
           submittedAt: practiceqPacket.submittedAt,
+          intakeId: practiceqPacket.id,
+          answers: [],
         }
-      : null,
+      : null),
   });
 }

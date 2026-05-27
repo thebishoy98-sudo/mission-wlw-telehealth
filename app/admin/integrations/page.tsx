@@ -48,16 +48,16 @@ const INTEGRATIONS: Record<
     role: "Once a provider approves a prescription, the full order - drug, dose, quantity, and the patient's shipping address - is transmitted directly to Life File. Status updates and tracking numbers flow back automatically.",
   },
   spruce: {
-    label: "Spruce Messaging",
+    label: "Spruce Texting",
     color: "bg-orange-100 text-orange-700",
     dot: "bg-orange-500",
-    description: "A healthcare messaging platform for patient text communication.",
-    role: "Patients receive a plain-English text at every key moment in their order journey - no need to log in to find out what's happening.",
+    description: "Healthcare SMS texting for patient order updates and reminders.",
+    role: "Patients receive text updates for payment, identity verification, provider review, pharmacy dispatch, shipping, and delivery.",
     smsTemplates: [
       { trigger: "Intake submitted", message: "We've received your intake. A provider will review shortly." },
       { trigger: "Payment captured", message: "We've received your payment. Order ID confirmed." },
+      { trigger: "Identity reminder", message: "Please upload your ID and 10-second identity video." },
       { trigger: "Sent to pharmacy", message: "Your order has been sent to our pharmacy partner." },
-      { trigger: "Order fulfilled", message: "Your order has been fulfilled. Tracking info coming soon." },
       { trigger: "Order shipped", message: "Your tracking info is ready. Contact us with any questions." },
     ],
   },
@@ -117,6 +117,10 @@ function humanReadableAction(log: Types.IntegrationLog): string {
     "Pharmacy order submitted": "Prescription transmitted to pharmacy",
     "Pharmacy status updated": "Pharmacy sent a status update on the order",
     "SMS sent": "Text message sent to patient",
+    "SMS queued (Spruce disabled)": "Text message queued because live Spruce sending is disabled",
+    "SMS API send failed": "Text message failed to send through Spruce",
+    "Patient SMS reply received": "Patient replied by text",
+    "SMS delivery failed": "Spruce reported a text delivery failure",
   };
   return map[log.action] ?? log.action;
 }
@@ -125,6 +129,7 @@ function humanReadableAction(log: Types.IntegrationLog): string {
 
 export default function IntegrationsPage() {
   const [logs, setLogs] = useState<Types.IntegrationLog[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<Record<string, any>>({});
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -136,6 +141,7 @@ export default function IntegrationsPage() {
         if (!response.ok) throw new Error(payload.error ?? "Could not load integration activity.");
         const allLogs = (payload.logs ?? []) as Types.IntegrationLog[];
         setLogs(allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+        setIntegrationStatus(payload.integrations ?? {});
       })
       .catch((err) => setError(err.message ?? "Could not load integration activity."))
       .finally(() => setLoading(false));
@@ -173,6 +179,22 @@ export default function IntegrationsPage() {
                 {cfg.smsTemplates && (
                   <div className="border-t pt-3">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Messages patients receive</p>
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                      <span className={`rounded-full px-2 py-1 font-semibold ${
+                        integrationStatus.spruce?.liveSending ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {integrationStatus.spruce?.liveSending ? "Live sending on" : "Live sending off"}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 font-semibold ${
+                        integrationStatus.spruce?.configured ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      }`}>
+                        {integrationStatus.spruce?.configured ? "Credentials configured" : "Credentials missing"}
+                      </span>
+                    </div>
+                    <div className="mb-3 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                      <p className="font-semibold">Webhook</p>
+                      <p className="font-mono break-all">{integrationStatus.spruce?.webhookPath ?? "/api/webhooks/spruce"}</p>
+                    </div>
                     <div className="space-y-2">
                       {cfg.smsTemplates.map((t) => (
                         <div key={t.trigger} className="bg-orange-50 rounded-lg px-3 py-2">

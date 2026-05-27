@@ -1,5 +1,5 @@
-import { loadProviderPatientChart } from "@/lib/provider-chart";
-import type { Order, Patient, Product, ProviderReview } from "@/types";
+import { hydratePatientFromPracticeQ, loadProviderPatientChart } from "@/lib/provider-chart";
+import type { Order, Patient, PracticeQMirror, Product, ProviderReview } from "@/types";
 
 const patient: Patient = {
   id: "patient_server",
@@ -53,24 +53,44 @@ const review: ProviderReview = {
 
 describe("loadProviderPatientChart", () => {
   it("loads a provider chart from server stores by patient id", async () => {
+    const practiceq: PracticeQMirror = {
+      available: true,
+      clientId: "12345",
+      intakeId: "intake_123",
+      status: "Completed",
+      questionnaireName: "Medical: Brief Intake Form",
+      answers: [{ question: "What is your current body weight?", answer: "210" }],
+    };
     const chart = await loadProviderPatientChart(patient.id, {
       patients: { getById: jest.fn().mockResolvedValue(patient) },
       orders: { getByPatient: jest.fn().mockResolvedValue([order]) },
       products: { getById: jest.fn().mockResolvedValue(product) },
-      questions: { getAll: jest.fn().mockResolvedValue([]) },
+      questions: { getAll: jest.fn().mockResolvedValue([{ id: "pq_current_weight", text: "What is your current body weight?" }]) },
       answers: { getByOrder: jest.fn().mockResolvedValue([]) },
       consents: { getByOrder: jest.fn().mockResolvedValue(null) },
       uploads: { getByOrder: jest.fn().mockResolvedValue([]) },
       payments: { getByOrder: jest.fn().mockResolvedValue({ amount: 299 }) },
       reviews: { getByOrder: jest.fn().mockResolvedValue(review) },
+      practiceqPackets: { getByOrder: jest.fn().mockResolvedValue({ id: "intake_123" }) },
+      practiceqMirror: { getForOrder: jest.fn().mockResolvedValue(practiceq) },
     });
 
     expect(chart?.patient).toMatchObject({ id: patient.id, firstName: "Allen", lastName: "S" });
     expect(chart?.orders).toHaveLength(1);
     expect(chart?.selectedOrder.id).toBe(order.id);
     expect(chart?.product?.id).toBe(product.id);
-    expect(chart?.payment).toMatchObject({ amount: 299 });
+    expect(chart?.payment).toBeNull();
     expect(chart?.review?.identityReviewRequired).toBe(true);
+    expect(chart?.practiceq).toMatchObject({
+      available: true,
+      clientId: "12345",
+      intakeId: "intake_123",
+      questionnaireName: "Medical: Brief Intake Form",
+    });
+    expect(chart?.practiceq?.answers).toContainEqual({
+      question: "What is your current body weight?",
+      answer: "210",
+    });
   });
 
   it("returns null when the patient is not in the server store", async () => {
@@ -87,5 +107,49 @@ describe("loadProviderPatientChart", () => {
     });
 
     expect(chart).toBeNull();
+  });
+});
+
+describe("hydratePatientFromPracticeQ", () => {
+  it("fills local patient stubs from linked PracticeQ intake answers", () => {
+    const stub: Patient = {
+      ...patient,
+      firstName: "",
+      lastName: "",
+      dateOfBirth: "",
+      phone: "",
+      email: "",
+      address: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+      shippingAddress: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+    };
+    const practiceq: PracticeQMirror = {
+      available: true,
+      clientName: "Allen PracticeQ",
+      clientEmail: "allen.practiceq@example.com",
+      answers: [
+        { question: "First Name", answer: "Allen" },
+        { question: "Last Name", answer: "PracticeQ" },
+        { question: "Date of Birth", answer: "6/15/1985" },
+        { question: "Phone Number", answer: "5551234567" },
+        { question: "Address (For Medication Shipment)", answer: "123 Test Street" },
+        { question: "City", answer: "Dallas" },
+        { question: "State", answer: "TX" },
+        { question: "Zip Code", answer: "75201" },
+      ],
+    };
+
+    expect(hydratePatientFromPracticeQ(stub, practiceq)).toMatchObject({
+      firstName: "Allen",
+      lastName: "PracticeQ",
+      email: "allen.practiceq@example.com",
+      phone: "5551234567",
+      dateOfBirth: "6/15/1985",
+      address: {
+        street1: "123 Test Street",
+        city: "Dallas",
+        state: "TX",
+        zipCode: "75201",
+      },
+    });
   });
 });

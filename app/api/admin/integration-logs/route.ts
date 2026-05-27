@@ -14,5 +14,16 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     logs: serverLogs.length ? serverLogs : localLogs,
+    integrations: {
+      spruce: {
+        liveSending: process.env.USE_REAL_SPRUCE === "true",
+        configured: Boolean(
+          process.env.SPRUCE_AUTH_TOKEN ||
+          (process.env.SPRUCE_ACCESS_ID && process.env.SPRUCE_API_KEY)
+        ),
+        hasPhoneEndpoint: Boolean(process.env.SPRUCE_INTERNAL_ENDPOINT_ID),
+        webhookPath: "/api/webhooks/spruce",
+      },
+    },
   });
 }

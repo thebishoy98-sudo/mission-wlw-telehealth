@@ -122,15 +122,26 @@ export const patientDb = {
 
   async create(p: Patient & { practiceqClientId?: string }): Promise<Patient> {
     // PHI lives in PracticeQ — store only a stub (id + email for dedup + practiceq_client_id)
-    await sql`
+    const { rows } = await sql`
       INSERT INTO patients (id, email, practiceq_client_id, created_at, updated_at)
       VALUES (${p.id}, ${p.email ?? null}, ${(p as any).practiceqClientId ?? null},
         ${p.createdAt}, ${p.updatedAt})
-      ON CONFLICT (id) DO UPDATE SET
+      ON CONFLICT (email) DO UPDATE SET
         practiceq_client_id = COALESCE(EXCLUDED.practiceq_client_id, patients.practiceq_client_id),
         updated_at = EXCLUDED.updated_at
+      RETURNING id, email, practiceq_client_id, created_at, updated_at
     `;
-    return p;
+    const row = rows[0];
+    return row
+      ? {
+          ...p,
+          id: row.id,
+          email: row.email,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          practiceqClientId: row.practiceq_client_id ?? (p as any).practiceqClientId,
+        } as Patient & { practiceqClientId?: string }
+      : p;
   },
 
   async update(id: string, data: Partial<Patient> & { practiceqClientId?: string }): Promise<Patient | null> {
@@ -225,6 +236,12 @@ export const orderDb = {
 // ── Uploads ───────────────────────────────────────────────────────────────────
 
 export const uploadDb = {
+  async getById(id: string): Promise<Upload | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM uploads WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToUpload(rows[0]) : null;
+  },
+
   async getByOrder(orderId: string): Promise<Upload[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`

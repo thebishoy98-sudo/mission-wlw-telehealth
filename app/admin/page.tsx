@@ -216,6 +216,11 @@ function AdminDashboardContent() {
                 Integration Logs
               </Button>
             </Link>
+            <Link href="/admin/integrations">
+              <Button fullWidth variant="outline">
+                Spruce Texting
+              </Button>
+            </Link>
           </div>
         </div>
 

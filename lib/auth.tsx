@@ -108,6 +108,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
 
+    if (role === "provider") {
+      const response = await fetch("/api/auth/provider-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, error: payload.error ?? "Invalid email or password." };
+      }
+      setUser(payload.user);
+      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
+      return { success: true };
+    }
+
     const staff = STAFF_CREDENTIALS[normalized];
     if (!staff || staff.role !== role || staff.password !== password) {
       return { success: false, error: "Invalid email or password." };

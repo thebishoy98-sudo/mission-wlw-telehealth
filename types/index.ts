@@ -224,12 +224,66 @@ export interface PracticeQPacket {
     questionnaireAnswers: QuestionnaireAnswer[];
     consentRecord: Partial<ConsentRecord>;
     uploads: Upload[];
+    practiceQAnswerFile?: {
+      fileId: string;
+      filename: string;
+      uploadedAt: string;
+    };
+    practiceQPdfFile?: {
+      fileId: string;
+      filename: string;
+      uploadedAt: string;
+    };
     productRequested: string;
     doseSelected: string;
   };
   status: "pending" | "submitted" | "completed" | "error";
   lastSyncAt?: string;
   lastError?: string;
+}
+
+export interface PracticeQMirrorAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface PracticeQMirror {
+  available: boolean;
+  reason?: string;
+  clientId?: string;
+  intakeId?: string;
+  status?: string;
+  questionnaireName?: string;
+  submittedAt?: string;
+  clientName?: string;
+  clientEmail?: string;
+  practiceQUrl?: string;
+  answerFileId?: string;
+  pdfFileId?: string;
+  answers: PracticeQMirrorAnswer[];
+}
+
+export interface PracticeQFormSummary {
+  id: string;
+  clientName?: string;
+  clientEmail?: string;
+  clientId?: string;
+  status: string;
+  createdAt?: string;
+  submittedAt?: string;
+  questionnaireName?: string;
+  questionnaireId?: string;
+  practitionerName?: string;
+  externalClientId?: string;
+  practiceQUrl: string;
+}
+
+export interface PracticeQFormFeed {
+  available: boolean;
+  reason?: string;
+  completed: PracticeQFormSummary[];
+  pending: PracticeQFormSummary[];
+  all: PracticeQFormSummary[];
 }
 
 export interface PharmacyOrder {

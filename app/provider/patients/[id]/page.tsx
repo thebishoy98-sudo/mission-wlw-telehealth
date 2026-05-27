@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText } from "lucide-react";
+import { ChevronLeft, CheckCircle, ClipboardCheck, Eye, FileText, Image as ImageIcon, Video } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Textarea";
-import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { getIdentityGate } from "@/lib/identity";
+import { formatDateTime, getStatusColor, getStatusLabel } from "@/lib/utils";
 import type {
   ConsentRecord,
   Order,
   Patient,
-  Payment,
   PharmacyOrder,
+  PracticeQMirror,
   Product,
   ProviderReview,
   Question,
@@ -31,9 +32,10 @@ interface ChartState {
   answers: QuestionnaireAnswer[];
   consent: ConsentRecord | null;
   uploads: Upload[];
-  payment: Payment | null;
+  payment: null;
   pharmacyOrder: PharmacyOrder | null;
   review: ProviderReview | null;
+  practiceq: PracticeQMirror | null;
 }
 
 export default function PatientDetail() {
@@ -48,6 +50,8 @@ export default function PatientDetail() {
   const [approvalSteps, setApprovalSteps] = useState<{ label: string; status: "pending" | "done" | "running" }[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [identityMessage, setIdentityMessage] = useState("");
+  const [resendingIdentity, setResendingIdentity] = useState(false);
 
   useEffect(() => {
     if (!patientId) return;
@@ -56,7 +60,7 @@ export default function PatientDetail() {
     async function loadPatientChart() {
       setLoadError("");
       try {
-        const res = await fetch(`/api/provider/patients/${patientId}`, { cache: "no-store" });
+        const res = await fetch(`/api/provider/patients/${patientId}?t=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         if (!cancelled) setChart(data);
@@ -175,6 +179,27 @@ export default function PatientDetail() {
     setSelectedOrderPatch({ status: "rejected", rejectionReason: reason });
   };
 
+  const handleResendIdentityText = async () => {
+    if (!chart) return;
+    setActionError("");
+    setIdentityMessage("");
+    setResendingIdentity(true);
+    try {
+      const res = await fetch("/api/identity/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: chart.selectedOrder.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not resend verification text.");
+      setIdentityMessage(`Verification text sent to ${data.phone || "patient"}.`);
+    } catch (error) {
+      setActionError((error as Error).message);
+    } finally {
+      setResendingIdentity(false);
+    }
+  };
+
   if (loadError) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -201,8 +226,9 @@ export default function PatientDetail() {
     );
   }
 
-  const { patient, selectedOrder, questionnaire, answers, consent, payment, pharmacyOrder, review } = chart;
+  const { patient, selectedOrder, questionnaire, answers, consent, uploads, pharmacyOrder, review, practiceq } = chart;
   const chartMarkedViewed = !!review?.chartViewedAt;
+  const identityVerified = getIdentityGate(selectedOrder).canDispatch;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -282,6 +308,41 @@ export default function PatientDetail() {
               </Card>
             )}
 
+            {practiceq?.available && (
+              <Card>
+                <CardContent className="p-5 sm:p-6">
+                  <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-teal-500" />
+                        PracticeQ Intake Chart
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {practiceq.questionnaireName || "PracticeQ form"}
+                        {practiceq.submittedAt ? ` - ${formatDateTime(practiceq.submittedAt)}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                      {practiceq.status && <Badge className={getStatusColor(practiceq.status.toLowerCase())}>{practiceq.status}</Badge>}
+                    </div>
+                  </div>
+                  {practiceq.answers.length === 0 ? (
+                    <p className="text-sm text-gray-500">No PracticeQ answers were returned for this linked order.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {practiceq.answers.map((answer, index) => (
+                        <div key={`${answer.question}-${index}`} className="border-b border-gray-50 pb-4 last:border-0">
+                          <p className="font-medium text-gray-800 text-sm mb-1">{answer.question}</p>
+                          <p className="whitespace-pre-wrap text-gray-600 text-sm">{answer.answer || <span className="text-gray-400 italic">No answer</span>}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {consent && (
               <Card>
                 <CardContent className="p-5 sm:p-6">
@@ -299,6 +360,50 @@ export default function PatientDetail() {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardContent className="p-5 sm:p-6">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-teal-500" />
+                      Identity Evidence
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Status: {selectedOrder.identityStatus ?? "missing"}
+                    </p>
+                  </div>
+                  {!identityVerified && (
+                    <Button size="sm" variant="outline" onClick={handleResendIdentityText} disabled={resendingIdentity}>
+                      {resendingIdentity ? "Sending..." : "Resend Verification Text"}
+                    </Button>
+                  )}
+                </div>
+                {identityMessage && (
+                  <div className="mb-4 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+                    {identityMessage}
+                  </div>
+                )}
+                {uploads.length === 0 ? (
+                  <p className="text-sm text-gray-500">No license or identity video has been submitted for this order.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {uploads.map((upload) => (
+                      <div key={upload.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {upload.type === "driver_license" ? "Submitted License" : "Identity Video"}
+                          </p>
+                          {upload.type === "selfie_video" ? <Video className="h-4 w-4 text-gray-400" /> : <ImageIcon className="h-4 w-4 text-gray-400" />}
+                        </div>
+                        <IdentityUploadPreview upload={upload} />
+                        <p className="mt-2 truncate text-xs text-gray-500">{upload.filename}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {selectedOrder.status === "pending_review" || selectedOrder.status === "approved" ? (
               <Card>
@@ -362,6 +467,46 @@ export default function PatientDetail() {
 
             <Card>
               <CardContent className="p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">PracticeQ Linkage</h3>
+                {!practiceq ? (
+                  <p className="text-sm text-gray-500">No PracticeQ record is linked to this order.</p>
+                ) : !practiceq.available ? (
+                  <div className="space-y-2 text-sm">
+                    <Badge className="bg-amber-100 text-amber-800">Unavailable</Badge>
+                    <p className="text-gray-600">{practiceq.reason}</p>
+                    {practiceq.clientId && (
+                      <p className="font-mono text-xs text-gray-500">Client {practiceq.clientId}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                      {practiceq.status && <Badge className={getStatusColor(practiceq.status.toLowerCase())}>{practiceq.status}</Badge>}
+                    </div>
+                    <div className="space-y-1 text-gray-600">
+                      {practiceq.clientId && <p>Client ID: <span className="font-mono text-xs">{practiceq.clientId}</span></p>}
+                      {practiceq.intakeId && <p>Intake ID: <span className="font-mono text-xs">{practiceq.intakeId}</span></p>}
+                      {practiceq.questionnaireName && <p>Form: {practiceq.questionnaireName}</p>}
+                      {practiceq.submittedAt && <p>Submitted: {formatDateTime(practiceq.submittedAt)}</p>}
+                    </div>
+                    {practiceq.practiceQUrl && (
+                      <a
+                        href={practiceq.practiceQUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex text-sm font-medium text-teal-600 hover:text-teal-700"
+                      >
+                        Open in PracticeQ
+                      </a>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-gray-400" />
                   Chart Review Audit
@@ -382,22 +527,6 @@ export default function PatientDetail() {
                 </div>
               </CardContent>
             </Card>
-
-            {payment && (
-              <Card>
-                <CardContent className="p-5">
-                  <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-gray-400" />
-                    Payment
-                  </h3>
-                  <p className="text-2xl font-bold text-teal-600 mb-1">{formatCurrency(payment.amount)}</p>
-                  <p className="text-xs text-gray-400">Card ending {payment.cardLast4}</p>
-                  <div className="mt-2">
-                    <Badge className={getStatusColor(payment.status)}>{getStatusLabel(payment.status)}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             <Card>
               <CardContent className="p-5">
@@ -448,4 +577,21 @@ export default function PatientDetail() {
 
     </div>
   );
+}
+
+function IdentityUploadPreview({ upload }: { upload: Upload }) {
+  const src = `/api/provider/uploads/${encodeURIComponent(upload.id)}`;
+  if (!upload.base64Data && !upload.storageUrl) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-lg bg-white text-sm text-gray-500">
+        Media file is stored securely but no browser preview URL is available.
+      </div>
+    );
+  }
+
+  if (upload.mimeType.startsWith("video/")) {
+    return <video controls playsInline src={src} className="aspect-video w-full rounded-lg bg-white object-contain" />;
+  }
+
+  return <img src={src} alt={upload.type === "driver_license" ? "Submitted license" : "Submitted identity capture"} className="aspect-video w-full rounded-lg bg-white object-contain" />;
 }

@@ -14,6 +14,9 @@ import { generateId } from "@/lib/utils";
 type PacketOverrides = {
   patient?: Types.Patient | null;
   product?: Types.Product | null;
+  answers?: Types.QuestionnaireAnswer[];
+  questions?: Types.Question[];
+  consent?: Types.ConsentRecord | null;
 };
 
 type PracticeQApiResponse = {
@@ -37,6 +40,38 @@ type PracticeQIntake = PracticeQApiResponse & {
   questions?: unknown[];
 };
 
+type PracticeQIntakeSummary = {
+  Id?: string;
+  ClientName?: string;
+  ClientEmail?: string;
+  ClientId?: number | string;
+  Status?: string;
+  DateCreated?: number | string | null;
+  DateSubmitted?: number | string | null;
+  QuestionnaireName?: string;
+  QuestionnaireId?: string;
+  PractitionerName?: string;
+  ExternalClientId?: string;
+  [key: string]: unknown;
+};
+
+type PracticeQFileUploadInput = {
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+};
+
+type PracticeQFileUploadResult = {
+  id: string;
+  raw: PracticeQApiResponse | null;
+};
+
+type PracticeQFileSummary = {
+  id: string;
+  filename?: string;
+  raw: Record<string, unknown>;
+};
+
 const normalizeEndpoint = () => {
   if (serviceConfig.practiceq.intakeEndpoint) return serviceConfig.practiceq.intakeEndpoint;
   return `${serviceConfig.practiceq.baseUrl.replace(/\/$/, "")}/intakes/send`;
@@ -48,8 +83,9 @@ export const submitIntakePacket = async (
 ): Promise<Types.PracticeQPacket> => {
   const patient = overrides?.patient ?? db.patientDb.getById(order.patientId);
   const product = overrides?.product ?? db.productDb.getById(order.productId);
-  const answers = await getAnswers(order.id);
-  const consent = await getConsent(order.id);
+  const answers = overrides?.answers ?? await getAnswers(order.id);
+  const questions = overrides?.questions ?? await getQuestions();
+  const consent = overrides?.consent ?? await getConsent(order.id);
   const uploads = await getUploads(order.id);
 
   if (!patient || !product) {
@@ -104,17 +140,35 @@ export const submitIntakePacket = async (
       throw new Error(`PracticeQ API error: ${message}`);
     }
 
+    const intakeWithAnswers = await populateAndUpdatePracticeQIntake(result as PracticeQIntake | null, {
+      patient,
+      answers,
+      questions,
+    });
+    const finalIntake = intakeWithAnswers ?? result;
+    const practiceQFiles = answers.length
+      ? await uploadMissionIntakeFiles(client.ClientId as string | number, order, patient, answers, questions, consent)
+      : null;
+
     const saved = persistPacket({
       ...packet,
-      id: result?.Id ?? result?.packetId ?? result?.id ?? packet.id,
-      status: result?.Status === "Completed" || result?.status === "completed" ? "completed" : "submitted",
+      id: finalIntake?.Id ?? finalIntake?.packetId ?? finalIntake?.id ?? packet.id,
+      status: finalIntake?.Status === "Completed" || finalIntake?.status === "completed" ? "completed" : "submitted",
       lastSyncAt: new Date().toISOString(),
+      packetData: {
+        ...packet.packetData,
+        practiceQAnswerFile: practiceQFiles?.answerFile ?? undefined,
+        practiceQPdfFile: practiceQFiles?.pdfFile ?? undefined,
+      },
     });
     logPacketEvent("Intake packet submitted", saved, patient, product, {
       mode: "live",
       endpoint,
       clientId: client.ClientId,
       requestId: result?.requestId,
+      answersSubmitted: answers.length,
+      answerFileId: practiceQFiles?.answerFile.fileId,
+      pdfFileId: practiceQFiles?.pdfFile.fileId,
     });
     return saved;
   } catch (error) {
@@ -172,6 +226,10 @@ export function buildPracticeQUrl(path: string): string {
   return `https://intakeq.com/${normalized}`;
 }
 
+export function buildPracticeQClientFilesUrl(clientId: string | number): string {
+  return buildPracticeQUrl(`#/client/${encodeURIComponent(String(clientId))}?tab=files`);
+}
+
 export async function getIntakeById(intakeId: string): Promise<PracticeQIntake | null> {
   if (!serviceConfig.practiceq.apiKey) return null;
   const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(intakeId)}`, {
@@ -181,12 +239,44 @@ export async function getIntakeById(intakeId: string): Promise<PracticeQIntake |
   return parsePracticeQResponse(response) as Promise<PracticeQIntake | null>;
 }
 
+export async function getPracticeQFormDetail(intakeId: string): Promise<Types.PracticeQMirror> {
+  const unavailable = (reason: string): Types.PracticeQMirror => ({
+    available: false,
+    reason,
+    intakeId,
+    answers: [],
+    practiceQUrl: buildPracticeQUrl(`#/history/${intakeId}`),
+  });
+
+  if (!serviceConfig.practiceq.apiKey) {
+    return unavailable("PRACTICEQ_API_KEY is not configured");
+  }
+
+  const intake = await getIntakeById(intakeId).catch(() => null);
+  if (!intake) {
+    return unavailable("PracticeQ intake could not be loaded");
+  }
+
+  return {
+    available: true,
+    intakeId: intake.Id ? String(intake.Id) : intakeId,
+    clientId: intake.ClientId === undefined || intake.ClientId === null ? undefined : String(intake.ClientId),
+    status: intake.Status,
+    questionnaireName: intake.QuestionnaireName,
+    submittedAt: normalizePracticeQDate(intake.DateSubmitted),
+    clientName: firstString(intake.ClientName),
+    clientEmail: firstString(intake.ClientEmail),
+    practiceQUrl: buildPracticeQUrl(`#/history/${intake.Id ?? intakeId}`),
+    answers: normalizePracticeQAnswers(intake),
+  };
+}
+
 export async function getPracticeQMirrorForOrder(
   order: Types.Order,
   packet?: Types.PracticeQPacket | null
 ): Promise<Types.PracticeQMirror> {
   const clientId = order.practiceqClientId;
-  const intakeId = packet?.id;
+  let intakeId = packet?.id;
   const unavailable = (reason: string): Types.PracticeQMirror => ({
     available: false,
     reason,
@@ -203,10 +293,33 @@ export async function getPracticeQMirrorForOrder(
     return unavailable("No PracticeQ client or intake id is linked to this order");
   }
 
-  const [client, intake] = await Promise.all([
+  let [client, intake] = await Promise.all([
     clientId ? getClientById(clientId).catch(() => null) : Promise.resolve(null),
     intakeId ? getIntakeById(intakeId).catch(() => null) : Promise.resolve(null),
   ]);
+
+  let answers = normalizePracticeQAnswers(intake);
+  const shouldRecoverIntake = clientId && (!intake || answers.length === 0 || packet?.status === "error");
+  if (shouldRecoverIntake) {
+    const findMatch = (feed: Types.PracticeQFormFeed | null | undefined) =>
+      feed?.all.find((form) => form.externalClientId === order.id) ??
+      feed?.all.find((form) => form.clientId === String(clientId) && form.id !== intakeId);
+    const filteredFeed = await getIntakeSummaryFeed({ client: String(clientId) }).catch(() => null);
+    let matchedSummary = findMatch(filteredFeed);
+    if (!matchedSummary) {
+      const unfilteredFeed = await getIntakeSummaryFeed().catch(() => null);
+      matchedSummary = findMatch(unfilteredFeed);
+    }
+    if (matchedSummary) {
+      const recoveredIntake = await getIntakeById(matchedSummary.id).catch(() => null);
+      const recoveredAnswers = normalizePracticeQAnswers(recoveredIntake);
+      if (recoveredIntake && (recoveredAnswers.length > 0 || !intake)) {
+        intakeId = matchedSummary.id;
+        intake = recoveredIntake;
+        answers = recoveredAnswers;
+      }
+    }
+  }
 
   return {
     available: true,
@@ -217,8 +330,50 @@ export async function getPracticeQMirrorForOrder(
     submittedAt: normalizePracticeQDate(intake?.DateSubmitted) ?? packet?.submittedAt,
     clientName: client?.Name ?? ([client?.FirstName, client?.LastName].filter(Boolean).join(" ") || undefined),
     clientEmail: client?.Email,
-    practiceQUrl: intakeId ? buildPracticeQUrl(`#/history/${intakeId}`) : undefined,
-    answers: normalizePracticeQAnswers(intake),
+    practiceQUrl: clientId
+      ? buildPracticeQClientFilesUrl(clientId)
+      : intakeId ? buildPracticeQUrl(`#/history/${intakeId}`) : undefined,
+    answerFileId: packet?.packetData?.practiceQAnswerFile?.fileId,
+    pdfFileId: packet?.packetData?.practiceQPdfFile?.fileId,
+    answers: await mergePracticeQAnswersWithAnswerFile(answers, packet).catch(() => answers),
+  };
+}
+
+export async function getIntakeSummaryFeed(options: {
+  page?: number;
+  client?: string;
+  startDate?: string;
+  endDate?: string;
+  updatedSince?: string;
+} = {}): Promise<Types.PracticeQFormFeed> {
+  if (!serviceConfig.practiceq.apiKey) {
+    return unavailableFormFeed("PRACTICEQ_API_KEY is not configured");
+  }
+
+  const params = new URLSearchParams();
+  params.set("all", "true");
+  params.set("page", String(Math.max(1, options.page ?? 1)));
+  if (options.client?.trim()) params.set("client", options.client.trim());
+  if (options.startDate?.trim()) params.set("startDate", options.startDate.trim());
+  if (options.endDate?.trim()) params.set("endDate", options.endDate.trim());
+  if (options.updatedSince?.trim()) params.set("updatedSince", options.updatedSince.trim());
+
+  const response = await fetch(`${pqBase()}/intakes/summary?${params.toString()}`, {
+    headers: pqHeaders(),
+  });
+  if (!response.ok) {
+    return unavailableFormFeed(`PracticeQ summary request failed with HTTP ${response.status}`);
+  }
+
+  const raw = await parsePracticeQListResponse(response);
+  const all = raw.map(normalizePracticeQSummary).filter((form): form is Types.PracticeQFormSummary => Boolean(form));
+  all.sort((a, b) => formSortTime(b) - formSortTime(a));
+
+  return {
+    available: true,
+    completed: all.filter((form) => form.status.toLowerCase() === "completed"),
+    pending: all.filter((form) => form.status.toLowerCase() !== "completed"),
+    all,
   };
 }
 
@@ -230,6 +385,9 @@ function buildPacket(
   consent: Types.ConsentRecord | null,
   uploads: Types.Upload[]
 ): Types.PracticeQPacket {
+  const doseSelected =
+    product.doses.find((d) => d.id === order.doseId)?.label ||
+    "Unknown";
   return {
     id: generateId(),
     orderId: order.id,
@@ -238,14 +396,12 @@ function buildPacket(
     status: "submitted",
     lastSyncAt: new Date().toISOString(),
     packetData: {
-      patientInfo: patient,
-      questionnaireAnswers: answers,
-      consentRecord: consent || {},
-      uploads,
+      patientInfo: { id: patient.id },
+      questionnaireAnswers: [],
+      consentRecord: consent ? { id: consent.id, signedAt: consent.signedAt } : {},
+      uploads: [],
       productRequested: product.name,
-      doseSelected:
-        product.doses.find((d) => d.id === order.doseId)?.label ||
-        "Unknown",
+      doseSelected,
     },
   };
 }
@@ -261,6 +417,39 @@ function normalizePracticeQDate(value: unknown): string | undefined {
   return undefined;
 }
 
+function unavailableFormFeed(reason: string): Types.PracticeQFormFeed {
+  return {
+    available: false,
+    reason,
+    completed: [],
+    pending: [],
+    all: [],
+  };
+}
+
+function normalizePracticeQSummary(summary: PracticeQIntakeSummary): Types.PracticeQFormSummary | null {
+  if (!summary?.Id) return null;
+  return {
+    id: String(summary.Id),
+    clientName: summary.ClientName,
+    clientEmail: summary.ClientEmail,
+    clientId: summary.ClientId === undefined || summary.ClientId === null ? undefined : String(summary.ClientId),
+    status: summary.Status ?? "Unknown",
+    createdAt: normalizePracticeQDate(summary.DateCreated),
+    submittedAt: normalizePracticeQDate(summary.DateSubmitted),
+    questionnaireName: summary.QuestionnaireName,
+    questionnaireId: summary.QuestionnaireId,
+    practitionerName: summary.PractitionerName,
+    externalClientId: summary.ExternalClientId,
+    practiceQUrl: buildPracticeQUrl(`#/history/${summary.Id}`),
+  };
+}
+
+function formSortTime(form: Types.PracticeQFormSummary): number {
+  const value = form.submittedAt ?? form.createdAt;
+  return value ? new Date(value).getTime() : 0;
+}
+
 function normalizePracticeQAnswers(intake: PracticeQIntake | null): Types.PracticeQMirrorAnswer[] {
   const questions = intake?.Questions ?? intake?.questions ?? [];
   if (!Array.isArray(questions)) return [];
@@ -270,7 +459,7 @@ function normalizePracticeQAnswers(intake: PracticeQIntake | null): Types.Practi
       if (!item || typeof item !== "object") return null;
       const entry = item as Record<string, unknown>;
       const question = firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name);
-      const answer = firstString(entry.Answer, entry.Value, entry.AnswerText, entry.Response);
+      const answer = firstString(entry.Answer, entry.Value, entry.AnswerText, entry.Response) || formatPracticeQRows(entry.Rows);
       if (!question && !answer) return null;
       return {
         question: question || "Question",
@@ -278,6 +467,479 @@ function normalizePracticeQAnswers(intake: PracticeQIntake | null): Types.Practi
       };
     })
     .filter((answer): answer is Types.PracticeQMirrorAnswer => Boolean(answer));
+}
+
+async function mergePracticeQAnswersWithAnswerFile(
+  answers: Types.PracticeQMirrorAnswer[],
+  packet?: Types.PracticeQPacket | null
+) {
+  const fileId = packet?.packetData?.practiceQAnswerFile?.fileId;
+  if (!fileId) return answers;
+
+  const file = await downloadPracticeQFile(fileId);
+  const parsed = JSON.parse(file.body.toString("utf8")) as {
+    answers?: Types.PracticeQMirrorAnswer[];
+  };
+  const fileAnswers = Array.isArray(parsed.answers) ? parsed.answers : [];
+  if (!fileAnswers.length) return answers;
+
+  const fileAnswerByQuestion = new Map(fileAnswers.map((answer) => [normalizeQuestionText(answer.question), answer.answer]));
+  const seen = new Set<string>();
+  const hasMeaningfulPracticeQAnswers = answers.some((answer) => answer.answer.trim());
+  if (!hasMeaningfulPracticeQAnswers) return fileAnswers;
+
+  const merged = answers.map((answer) => {
+    const key = normalizeQuestionText(answer.question);
+    seen.add(key);
+    return answer.answer.trim()
+      ? answer
+      : { ...answer, answer: fileAnswerByQuestion.get(key) ?? answer.answer };
+  });
+
+  for (const answer of fileAnswers) {
+    const key = normalizeQuestionText(answer.question);
+    if (!seen.has(key)) merged.push(answer);
+  }
+
+  return merged;
+}
+
+async function uploadMissionIntakeFiles(
+  clientId: string | number,
+  order: Types.Order,
+  patient: Types.Patient,
+  answers: Types.QuestionnaireAnswer[],
+  questions: Types.Question[],
+  consent: Types.ConsentRecord | null
+) {
+  const normalizedAnswers = buildMissionIntakeAnswerRows(patient, answers, questions);
+  if (!normalizedAnswers.length) return null;
+
+  const jsonFilename = `mission-intake-answers-${order.id}.json`;
+  const payload = {
+    source: "Mission WLW",
+    orderId: order.id,
+    patientId: patient.id,
+    submittedAt: new Date().toISOString(),
+    consent: consent
+      ? { signedName: consent.signedName, signedAt: consent.signedAt, acknowledgments: consent.acknowledgments }
+      : null,
+    answers: normalizedAnswers,
+  };
+  const answerFile = await uploadPracticeQClientFile(clientId, {
+    filename: jsonFilename,
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(payload, null, 2), "utf8"),
+  });
+  const pdfFilename = `mission-intake-summary-${order.id}.pdf`;
+  const pdfFile = await uploadPracticeQClientFile(clientId, {
+    filename: pdfFilename,
+    mimeType: "application/pdf",
+    buffer: createMissionIntakePdf({
+      order,
+      patient,
+      answers: normalizedAnswers,
+      consent,
+    }),
+  });
+
+  const uploadedAt = new Date().toISOString();
+  return {
+    answerFile: {
+      fileId: answerFile.id,
+      filename: jsonFilename,
+      uploadedAt,
+    },
+    pdfFile: {
+      fileId: pdfFile.id,
+      filename: pdfFilename,
+      uploadedAt,
+    },
+  };
+}
+
+export function createMissionIntakePdf(input: {
+  order: Types.Order;
+  patient: Types.Patient;
+  answers: Types.PracticeQMirrorAnswer[];
+  consent: Types.ConsentRecord | null;
+}) {
+  const profileLabels = new Set([
+    "First Name",
+    "Last Name",
+    "Date of Birth",
+    "Phone Number",
+    "Email",
+    "Address (For Medication Shipment)",
+    "City",
+    "State",
+    "Zip Code",
+    "Gender",
+  ]);
+  const profileAnswers = input.answers.filter((answer) => profileLabels.has(answer.question));
+  const clinicalAnswers = input.answers.filter((answer) => !profileLabels.has(answer.question));
+  const patientName = [input.patient.firstName, input.patient.lastName].filter(Boolean).join(" ") || "Patient";
+  const address = [
+    input.patient.address?.street1,
+    input.patient.address?.city,
+    input.patient.address?.state,
+    input.patient.address?.zipCode,
+  ].filter(Boolean).join(", ");
+
+  return buildStyledMissionIntakePdf({
+    title: "Mission WLW Intake Summary",
+    subtitle: "Completed clinical intake packet",
+    metadata: [
+      ["Patient", patientName],
+      ["DOB", input.patient.dateOfBirth || "Not supplied"],
+      ["Phone", input.patient.phone || "Not supplied"],
+      ["Email", input.patient.email || "Not supplied"],
+      ["Address", address || "Not supplied"],
+      ["Order ID", input.order.id],
+      ["Submitted", new Date().toLocaleString("en-US")],
+      ["Status", input.order.status],
+    ],
+    profileAnswers,
+    clinicalAnswers,
+    consent: input.consent,
+  });
+}
+
+function buildStyledMissionIntakePdf(input: {
+  title: string;
+  subtitle: string;
+  metadata: Array<[string, string]>;
+  profileAnswers: Types.PracticeQMirrorAnswer[];
+  clinicalAnswers: Types.PracticeQMirrorAnswer[];
+  consent: Types.ConsentRecord | null;
+}) {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 42;
+  const contentWidth = pageWidth - margin * 2;
+  const bottomMargin = 54;
+  const pages: string[][] = [];
+  let ops: string[] = [];
+  let y = 0;
+
+  const add = (op: string) => ops.push(op);
+  const color = (hex: string) => {
+    const normalized = hex.replace("#", "");
+    const r = parseInt(normalized.slice(0, 2), 16) / 255;
+    const g = parseInt(normalized.slice(2, 4), 16) / 255;
+    const b = parseInt(normalized.slice(4, 6), 16) / 255;
+    return `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)}`;
+  };
+  const rect = (x: number, top: number, width: number, height: number, fill: string, stroke?: string) => {
+    add(`q ${color(fill)} rg ${x} ${top - height} ${width} ${height} re f Q`);
+    if (stroke) add(`q ${color(stroke)} RG 0.8 w ${x} ${top - height} ${width} ${height} re S Q`);
+  };
+  const text = (value: string, x: number, baseline: number, size = 10, font: "regular" | "bold" = "regular", fill = "#111827") => {
+    const fontName = font === "bold" ? "F2" : "F1";
+    add(`BT ${color(fill)} rg /${fontName} ${size} Tf 1 0 0 1 ${x} ${baseline} Tm (${escapePdfText(value)}) Tj ET`);
+  };
+  const wrappedLines = (value: string, width: number, size = 10) => wrapPdfLine(value || "No answer", Math.max(18, Math.floor(width / (size * 0.52))));
+  const drawWrapped = (value: string, x: number, startY: number, width: number, size = 10, font: "regular" | "bold" = "regular", fill = "#374151") => {
+    let nextY = startY;
+    for (const line of wrappedLines(value, width, size)) {
+      text(line, x, nextY, size, font, fill);
+      nextY -= size + 4;
+    }
+    return nextY;
+  };
+  const startPage = () => {
+    if (ops.length) pages.push(ops);
+    ops = [];
+    rect(0, pageHeight, pageWidth, 84, "#0f766e");
+    text(input.title, margin, 742, 22, "bold", "#ffffff");
+    text(input.subtitle, margin, 722, 10, "regular", "#ccfbf1");
+    text("Confidential patient record", 438, 742, 10, "bold", "#ffffff");
+    y = 682;
+  };
+  const ensureSpace = (height: number) => {
+    if (y - height < bottomMargin) startPage();
+  };
+  const sectionTitle = (label: string) => {
+    ensureSpace(42);
+    text(label, margin, y, 14, "bold", "#0f172a");
+    add(`q ${color("#14b8a6")} RG 1.4 w ${margin} ${y - 10} m ${margin + contentWidth} ${y - 10} l S Q`);
+    y -= 30;
+  };
+  const infoCard = () => {
+    ensureSpace(150);
+    const cardTop = y + 14;
+    const rowHeight = 22;
+    const leftX = margin + 18;
+    const rightX = margin + 284;
+    const labelWidth = 72;
+    rect(margin, cardTop, contentWidth, 142, "#f8fafc", "#dbeafe");
+    text("Patient and Order Details", leftX, cardTop - 24, 13, "bold", "#0f172a");
+    input.metadata.forEach(([label, value], index) => {
+      const colX = index % 2 === 0 ? leftX : rightX;
+      const rowY = cardTop - 50 - Math.floor(index / 2) * rowHeight;
+      text(label, colX, rowY, 8, "bold", "#64748b");
+      drawWrapped(value || "Not supplied", colX + labelWidth, rowY, 180, 9, "regular", "#1f2937");
+    });
+    y = cardTop - 162;
+  };
+  const answerCard = (answer: Types.PracticeQMirrorAnswer) => {
+    const questionLines = wrappedLines(answer.question, contentWidth - 34, 10);
+    const answerLines = wrappedLines(answer.answer || "No answer", contentWidth - 34, 10);
+    const height = 28 + questionLines.length * 14 + answerLines.length * 14 + 18;
+    ensureSpace(height + 10);
+    const top = y + 8;
+    rect(margin, top, contentWidth, height, "#ffffff", "#e5e7eb");
+    let lineY = top - 24;
+    questionLines.forEach((line) => {
+      text(line, margin + 16, lineY, 10, "bold", "#0f766e");
+      lineY -= 14;
+    });
+    lineY -= 4;
+    answerLines.forEach((line) => {
+      text(line, margin + 16, lineY, 10, "regular", "#374151");
+      lineY -= 14;
+    });
+    y = top - height - 10;
+  };
+  const consentBlock = () => {
+    sectionTitle("Consent");
+    ensureSpace(72);
+    rect(margin, y + 10, contentWidth, 58, "#f0fdfa", "#99f6e4");
+    if (input.consent) {
+      text("Signed", margin + 16, y - 12, 10, "bold", "#0f766e");
+      drawWrapped(`${input.consent.signedName} on ${new Date(input.consent.signedAt).toLocaleString("en-US")}`, margin + 82, y - 12, contentWidth - 104, 10, "regular", "#1f2937");
+    } else {
+      text("No consent record supplied.", margin + 16, y - 12, 10, "regular", "#374151");
+    }
+    y -= 78;
+  };
+
+  startPage();
+  infoCard();
+  if (input.profileAnswers.length) {
+    sectionTitle("Patient Profile");
+    input.profileAnswers.forEach(answerCard);
+  }
+  sectionTitle("Clinical Intake Answers");
+  if (input.clinicalAnswers.length) {
+    input.clinicalAnswers.forEach(answerCard);
+  } else {
+    ensureSpace(40);
+    text("No clinical answers were supplied.", margin, y, 10, "regular", "#64748b");
+    y -= 24;
+  }
+  consentBlock();
+  if (ops.length) pages.push(ops);
+
+  pages.forEach((pageOps, index) => {
+    pageOps.push(`BT ${color("#94a3b8")} rg /F1 8 Tf 1 0 0 1 ${margin} 28 Tm (Mission WLW) Tj ET`);
+    pageOps.push(`BT ${color("#94a3b8")} rg /F1 8 Tf 1 0 0 1 520 28 Tm (Page ${index + 1} of ${pages.length}) Tj ET`);
+  });
+
+  const objects: string[] = [];
+  const addObject = (content: string) => {
+    objects.push(content);
+    return objects.length;
+  };
+
+  const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
+  const pagesId = addObject("__PAGES__");
+  const fontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const boldFontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+  const pageIds: number[] = [];
+
+  for (const pageOps of pages) {
+    const stream = pageOps.join("\n");
+    const contentId = addObject(`<< /Length ${Buffer.byteLength(stream, "utf8")} >>\nstream\n${stream}\nendstream`);
+    const pageId = addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  }
+
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
+
+  const chunks: string[] = ["%PDF-1.4\n"];
+  const offsets = [0];
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(Buffer.byteLength(chunks.join(""), "utf8"));
+    chunks.push(`${i + 1} 0 obj\n${objects[i]}\nendobj\n`);
+  }
+  const xrefOffset = Buffer.byteLength(chunks.join(""), "utf8");
+  chunks.push(`xref\n0 ${objects.length + 1}\n`);
+  chunks.push("0000000000 65535 f \n");
+  for (let i = 1; i < offsets.length; i++) {
+    chunks.push(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+  }
+  chunks.push(`trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+  return Buffer.from(chunks.join(""), "utf8");
+}
+
+function wrapPdfLine(line: string, width: number) {
+  if (!line) return [""];
+  const chunks: string[] = [];
+  let remaining = line;
+  while (remaining.length > width) {
+    const index = remaining.lastIndexOf(" ", width);
+    const splitAt = index > 20 ? index : width;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  chunks.push(remaining);
+  return chunks;
+}
+
+function escapePdfText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function buildMissionIntakeAnswerRows(
+  patient: Types.Patient,
+  answers: Types.QuestionnaireAnswer[],
+  questions: Types.Question[]
+): Types.PracticeQMirrorAnswer[] {
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const profile = buildPracticeQProfileAnswers(patient);
+  const rows: Types.PracticeQMirrorAnswer[] = Array.from(profile.entries()).map(([question, answer]) => ({
+    question: titlePracticeQProfileQuestion(question),
+    answer,
+  }));
+
+  for (const answer of answers) {
+    const question = questionById.get(answer.questionId);
+    if (!question || !answer.answer.trim()) continue;
+    rows.push({ question: question.text, answer: answer.answer });
+  }
+  return rows;
+}
+
+function titlePracticeQProfileQuestion(question: string) {
+  const titles: Record<string, string> = {
+    "first name": "First Name",
+    "last name": "Last Name",
+    "date of birth": "Date of Birth",
+    "phone number": "Phone Number",
+    email: "Email",
+    "address for medication shipment": "Address (For Medication Shipment)",
+    city: "City",
+    state: "State",
+    "zip code": "Zip Code",
+    gender: "Gender",
+  };
+  return titles[question] ?? question;
+}
+
+async function populateAndUpdatePracticeQIntake(
+  intake: PracticeQIntake | null,
+  context: {
+    patient: Types.Patient;
+    answers: Types.QuestionnaireAnswer[];
+    questions: Types.Question[];
+  }
+): Promise<PracticeQIntake | null> {
+  if (!intake?.Id || context.answers.length === 0) return null;
+
+  const fullIntake = Array.isArray(intake.Questions) || Array.isArray(intake.questions)
+    ? intake
+    : await getIntakeById(intake.Id).catch(() => null);
+  const intakeQuestions = fullIntake?.Questions ?? fullIntake?.questions;
+  if (!fullIntake || !Array.isArray(intakeQuestions)) return null;
+
+  const answerByText = new Map<string, string>();
+  const questionById = new Map(context.questions.map((question) => [question.id, question]));
+  for (const answer of context.answers) {
+    const question = questionById.get(answer.questionId);
+    if (question?.text && answer.answer.trim()) {
+      answerByText.set(normalizeQuestionText(question.text), answer.answer);
+    }
+  }
+
+  const profileAnswers = buildPracticeQProfileAnswers(context.patient);
+  let changed = false;
+  for (const item of intakeQuestions) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+    const questionText = firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name);
+    const answer = findPracticeQAnswer(questionText, answerByText, profileAnswers);
+    if (!answer) continue;
+    entry.Answer = answer;
+    changed = true;
+  }
+
+  if (!changed) return null;
+
+  const response = await fetch(`${pqBase()}/intakes`, {
+    method: "POST",
+    headers: pqHeaders(),
+    body: JSON.stringify(fullIntake),
+  });
+  const result = await parsePracticeQResponse(response);
+  if (!response.ok) {
+    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
+    throw new Error(`PracticeQ intake answer update failed: ${message}`);
+  }
+  return (result as PracticeQIntake | null) ?? fullIntake;
+}
+
+function buildPracticeQProfileAnswers(patient: Types.Patient) {
+  const dob = patient.dateOfBirth ? new Date(`${patient.dateOfBirth}T00:00:00Z`) : null;
+  const formattedDob = dob && !Number.isNaN(dob.getTime())
+    ? `${dob.getUTCMonth() + 1}/${dob.getUTCDate()}/${dob.getUTCFullYear()}`
+    : patient.dateOfBirth;
+  return new Map<string, string>([
+    ["first name", patient.firstName],
+    ["last name", patient.lastName],
+    ["date of birth", formattedDob],
+    ["phone number", patient.phone],
+    ["email", patient.email],
+    ["address for medication shipment", patient.address.street1],
+    ["city", patient.address.city],
+    ["state", patient.address.state],
+    ["zip code", patient.address.zipCode],
+    ["gender", patient.gender],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1])));
+}
+
+function findPracticeQAnswer(
+  practiceQQuestionText: string,
+  missionAnswers: Map<string, string>,
+  profileAnswers: Map<string, string>
+) {
+  const normalized = normalizeQuestionText(practiceQQuestionText);
+  return profileAnswers.get(normalized) ??
+    missionAnswers.get(normalized) ??
+    findLooseAnswer(normalized, missionAnswers);
+}
+
+function findLooseAnswer(normalizedPracticeQText: string, answers: Map<string, string>) {
+  for (const [question, answer] of answers) {
+    if (question === normalizedPracticeQText) return answer;
+    if (question.includes(normalizedPracticeQText) || normalizedPracticeQText.includes(question)) return answer;
+  }
+  return "";
+}
+
+function normalizeQuestionText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function formatPracticeQRows(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((row) => {
+      if (!row || typeof row !== "object") return "";
+      const entry = row as Record<string, unknown>;
+      const label = firstString(entry.Text, entry.Label, entry.Name);
+      const answers = Array.isArray(entry.Answers)
+        ? entry.Answers.map((answer) => String(answer ?? "")).filter(Boolean).join(", ")
+        : firstString(entry.Answer, entry.Value);
+      if (!label && !answers) return "";
+      return label ? `${label}: ${answers}` : answers;
+    })
+    .filter(Boolean)
+    .join("; ");
 }
 
 function firstString(...values: unknown[]): string {
@@ -303,6 +965,23 @@ async function parsePracticeQResponse(response: Response): Promise<PracticeQApiR
     return JSON.parse(text) as PracticeQApiResponse;
   } catch {
     return { status: text };
+  }
+}
+
+async function parsePracticeQListResponse(response: Response): Promise<PracticeQIntakeSummary[]> {
+  const text = await response.text();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) return parsed as PracticeQIntakeSummary[];
+    if (parsed && typeof parsed === "object") {
+      const object = parsed as Record<string, unknown>;
+      const candidates = object.Intakes ?? object.intakes ?? object.Items ?? object.items;
+      if (Array.isArray(candidates)) return candidates as PracticeQIntakeSummary[];
+    }
+    return [];
+  } catch {
+    return [];
   }
 }
 
@@ -381,6 +1060,12 @@ async function getAnswers(orderId: string): Promise<Types.QuestionnaireAnswer[]>
   return serverDb.answerDb.getByOrder(orderId).catch(() => db.answerDb.getByOrder(orderId));
 }
 
+async function getQuestions(): Promise<Types.Question[]> {
+  const serverDb = await getServerDb();
+  if (!serverDb) return db.questionDb.getAll();
+  return serverDb.questionDb.getAll().catch(() => db.questionDb.getAll());
+}
+
 async function getConsent(orderId: string): Promise<Types.ConsentRecord | null> {
   const serverDb = await getServerDb();
   if (!serverDb) return db.consentDb.getByOrder(orderId);
@@ -437,6 +1122,12 @@ function pqHeaders() {
 }
 
 const pqBase = () => serviceConfig.practiceq.baseUrl.replace(/\/$/, "");
+
+function pqAuthHeaders() {
+  return {
+    "X-Auth-Key": serviceConfig.practiceq.apiKey,
+  };
+}
 
 /** Fetch a single PracticeQ client by their numeric ClientId */
 export async function getClientById(clientId: string | number): Promise<PracticeQClient | null> {
@@ -510,5 +1201,120 @@ export function practiceQClientToPatient(client: PracticeQClient, fallbackId: st
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  };
+}
+
+/** Upload a file to a PracticeQ client chart through the Files API. */
+export async function uploadPracticeQClientFile(
+  clientId: string | number,
+  file: PracticeQFileUploadInput
+): Promise<PracticeQFileUploadResult> {
+  if (!serviceConfig.practiceq.apiKey) {
+    throw new Error("PRACTICEQ_API_KEY is required to upload files to PracticeQ");
+  }
+
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(file.buffer)], { type: file.mimeType }), file.filename);
+
+  const response = await fetch(`${pqBase()}/files/${encodeURIComponent(String(clientId))}`, {
+    method: "POST",
+    headers: pqAuthHeaders(),
+    body: form,
+  });
+  const result = await parsePracticeQResponse(response);
+  if (!response.ok) {
+    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
+    throw new Error(`PracticeQ file upload failed: ${message}`);
+  }
+
+  let id = extractPracticeQFileId(result);
+  if (!id) {
+    const files = await listPracticeQClientFiles(clientId);
+    id = files.find((item) => item.filename === file.filename)?.id ?? files[0]?.id ?? "";
+  }
+  if (!id) throw new Error("PracticeQ file upload did not return a file id");
+  return { id, raw: result };
+}
+
+async function listPracticeQClientFiles(clientId: string | number): Promise<PracticeQFileSummary[]> {
+  const response = await fetch(`${pqBase()}/files?clientId=${encodeURIComponent(String(clientId))}`, {
+    headers: pqAuthHeaders(),
+  });
+  if (!response.ok) return [];
+  const text = await response.text();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    const candidates =
+      Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object"
+          ? (parsed as Record<string, unknown>).Files ??
+            (parsed as Record<string, unknown>).files ??
+            (parsed as Record<string, unknown>).Items ??
+            (parsed as Record<string, unknown>).items ??
+            (parsed as Record<string, unknown>).data
+          : [];
+    if (!Array.isArray(candidates)) return [];
+    const normalized: PracticeQFileSummary[] = [];
+    for (const item of candidates) {
+        if (!item || typeof item !== "object") continue;
+        const raw = item as Record<string, unknown>;
+        const id = extractPracticeQFileId(raw);
+        if (!id) continue;
+        normalized.push({
+          id,
+          filename: firstString(raw.Name, raw.name, raw.FileName, raw.fileName, raw.Filename, raw.filename),
+          raw,
+        });
+    }
+    return normalized;
+  } catch {
+    return [];
+  }
+}
+
+function extractPracticeQFileId(result: Record<string, unknown> | null | undefined) {
+  const data = result?.data && typeof result.data === "object" ? result.data as Record<string, unknown> : null;
+  const dataUpper = result?.Data && typeof result.Data === "object" ? result.Data as Record<string, unknown> : null;
+  return firstString(
+    result?.Id,
+    result?.id,
+    result?.FileId,
+    result?.fileId,
+    result?.FileID,
+    result?.fileID,
+    data?.Id,
+    data?.id,
+    data?.FileId,
+    data?.fileId,
+    data?.FileID,
+    data?.fileID,
+    dataUpper?.Id,
+    dataUpper?.id,
+    dataUpper?.FileId,
+    dataUpper?.fileId,
+    dataUpper?.FileID,
+    dataUpper?.fileID
+  );
+}
+
+/** Download a PracticeQ file by id. Callers are responsible for authorization. */
+export async function downloadPracticeQFile(fileId: string): Promise<{ body: Buffer; contentType: string }> {
+  if (!serviceConfig.practiceq.apiKey) {
+    throw new Error("PRACTICEQ_API_KEY is required to download files from PracticeQ");
+  }
+
+  const response = await fetch(`${pqBase()}/files/${encodeURIComponent(fileId)}`, {
+    headers: pqAuthHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(`PracticeQ file download failed: HTTP ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    body: Buffer.from(arrayBuffer),
+    contentType: response.headers.get("content-type") || "application/octet-stream",
   };
 }

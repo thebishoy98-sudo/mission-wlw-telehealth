@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
     const patient =
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
+    const practiceqClientId =
+      order.practiceqClientId ??
+      (patient as { practiceqClientId?: string } | null)?.practiceqClientId ??
+      null;
 
     const now = new Date().toISOString();
     try {
@@ -42,6 +46,7 @@ export async function POST(req: NextRequest) {
     }
     const { uploads, aiUploads } = await buildIdentityUploads({
       orderId: order.id,
+      practiceqClientId,
       idImageData,
       selfieFrameData,
       identityVideoData,
@@ -99,6 +104,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Identity upload error:", error);
-    return NextResponse.json({ error: "Identity upload failed" }, { status: 500 });
+    return NextResponse.json({ error: (error as Error).message || "Identity upload failed" }, { status: 500 });
   }
 }

@@ -62,9 +62,10 @@ export default function PrivacyPage() {
             <p>
               We share information with service providers and partners only as needed to operate Mission WLW and complete
               requested workflows. These may include hosting, database, payment, accounting, pharmacy, messaging,
-              identity verification, analytics, and support providers. We may also share information when required by
-              law, to protect rights and safety, or as part of a business transaction. Health-related information should
-              be shared only through appropriate workflows and vendor arrangements.
+              identity verification, analytics, and support providers. When QuickBooks Payments is used, payment
+              processing services are provided by Intuit Payments Inc. We may also share information when required by law,
+              to protect rights and safety, or as part of a business transaction. Health-related information should be
+              shared only through appropriate workflows and vendor arrangements.
             </p>
           </section>
 

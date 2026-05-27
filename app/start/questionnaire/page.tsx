@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
 
 export default function Questionnaire() {
@@ -34,6 +35,19 @@ export default function Questionnaire() {
     setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
   };
 
+  const toggleMultiAnswer = (id: string, option: string, checked: boolean) => {
+    setAnswers((prev) => {
+      const current = (prev[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
+      const next = checked
+        ? Array.from(new Set([...current.filter((item) => item !== "None of the above"), option]))
+        : current.filter((item) => item !== option);
+      const normalized = option === "None of the above" && checked ? ["None of the above"] : next;
+      return { ...prev, [id]: normalized.join(", ") };
+    });
+    setIneligibleQuestion(null);
+    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -47,10 +61,17 @@ export default function Questionnaire() {
       return;
     }
 
-    // Check eligibility: find any disqualifying answer
-    const disqualifier = questions.find(
-      (q) => q.disqualifying && answers[q.id] === q.disqualifying
-    );
+    const submittedAnswers = Object.entries(answers).map(([questionId, answer]) => ({
+      id: `answer_${questionId}`,
+      orderId: "pending",
+      questionId,
+      answer,
+      createdAt: new Date().toISOString(),
+    }));
+    const eligibility = checkEligibility(submittedAnswers, questions);
+    const disqualifier = eligibility.disqualifyingQuestion
+      ? questions.find((question) => question.text === eligibility.disqualifyingQuestion)
+      : null;
 
     if (disqualifier) {
       setIneligibleQuestion(disqualifier);
@@ -168,15 +189,22 @@ export default function Questionnaire() {
                   </div>
                 )}
                 {question.type === "checkbox" && (
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all w-fit">
-                    <input
-                      type="checkbox"
-                      checked={answers[question.id] === "yes"}
-                      onChange={(e) => setAnswer(question.id, e.target.checked ? "yes" : "no")}
-                      className="accent-teal-600"
-                    />
-                    <span className="text-sm text-gray-700">Yes</span>
-                  </label>
+                  <div className="space-y-2">
+                    {(question.options?.length ? question.options : ["Yes"]).map((option) => {
+                      const selected = (answers[question.id] || "").split(",").map((item) => item.trim()).includes(option);
+                      return (
+                        <label key={option} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(e) => toggleMultiAnswer(question.id, option, e.target.checked)}
+                            className="accent-teal-600"
+                          />
+                          <span className="text-sm text-gray-700">{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 )}
                 {missingRequired.includes(question.id) && (
                   <p className="mt-2 text-sm text-red-500">This question is required.</p>

@@ -11,6 +11,13 @@
  */
 
 const all = process.env.USE_REAL_INTEGRATIONS === "true";
+const env = (...names: string[]) => {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value !== undefined && value !== "") return value;
+  }
+  return "";
+};
 
 export const serviceConfig = {
   practiceq: {
@@ -29,21 +36,22 @@ export const serviceConfig = {
   },
   lifefile: {
     useMock: !(all || process.env.USE_REAL_LIFEFILE === "true"),
-    vendorId: process.env.LIFEFILE_VENDOR_ID ?? "",
-    locationId: process.env.LIFEFILE_LOCATION_ID ?? "",
-    apiNetworkId: process.env.LIFEFILE_API_NETWORK_ID ?? "",
-    username: process.env.LIFEFILE_API_USERNAME ?? "",
-    password: process.env.LIFEFILE_API_PASSWORD ?? "",
-    practiceId: process.env.LIFEFILE_PRACTICE_ID ?? "",
-    baseUrl: process.env.LIFEFILE_BASE_URL ?? "https://host37a.lifefile.net/lfapi/v1",
-    prescriberNpi: process.env.LIFEFILE_PRESCRIBER_NPI ?? "",
-    prescriberLastName: process.env.LIFEFILE_PRESCRIBER_LAST_NAME ?? "",
-    prescriberFirstName: process.env.LIFEFILE_PRESCRIBER_FIRST_NAME ?? "",
-    prescriberPhone: process.env.LIFEFILE_PRESCRIBER_PHONE ?? "",
-    prescriberEmail: process.env.LIFEFILE_PRESCRIBER_EMAIL ?? "",
-    prescriberLicenseState: process.env.LIFEFILE_PRESCRIBER_LICENSE_STATE ?? "",
-    prescriberLicenseNumber: process.env.LIFEFILE_PRESCRIBER_LICENSE_NUMBER ?? "",
-    shippingServiceId: parseInt(process.env.LIFEFILE_SHIPPING_SERVICE_ID ?? "999", 10),
+    vendorId: env("LIFEFILE_VENDOR_ID", "LF_X_VENDOR_ID"),
+    locationId: env("LIFEFILE_LOCATION_ID", "LF_X_LOCATION_ID"),
+    apiNetworkId: env("LIFEFILE_API_NETWORK_ID", "LF_X_API_NETWORK_ID"),
+    username: env("LIFEFILE_API_USERNAME", "LF_API_USERNAME"),
+    password: env("LIFEFILE_API_PASSWORD", "LF_API_PASSWORD"),
+    practiceId: env("LIFEFILE_PRACTICE_ID", "LF_PRACTICE_ID", "LF_ID"),
+    baseUrl: env("LIFEFILE_BASE_URL", "LF_BASE_URL") || "https://host37a.lifefile.net/lfapi/v1",
+    orderEndpoint: env("LIFEFILE_ORDER_ENDPOINT", "LF_ENDPOINT_ORDER_API"),
+    prescriberNpi: env("LIFEFILE_PRESCRIBER_NPI", "LF_PRESCRIBER_NPI"),
+    prescriberLastName: env("LIFEFILE_PRESCRIBER_LAST_NAME", "LF_PRESCRIBER_LAST_NAME"),
+    prescriberFirstName: env("LIFEFILE_PRESCRIBER_FIRST_NAME", "LF_PRESCRIBER_FIRST_NAME"),
+    prescriberPhone: env("LIFEFILE_PRESCRIBER_PHONE", "LF_PRESCRIBER_PHONE"),
+    prescriberEmail: env("LIFEFILE_PRESCRIBER_EMAIL", "LF_PRESCRIBER_EMAIL"),
+    prescriberLicenseState: env("LIFEFILE_PRESCRIBER_LICENSE_STATE", "LF_PRESCRIBER_LICENSE_STATE"),
+    prescriberLicenseNumber: env("LIFEFILE_PRESCRIBER_LICENSE_NUMBER", "LF_PRESCRIBER_LICENSE_NUMBER"),
+    shippingServiceId: parseInt(env("LIFEFILE_SHIPPING_SERVICE_ID", "LF_SHIPPING_SERVICE_ID", "LF_SERVICE") || "999", 10),
   },
   spruce: {
     useMock: !(all || process.env.USE_REAL_SPRUCE === "true"),

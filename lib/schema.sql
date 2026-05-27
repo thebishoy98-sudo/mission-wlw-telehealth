@@ -101,19 +101,21 @@ CREATE TABLE IF NOT EXISTS payments (
   id                TEXT PRIMARY KEY,
   order_id          TEXT NOT NULL REFERENCES orders(id),
   patient_id        TEXT NOT NULL REFERENCES patients(id),
-  amount            INTEGER NOT NULL,
+  amount            NUMERIC(10,2) NOT NULL,
   currency          TEXT NOT NULL DEFAULT 'usd',
   status            TEXT NOT NULL DEFAULT 'pending',
   payment_method    TEXT NOT NULL,
   card_last4        TEXT,
   card_brand        TEXT,
   transaction_id    TEXT,
-  refund_amount     INTEGER,
+  refund_amount     NUMERIC(10,2),
   retention_delete_after TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   processed_at      TIMESTAMPTZ,
   refunded_at       TIMESTAMPTZ
 );
+ALTER TABLE payments ALTER COLUMN amount TYPE NUMERIC(10,2) USING amount::numeric;
+ALTER TABLE payments ALTER COLUMN refund_amount TYPE NUMERIC(10,2) USING refund_amount::numeric;
 
 -- ── Questions ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS questions (

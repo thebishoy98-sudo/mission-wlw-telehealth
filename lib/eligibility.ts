@@ -21,7 +21,12 @@ export function checkEligibility(
     const answerVal = answer.answer.trim().toLowerCase();
     const disqualifyingVal = question.disqualifying.trim().toLowerCase();
 
-    if (answerVal === disqualifyingVal) {
+    const isLongMultiSelectValue = disqualifyingVal.length > 3;
+    const selectedValues = answerVal.split(",").map((value) => value.trim()).filter(Boolean);
+    const isDisqualified = answerVal === disqualifyingVal ||
+      (isLongMultiSelectValue && selectedValues.includes(disqualifyingVal));
+
+    if (isDisqualified) {
       return {
         eligible: false,
         reason: buildReason(question),

@@ -45,6 +45,12 @@ function cfg() {
   return serviceConfig.lifefile;
 }
 
+function lfUrl(path: string) {
+  const c = cfg();
+  if (path === "/order" && c.orderEndpoint) return c.orderEndpoint;
+  return `${c.baseUrl}${path}`;
+}
+
 function basicAuth(username: string, password: string) {
   return "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 }
@@ -189,7 +195,7 @@ async function lfFetch(
   options: RequestInit = {}
 ): Promise<{ httpOk: boolean; httpStatus: number; body: LfResponse }> {
   const c = cfg();
-  const url = `${c.baseUrl}${path}`;
+  const url = lfUrl(path);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: basicAuth(c.username, c.password),
