@@ -220,6 +220,8 @@ export const consentDb = {
 // Upload operations
 export const uploadDb = {
   getAll: (): Types.Upload[] => getFromStorage(KEYS.UPLOADS, []),
+  getById: (id: string): Types.Upload | null =>
+    uploadDb.getAll().find((u) => u.id === id) ?? null,
   getByOrder: (orderId: string): Types.Upload[] => {
     return uploadDb.getAll().filter((u) => u.orderId === orderId);
   },
