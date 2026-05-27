@@ -283,10 +283,11 @@ let _pqQuestionnaireCache: { ts: number; questions: Types.Question[] } | null = 
 const PQ_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * Fetch the questionnaire from PracticeQ and return it as our Question[] format.
- * Question IDs are PracticeQ's own question IDs, enabling exact-ID answer mapping
- * when the intake is later submitted (no fuzzy text matching needed).
- * Returns null in mock mode or when PRACTICEQ_QUESTIONNAIRE_ID is not set.
+ * Returns PracticeQ question IDs for our local question IDs by pulling questions
+ * from the most recent completed intake for this questionnaire.
+ * IntakeQ's /questionnaires/{id} endpoint does not return questions (it returns HTML),
+ * so we derive the structure from a real intake instead.
+ * Returns null in mock mode or when credentials/questionnaire ID are absent.
  */
 export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | null> {
   if (serviceConfig.practiceq.useMock || !serviceConfig.practiceq.apiKey || !serviceConfig.practiceq.questionnaireId) {
@@ -295,14 +296,22 @@ export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | nu
   if (_pqQuestionnaireCache && Date.now() - _pqQuestionnaireCache.ts < PQ_CACHE_TTL_MS) {
     return _pqQuestionnaireCache.questions;
   }
-  const response = await fetch(
-    `${pqBase()}/questionnaires/${encodeURIComponent(serviceConfig.practiceq.questionnaireId)}`,
+  // Fetch the most recent intake for this questionnaire to get the question structure
+  const summaryRes = await fetch(
+    `${pqBase()}/intakes/summary?questionnaireId=${encodeURIComponent(serviceConfig.practiceq.questionnaireId)}&page=1`,
     { headers: pqHeaders() }
   );
-  if (!response.ok) return null;
-  const data = await response.json() as Record<string, unknown>;
-  const rawQuestions = Array.isArray(data?.Questions) ? data.Questions as unknown[]
-    : Array.isArray(data?.questions) ? data.questions as unknown[] : [];
+  if (!summaryRes.ok) return null;
+  const summaryData = await summaryRes.json().catch(() => null) as unknown[] | null;
+  const latestIntakeId = Array.isArray(summaryData) && summaryData.length > 0
+    ? (summaryData[0] as Record<string, unknown>)?.Id as string | undefined
+    : undefined;
+  if (!latestIntakeId) return null;
+
+  const intakeRes = await fetch(`${pqBase()}/intakes/${encodeURIComponent(latestIntakeId)}`, { headers: pqHeaders() });
+  if (!intakeRes.ok) return null;
+  const intake = await intakeRes.json().catch(() => null) as Record<string, unknown> | null;
+  const rawQuestions = Array.isArray(intake?.Questions) ? intake.Questions as unknown[] : [];
   const questions = mapPracticeQQuestions(rawQuestions);
   if (questions.length > 0) _pqQuestionnaireCache = { ts: Date.now(), questions };
   return questions.length > 0 ? questions : null;
