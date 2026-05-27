@@ -967,8 +967,8 @@ async function populateAndUpdatePracticeQIntake(
 
   if (!changed) return null;
 
-  const response = await fetch(`${pqBase()}/intakes`, {
-    method: "POST",
+  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(fullIntake.Id!)}`, {
+    method: "PUT",
     headers: pqHeaders(),
     body: JSON.stringify(fullIntake),
   });
