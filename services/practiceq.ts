@@ -230,6 +230,84 @@ export function buildPracticeQClientFilesUrl(clientId: string | number): string 
   return buildPracticeQUrl(`#/client/${encodeURIComponent(String(clientId))}?tab=files`);
 }
 
+// ── PracticeQ questionnaire structure ─────────────────────────────────────────
+
+type PracticeQRawQuestion = {
+  Id?: string; id?: string;
+  Text?: string; QuestionText?: string; Label?: string;
+  Type?: string; QuestionType?: string;
+  Required?: boolean; IsRequired?: boolean;
+  DisplayOrder?: number; Order?: number;
+  Options?: Array<string | { Text?: string; Value?: string; Label?: string }>;
+};
+
+function mapPracticeQType(rawType: string): Types.Question["type"] {
+  const t = rawType.toLowerCase();
+  if (t.includes("textarea") || t.includes("longtext") || t.includes("multiline") || t.includes("paragraph")) return "textarea";
+  if (t.includes("radio") || t.includes("yesno") || t.includes("boolean") || t.includes("single")) return "radio";
+  if (t.includes("check") || t.includes("multiple")) return "checkbox";
+  if (t.includes("select") || t.includes("dropdown")) return "select";
+  return "text";
+}
+
+function mapPracticeQOptions(raw: PracticeQRawQuestion["Options"]): string[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw.map((o) => typeof o === "string" ? o : String(o.Text ?? o.Label ?? o.Value ?? "")).filter(Boolean);
+}
+
+function mapPracticeQQuestions(rawList: unknown[]): Types.Question[] {
+  const out: Types.Question[] = [];
+  rawList
+    .filter((q): q is PracticeQRawQuestion => !!q && typeof q === "object")
+    .forEach((q, idx) => {
+      const id = String(q.Id ?? q.id ?? "");
+      const text = String(q.Text ?? q.QuestionText ?? q.Label ?? "");
+      if (!id || !text) return;
+      const question: Types.Question = {
+        id,
+        text,
+        type: mapPracticeQType(String(q.Type ?? q.QuestionType ?? "text")),
+        required: Boolean(q.Required ?? q.IsRequired),
+        displayOrder: Number(q.DisplayOrder ?? q.Order ?? idx),
+        category: "screening",
+      };
+      const opts = mapPracticeQOptions(q.Options);
+      if (opts) question.options = opts;
+      out.push(question);
+    });
+  return out;
+}
+
+/** In-process cache — refreshed every 5 min to avoid hammering PracticeQ on every page load. */
+let _pqQuestionnaireCache: { ts: number; questions: Types.Question[] } | null = null;
+const PQ_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Fetch the questionnaire from PracticeQ and return it as our Question[] format.
+ * Question IDs are PracticeQ's own question IDs, enabling exact-ID answer mapping
+ * when the intake is later submitted (no fuzzy text matching needed).
+ * Returns null in mock mode or when PRACTICEQ_QUESTIONNAIRE_ID is not set.
+ */
+export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | null> {
+  if (serviceConfig.practiceq.useMock || !serviceConfig.practiceq.apiKey || !serviceConfig.practiceq.questionnaireId) {
+    return null;
+  }
+  if (_pqQuestionnaireCache && Date.now() - _pqQuestionnaireCache.ts < PQ_CACHE_TTL_MS) {
+    return _pqQuestionnaireCache.questions;
+  }
+  const response = await fetch(
+    `${pqBase()}/questionnaires/${encodeURIComponent(serviceConfig.practiceq.questionnaireId)}`,
+    { headers: pqHeaders() }
+  );
+  if (!response.ok) return null;
+  const data = await response.json() as Record<string, unknown>;
+  const rawQuestions = Array.isArray(data?.Questions) ? data.Questions as unknown[]
+    : Array.isArray(data?.questions) ? data.questions as unknown[] : [];
+  const questions = mapPracticeQQuestions(rawQuestions);
+  if (questions.length > 0) _pqQuestionnaireCache = { ts: Date.now(), questions };
+  return questions.length > 0 ? questions : null;
+}
+
 export async function getIntakeById(intakeId: string): Promise<PracticeQIntake | null> {
   if (!serviceConfig.practiceq.apiKey) return null;
   const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(intakeId)}`, {
@@ -843,9 +921,16 @@ async function populateAndUpdatePracticeQIntake(
   const intakeQuestions = fullIntake?.Questions ?? fullIntake?.questions;
   if (!fullIntake || !Array.isArray(intakeQuestions)) return null;
 
+  // Build both an ID map and a text map so we can try exact-ID matching first.
+  // When questions were sourced from PracticeQ (Option B), questionId == PracticeQ question Id
+  // so we get a guaranteed 1:1 match with no fuzzy logic needed.
+  const answerById = new Map<string, string>();
   const answerByText = new Map<string, string>();
   const questionById = new Map(context.questions.map((question) => [question.id, question]));
   for (const answer of context.answers) {
+    if (answer.answer.trim()) {
+      answerById.set(answer.questionId, answer.answer);
+    }
     const question = questionById.get(answer.questionId);
     if (question?.text && answer.answer.trim()) {
       answerByText.set(normalizeQuestionText(question.text), answer.answer);
@@ -857,8 +942,15 @@ async function populateAndUpdatePracticeQIntake(
   for (const item of intakeQuestions) {
     if (!item || typeof item !== "object") continue;
     const entry = item as Record<string, unknown>;
-    const questionText = firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name);
-    const answer = findPracticeQAnswer(questionText, answerByText, profileAnswers);
+    // 1. Exact PracticeQ question ID match (when questions were fetched from PracticeQ)
+    const pqQuestionId = firstString(entry.Id, entry.id);
+    const answer = (pqQuestionId ? answerById.get(pqQuestionId) : undefined)
+      // 2. Fuzzy text match (fallback for locally-defined questions)
+      ?? findPracticeQAnswer(
+        firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name),
+        answerByText,
+        profileAnswers
+      );
     if (!answer) continue;
     entry.Answer = answer;
     changed = true;
