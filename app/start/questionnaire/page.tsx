@@ -10,6 +10,54 @@ import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
 
+const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm bg-white appearance-none";
+
+function HeightPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parseFeet = (v: string) => { const m = v.match(/^(\d+)/); return m ? m[1] : "5"; };
+  const parseInches = (v: string) => { const m = v.match(/['\s](\d+)/); return m ? m[1] : "6"; };
+  const [feet, setFeet] = useState(() => parseFeet(value));
+  const [inches, setInches] = useState(() => parseInches(value));
+
+  useEffect(() => { onChange(`${feet}'${inches}"`); }, [feet, inches]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex-1">
+        <label className="block text-xs text-gray-500 mb-1.5">Feet</label>
+        <select value={feet} onChange={(e) => setFeet(e.target.value)} className={selectCls}>
+          {[3,4,5,6,7].map((f) => <option key={f} value={f}>{f} ft</option>)}
+        </select>
+      </div>
+      <div className="flex-1">
+        <label className="block text-xs text-gray-500 mb-1.5">Inches</label>
+        <select value={inches} onChange={(e) => setInches(e.target.value)} className={selectCls}>
+          {Array.from({ length: 12 }, (_, i) => i).map((i) => (
+            <option key={i} value={i}>{i} in</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function WeightInput({ value, onChange, placeholder = "e.g. 185" }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="relative max-w-xs">
+      <input
+        type="number"
+        inputMode="decimal"
+        min={50}
+        max={700}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 pr-14 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+      />
+      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium pointer-events-none">lbs</span>
+    </div>
+  );
+}
+
 export default function Questionnaire() {
   const router = useRouter();
   const [questions, setQuestions] = useState<Types.Question[]>([]);
@@ -161,7 +209,13 @@ export default function Questionnaire() {
                   {question.required && <span className="text-red-400 ml-1">*</span>}
                 </label>
 
-                {question.type === "text" && (
+                {question.type === "text" && question.id === "pq_height" && (
+                  <HeightPicker value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
+                )}
+                {question.type === "text" && (question.id === "pq_current_weight" || question.id === "pq_ideal_weight") && (
+                  <WeightInput value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
+                )}
+                {question.type === "text" && question.id !== "pq_height" && question.id !== "pq_current_weight" && question.id !== "pq_ideal_weight" && (
                   <Input value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} />
                 )}
                 {question.type === "textarea" && (

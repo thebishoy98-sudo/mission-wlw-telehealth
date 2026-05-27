@@ -9,6 +9,19 @@ import { Select } from "@/components/ui/Select";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 
+const US_STATES = [
+  ["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],
+  ["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["FL","Florida"],["GA","Georgia"],
+  ["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],
+  ["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],
+  ["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],
+  ["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],
+  ["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],
+  ["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],
+  ["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],
+  ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],
+];
+
 export default function PatientInfo() {
   const router = useRouter();
   const [products, setProducts] = useState<Types.Product[]>([]);
@@ -109,7 +122,7 @@ export default function PatientInfo() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Email" type="email" autoComplete="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} error={errors.email} placeholder="jane@email.com" />
-            <Input label="Phone" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} error={errors.phone} placeholder="(555) 000-0000" />
+            <Input label="Phone" type="tel" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} error={errors.phone} placeholder="(555) 000-0000" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Date of Birth" type="date" autoComplete="bday" value={formData.dateOfBirth} onChange={(e) => updateField("dateOfBirth", e.target.value)} error={errors.dateOfBirth} />
@@ -139,8 +152,14 @@ export default function PatientInfo() {
           <Input label="Apt, Suite (Optional)" autoComplete="shipping address-line2" value={formData.address.street2 || ""} onChange={(e) => updateAddress("street2", e.target.value)} placeholder="Apt 4B" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Input label="City" autoComplete="shipping address-level2" value={formData.address.city} onChange={(e) => updateAddress("city", e.target.value)} error={errors.city} />
-            <Input label="State" autoComplete="shipping address-level1" value={formData.address.state} onChange={(e) => updateAddress("state", e.target.value)} error={errors.state} placeholder="CA" />
-            <Input label="ZIP Code" autoComplete="shipping postal-code" inputMode="numeric" value={formData.address.zipCode} onChange={(e) => updateAddress("zipCode", e.target.value)} error={errors.zipCode} placeholder="90210" />
+            <Select
+              label="State"
+              options={[{ value: "", label: "State..." }, ...US_STATES.map(([code, name]) => ({ value: code, label: `${code} – ${name}` }))]}
+              value={formData.address.state}
+              onChange={(e) => updateAddress("state", e.target.value)}
+              error={errors.state}
+            />
+            <Input label="ZIP Code" autoComplete="shipping postal-code" inputMode="numeric" pattern="[0-9]*" maxLength={5} value={formData.address.zipCode} onChange={(e) => updateAddress("zipCode", e.target.value.replace(/\D/g, "").slice(0, 5))} error={errors.zipCode} placeholder="90210" />
           </div>
         </div>
       </div>
