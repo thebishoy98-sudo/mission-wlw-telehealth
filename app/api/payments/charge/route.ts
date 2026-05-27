@@ -328,7 +328,12 @@ export async function POST(req: NextRequest) {
 
     // 9. PracticeQ — intake packet for provider chart
     try {
-      await practiceq.submitIntakePacket(updatedOrder, { patient, product: productData ?? null });
+      await practiceq.submitIntakePacket(updatedOrder, {
+        patient,
+        product: productData ?? null,
+        answers: fallbackAnswers,
+        questions: fallbackQuestions,
+      });
       db.orderDb.update(orderId, { practiceQStatus: "submitted" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
       logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);

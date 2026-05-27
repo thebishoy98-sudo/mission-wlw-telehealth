@@ -20,10 +20,11 @@ const KEYS = {
   PROVIDER_REVIEWS: "tele_provider_reviews",
 };
 
-// Utility functions for localStorage
+// PHI must not persist to disk. Use sessionStorage so data is cleared when the
+// browser tab closes. localStorage is avoided for HIPAA compliance.
 const getFromStorage = <T>(key: string, defaultValue: T): T => {
   if (typeof window === "undefined") return defaultValue;
-  const item = localStorage.getItem(key);
+  const item = sessionStorage.getItem(key);
   if (!item) return defaultValue;
   try {
     return JSON.parse(item);
@@ -34,7 +35,7 @@ const getFromStorage = <T>(key: string, defaultValue: T): T => {
 
 const setToStorage = <T>(key: string, value: T): void => {
   if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
+  sessionStorage.setItem(key, JSON.stringify(value));
 };
 
 // Patient operations
