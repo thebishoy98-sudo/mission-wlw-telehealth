@@ -1,17 +1,14 @@
 /**
- * PracticeQ Webhook Handler
+ * PracticeQ / IntakeQ Webhook Handler
  *
- * PracticeQ posts updates when provider reviews change status.
+ * IntakeQ fires webhooks using a "Type" field (not "event").
+ * We normalise both so legacy internal callers still work.
  *
- * Events:
- *   intake.reviewed     — provider has reviewed the intake
- *   intake.approved     — provider approved
- *   intake.rejected     — provider rejected with reason
- *
- * Setup:
- *   Add webhook URL in PracticeQ Settings → Integrations → Webhooks:
- *   https://<your-domain>/api/webhooks/practiceq
- *   Header: X-PracticeQ-Key: <your api key>
+ * Events handled:
+ *   IntakeSubmitted      — patient completed the form (e.g. marketing-site embed)
+ *   intake.reviewed      — provider viewed the chart
+ *   intake.approved      — provider approved → trigger pharmacy
+ *   intake.rejected      — provider rejected
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,20 +20,74 @@ import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
 
 export async function POST(req: NextRequest) {
-  // Verify API key header
-  const apiKey = req.headers.get("x-practiceq-key");
+  const apiKey = req.headers.get("x-practiceq-key") ?? req.headers.get("x-intakeq-signature");
   if (process.env.PRACTICEQ_WEBHOOK_KEY && apiKey !== process.env.PRACTICEQ_WEBHOOK_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = await req.json();
-  const { event, packetId, orderId: pqOrderRef, status, notes, rejectionReason } = payload;
+  const payload = await req.json() as Record<string, unknown>;
 
-  // Find the order by PracticeQ packet reference
+  // IntakeQ uses "Type"; our internal events use "event" — accept both.
+  const eventType = (
+    (payload.Type as string) ??
+    (payload.type as string) ??
+    (payload.event as string) ??
+    ""
+  ).toLowerCase();
+
+  // ── IntakeSubmitted: patient completed the form (marketing-site embed or direct link) ──
+  if (eventType === "intakesubmitted" || eventType === "intake.submitted" || eventType === "intakesend") {
+    const intakeId = String(payload.Id ?? payload.id ?? "");
+    const externalClientId = String(payload.ExternalClientId ?? payload.externalClientId ?? "");
+    const clientId = String(payload.ClientId ?? payload.clientId ?? "");
+    const clientEmail = String(payload.ClientEmail ?? payload.clientEmail ?? "");
+
+    // Find our packet: by ExternalClientId (= our orderId) first, then by clientId.
+    const packets = db.practiceqDb.getAll();
+    const packet =
+      (externalClientId ? packets.find((p) => p.orderId === externalClientId) : undefined) ??
+      (clientId ? packets.find((p) => p.id === intakeId) : undefined);
+
+    if (packet) {
+      db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
+      const order = db.orderDb.getById(packet.orderId);
+      if (order) {
+        db.orderDb.update(order.id, { practiceQStatus: "completed" });
+        await dbServer.orderDb.update(order.id, { practiceQStatus: "completed" }).catch(() => {});
+        // Trigger pharmacy if identity is already cleared.
+        if (getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(order.id) === null) {
+          try { await lifefile.createPharmacyOrder(order); } catch {}
+        }
+      }
+      const logEntry = {
+        id: generateId(), timestamp: new Date().toISOString(),
+        integrationName: "practiceq" as const, action: "PracticeQ: patient submitted intake",
+        orderId: packet.orderId, patientId: packet.patientId,
+        status: "success" as const, details: { eventType, intakeId, clientId },
+      };
+      db.integrationLogDb.create(logEntry);
+      dbServer.integrationLogDb.create(logEntry).catch(() => {});
+    } else if (clientEmail) {
+      // Intake submitted but we don't have a matching packet yet (patient hasn't paid).
+      // Store the mapping so submitIntakePacket can find it when they do pay.
+      console.log("PracticeQ IntakeSubmitted: no packet found, intake received early", {
+        intakeId, clientEmail, externalClientId,
+      });
+    }
+
+    return NextResponse.json({ received: true });
+  }
+
+  // ── Provider-action events — require an existing packet ──────────────────────
+  const packetId = String(payload.packetId ?? payload.PacketId ?? "");
+  const pqOrderRef = String(payload.orderId ?? payload.OrderId ?? "");
+  const notes = payload.notes as string | undefined;
+  const rejectionReason = payload.rejectionReason as string | undefined;
+
   const packets = db.practiceqDb.getAll();
   const packet = packets.find((p) => p.id === packetId || p.orderId === pqOrderRef);
   if (!packet) {
-    console.warn("PracticeQ webhook: packet not found", packetId);
+    console.warn("PracticeQ webhook: packet not found", { packetId, pqOrderRef, eventType });
     return NextResponse.json({ error: "Packet not found" }, { status: 404 });
   }
 
@@ -46,13 +97,13 @@ export async function POST(req: NextRequest) {
     const entry = {
       id: generateId(), timestamp: new Date().toISOString(),
       integrationName: "practiceq" as const, action, orderId, patientId,
-      status: logStatus, details: { event, packetId, notes },
+      status: logStatus, details: { eventType, packetId, notes },
     };
     db.integrationLogDb.create(entry);
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
-  switch (event) {
+  switch (eventType) {
     case "intake.reviewed": {
       db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
       log("PracticeQ: provider viewed intake");
@@ -80,7 +131,6 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Trigger pharmacy order if not already sent
       const order = db.orderDb.getById(orderId);
       if (order && getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(orderId) === null) {
         try { await lifefile.createPharmacyOrder(order); } catch {}
@@ -110,7 +160,7 @@ export async function POST(req: NextRequest) {
     }
 
     default:
-      console.warn("PracticeQ webhook: unknown event", event);
+      console.warn("PracticeQ webhook: unhandled event", eventType);
   }
 
   return NextResponse.json({ received: true });
