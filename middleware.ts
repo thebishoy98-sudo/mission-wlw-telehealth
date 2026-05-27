@@ -63,6 +63,17 @@ function checkAdminAuth(req: NextRequest): boolean {
   return provided === secret;
 }
 
+function checkProviderAuth(req: NextRequest): boolean {
+  const secret = process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET;
+  if (!secret) return process.env.NODE_ENV !== "production";
+
+  const provided =
+    req.headers.get("x-provider-secret") ??
+    req.cookies.get("provider_secret")?.value;
+
+  return provided === secret || checkAdminAuth(req);
+}
+
 // ── Main middleware ────────────────────────────────────────────────────────────
 export function middleware(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -99,6 +110,16 @@ export function middleware(req: NextRequest) {
     const loginUrl = new URL("/login/admin", req.url);
     loginUrl.searchParams.set("redirect", path);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (path.startsWith("/provider") && !checkProviderAuth(req)) {
+    const loginUrl = new URL("/login/provider", req.url);
+    loginUrl.searchParams.set("redirect", path);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (path.startsWith("/api/practiceq") && !checkProviderAuth(req)) {
+    return NextResponse.json({ error: "Provider authorization required" }, { status: 401 });
   }
 
   // ── Add audit headers for downstream API routes ────────────────────────────

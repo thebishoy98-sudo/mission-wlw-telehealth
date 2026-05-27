@@ -70,10 +70,19 @@ HIPAA note: QuickBooks Online should not receive PHI. Current code sends patient
 | `PRACTICEQ_BASE_URL` | PracticeQ/IntakeQ API base URL | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Required. Official API base is `https://intakeq.com/api/v1`. |
 | `PRACTICEQ_INTAKE_ENDPOINT` | Send-questionnaire endpoint override | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Set to `https://intakeq.com/api/v1/intakes/send`. |
 | `PRACTICEQ_QUESTIONNAIRE_ID` | Questionnaire template used for Mission WLW intake sends | `lib/service-config.ts`, `services/practiceq.ts` | Present on `mission-wlw-dev`; not verified on live `mission-wlw` | Set to the PracticeQ `Medical: Brief Intake Form` template ID. |
-| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation | `app/api/webhooks/practiceq/route.ts`, `lib/webhook-auth.ts` | Missing on live `mission-wlw` during production probe | Required. Configure the PracticeQ Intake Form Webhook URL as `https://<production-domain>/api/webhooks/practiceq?key=<secret>`. |
+| `PRACTICEQ_WEBHOOK_KEY` | Inbound webhook validation if PracticeQ posts directly to Mission WLW | `app/api/webhooks/practiceq/route.ts`, `lib/webhook-auth.ts` | Present on live `mission-wlw`; not currently used by PracticeQ while AppSheet remains pharmacy gateway | Keep configured for later direct webhook use. Do not point PracticeQ directly here until AppSheet is connected through the official API or a forwarding bridge. |
 
-Webhook URL configured in PracticeQ:
+Webhook URL currently configured in PracticeQ while AppSheet remains the pharmacy gateway:
+- `https://script.google.com/macros/s/AKfycbyrWN7rWE3-gcGaQpx4xT0KGBeWEKWwl6U0vs6h2JfFRp98tqe92BTZZT7kx7JFfNxU/exec`
+
+Future direct Mission WLW webhook URL after AppSheet API access is available:
 - `https://<production-domain>/api/webhooks/practiceq?key=<PRACTICEQ_WEBHOOK_KEY>`
+
+PracticeQ Developer API page observed on May 26, 2026:
+- API access is enabled in PracticeQ under `More > Settings > Integrations > Developer API`.
+- Current maximum request rate is `10 requests/min - 500/daily`; avoid bulk live fetches from list pages.
+- The PracticeQ account currently has the Intake Form Webhook URL pointed at a Google Apps Script endpoint that feeds the AppSheet gateway. Keep this in place while AppSheet is the pharmacy/order gateway.
+- Admin/provider PracticeQ detail panels fetch live data server-side with `PRACTICEQ_API_KEY`; the key must never be exposed to browser code.
 
 ## Life File
 

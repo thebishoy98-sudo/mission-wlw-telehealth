@@ -2,11 +2,12 @@ export const generateId = (): string => {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 };
 
-export const formatCurrency = (amount: number): string => {
+export const formatCurrency = (amount: number | string | null | undefined): string => {
+  const numericAmount = Number(amount);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(amount);
+  }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
 };
 
 export const formatDate = (dateString: string): string => {

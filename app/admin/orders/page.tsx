@@ -32,6 +32,19 @@ type OrderDetailData = {
   practiceq: Types.PracticeQMirror | null;
 };
 
+const cleanText = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  return text && text.toLowerCase() !== "null" ? text : "";
+};
+
+const patientDisplayName = (patient: Types.Patient | undefined, order: Types.Order) => {
+  const name = [cleanText(patient?.firstName), cleanText(patient?.lastName)].filter(Boolean).join(" ");
+  return name || cleanText(patient?.email) || cleanText(patient?.phone) || (order.practiceqClientId ? `PracticeQ Client ${order.practiceqClientId}` : `Order ${order.id.slice(-8)}`);
+};
+
+const patientSecondaryLine = (patient: Types.Patient | undefined, order: Types.Order) =>
+  cleanText(patient?.email) || cleanText(patient?.phone) || order.id.slice(-8);
+
 export default function OrdersManagement() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Types.Order | null>(null);
@@ -281,20 +294,20 @@ export default function OrdersManagement() {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-            <div className="lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
+            <div className="min-w-0">
               <Card>
                 <CardContent className="p-0">
-                  <div className="max-h-[32rem] overflow-auto">
-                    <table className="w-full min-w-[760px]">
+                  <div className="max-h-[34rem] overflow-auto">
+                    <table className="w-full min-w-[700px]">
                       <thead className="sticky top-0 border-b bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Payment / QB</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">PracticeQ</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Pharmacy</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">Identity</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Patient</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Order</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Payment</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">PracticeQ</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Pharmacy</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Identity</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -308,29 +321,30 @@ export default function OrdersManagement() {
                               onClick={() => setSelectedOrder(order)}
                               className={`cursor-pointer hover:bg-gray-50 ${selectedOrder?.id === order.id ? "bg-teal-50" : ""}`}
                             >
-                              <td className="px-6 py-4 text-sm">
-                                <p className="font-semibold">{patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}</p>
-                                <p className="text-xs text-gray-500">{order.id.slice(-8)}</p>
+                              <td className="px-4 py-4 text-sm">
+                                <p className="max-w-[11rem] truncate font-semibold text-gray-900">{patientDisplayName(patient, order)}</p>
+                                <p className="max-w-[11rem] truncate text-xs text-gray-500">{patientSecondaryLine(patient, order)}</p>
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
+                                <p className="mt-1 font-mono text-xs text-gray-500">{order.id.slice(-8)}</p>
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.paymentStatus)}>{getStatusLabel(order.paymentStatus)}</Badge>
                                 <div className="mt-1">
                                   <Badge className={getStatusColor(order.quickbooksStatus)}>{getStatusLabel(order.quickbooksStatus)}</Badge>
                                 </div>
-                                {payment?.transactionId && <p className="mt-1 text-xs text-gray-500">{payment.transactionId}</p>}
+                                {payment?.transactionId && <p className="mt-1 max-w-[10rem] truncate text-xs text-gray-500">{payment.transactionId}</p>}
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.practiceQStatus)}>{getStatusLabel(order.practiceQStatus)}</Badge>
                                 {order.practiceqClientId && <p className="mt-1 text-xs text-gray-500">Client {order.practiceqClientId}</p>}
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.pharmacyStatus)}>{getStatusLabel(order.pharmacyStatus)}</Badge>
-                                {pharmacyOrder?.lifeFileOrderId && <p className="mt-1 text-xs text-gray-500">LF {pharmacyOrder.lifeFileOrderId}</p>}
+                                {pharmacyOrder?.lifeFileOrderId && <p className="mt-1 max-w-[8rem] truncate text-xs text-gray-500">LF {pharmacyOrder.lifeFileOrderId}</p>}
                               </td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-4 text-sm">
                                 <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
                                   {order.identityStatus ?? "missing"}
                                 </Badge>
