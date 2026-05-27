@@ -49,6 +49,11 @@ export interface DoseOption {
   strength: string;
   quantity: number;
   price: number;
+  durationWeeks?: number;
+  weeklyDoseMg?: number;
+  injectionUnits?: number;
+  prescriptionLabel?: string;
+  patientDescription?: string;
 }
 
 export interface FAQ {
@@ -119,6 +124,7 @@ export interface Order {
   identityReviewedBy?: string;
   identityAiResult?: IdentityAiResult;
   identityUploadToken?: string;
+  practiceqClientId?: string;
 }
 
 // Intake and Medical Information
@@ -167,6 +173,8 @@ export interface Upload {
   fileSize: number;
   mimeType: string;
   base64Data: string; // For demo, store base64 instead of file
+  storageUrl?: string;
+  storageKey?: string;
   uploadedAt: string;
   status: "uploaded" | "verified" | "rejected";
   verificationNotes?: string;
@@ -217,10 +225,73 @@ export interface PracticeQPacket {
     uploads: Upload[];
     productRequested: string;
     doseSelected: string;
+    practiceQAnswerFile?: { fileId: string; filename?: string };
+    practiceQPdfFile?: { fileId: string; filename?: string };
   };
   status: "pending" | "submitted" | "completed" | "error";
   lastSyncAt?: string;
   lastError?: string;
+}
+
+export interface PracticeQMirrorAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface PracticeQMirror {
+  available: boolean;
+  reason?: string;
+  clientId?: string;
+  intakeId?: string;
+  status?: string;
+  questionnaireName?: string;
+  submittedAt?: string;
+  clientName?: string;
+  clientEmail?: string;
+  practiceQUrl?: string;
+  answerFileId?: string;
+  pdfFileId?: string;
+  answers: PracticeQMirrorAnswer[];
+}
+
+export interface PracticeQFormSummary {
+  id: string;
+  clientName?: string;
+  clientEmail?: string;
+  clientId?: string;
+  status: string;
+  createdAt?: string;
+  submittedAt?: string;
+  questionnaireName?: string;
+  questionnaireId?: string;
+  practitionerName?: string;
+  externalClientId?: string;
+  practiceQUrl?: string;
+}
+
+export interface PracticeQFormFeed {
+  available: boolean;
+  reason?: string;
+  completed: PracticeQFormSummary[];
+  pending: PracticeQFormSummary[];
+  all: PracticeQFormSummary[];
+}
+
+export interface PracticeQAutomationJob {
+  id: string;
+  orderId: string;
+  patientId: string;
+  status: "queued" | "running" | "awaiting_patient_signature" | "completed" | "failed";
+  attempts: number;
+  practiceQStartUrl: string;
+  handoffToken: string;
+  handoffExpiresAt: string;
+  handoffUrl?: string;
+  intakeId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+  lockedAt?: string;
 }
 
 export interface PharmacyOrder {

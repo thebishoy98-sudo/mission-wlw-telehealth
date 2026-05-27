@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS orders (
   pharmacy_status      TEXT NOT NULL DEFAULT 'draft',
   practice_q_status    TEXT NOT NULL DEFAULT 'pending',
   quickbooks_status    TEXT NOT NULL DEFAULT 'pending',
+  practiceq_client_id  TEXT,
   submitted_at         TIMESTAMPTZ,
   approved_at          TIMESTAMPTZ,
   provider_notes       TEXT,
@@ -212,6 +213,26 @@ CREATE TABLE IF NOT EXISTS practiceq_packets (
   last_sync_at    TIMESTAMPTZ,
   submitted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS practiceq_automation_jobs (
+  id                  TEXT PRIMARY KEY,
+  order_id            TEXT NOT NULL REFERENCES orders(id),
+  patient_id          TEXT NOT NULL REFERENCES patients(id),
+  status              TEXT NOT NULL,
+  attempts            INTEGER NOT NULL DEFAULT 0,
+  practiceq_start_url TEXT NOT NULL,
+  handoff_token       TEXT NOT NULL DEFAULT '',
+  handoff_expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  handoff_url         TEXT,
+  intake_id           TEXT,
+  last_error          TEXT,
+  created_at          TIMESTAMPTZ NOT NULL,
+  updated_at          TIMESTAMPTZ NOT NULL,
+  locked_at           TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_practiceq_automation_jobs_order_id ON practiceq_automation_jobs(order_id);
+CREATE INDEX IF NOT EXISTS idx_practiceq_automation_jobs_status_created ON practiceq_automation_jobs(status, created_at);
 
 -- ── QuickBooks Records ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS quickbooks_records (

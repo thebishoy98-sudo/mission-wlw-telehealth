@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: mission-wlw-practiceq-remote
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx playwright install chromium
+    startCommand: npm run practiceq:remote
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PRACTICEQ_REMOTE_HEADLESS
+        value: "true"
+      - key: PRACTICEQ_REMOTE_POLL_MS
+        value: "5000"
+      - key: PRACTICEQ_REMOTE_PUBLIC_URL
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
+      - key: POSTGRES_URL_NON_POOLING
+        sync: false
+

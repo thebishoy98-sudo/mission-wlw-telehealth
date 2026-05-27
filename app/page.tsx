@@ -24,7 +24,7 @@ export default function Home() {
     {
       icon: ClipboardList,
       title: "Complete your intake",
-      body: "Answer a short health questionnaire online. Takes about 10 minutes from any device.",
+      body: "Answer a short health questionnaire online. PracticeQ is prepared only after payment.",
     },
     {
       icon: Stethoscope,

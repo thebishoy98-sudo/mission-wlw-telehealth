@@ -43,19 +43,33 @@ export function LoginForm({ role }: { role: UserRole }) {
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
     setLoading(true);
 
     const result = login(email, password, role);
-    setLoading(false);
-
     if (!result.success) {
+      setLoading(false);
       setError(result.error || "Sign in failed.");
       return;
     }
 
+    if (role === "admin" || role === "provider") {
+      const sessionResponse = await fetch(`/api/auth/${role}-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!sessionResponse.ok) {
+        setLoading(false);
+        setError("Sign in failed.");
+        return;
+      }
+    }
+
+    setLoading(false);
     router.push(config.destination);
   };
 

@@ -28,7 +28,7 @@ export default function PatientInfo() {
         setSelectedDose(product.doses[0].id);
       }
     }
-  }, [formData.productId]);
+  }, [formData.productId, selectedDose]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -50,7 +50,11 @@ export default function PatientInfo() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    saveIntakeState({ ...formData, doseId: selectedDose, shippingAddress: formData.shippingAddress || formData.address });
+    saveIntakeState({
+      ...formData,
+      doseId: selectedDose,
+      shippingAddress: formData.shippingAddress || formData.address,
+    });
     router.push("/start/questionnaire");
   };
 
@@ -64,10 +68,9 @@ export default function PatientInfo() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Product Selection */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Choose Your Treatment</h2>
-        <p className="text-gray-500 text-sm mb-6">Select the treatment you're interested in</p>
+        <p className="text-gray-500 text-sm mb-6">Select the treatment you&apos;re interested in</p>
 
         <Select
           label="Treatment"
@@ -92,10 +95,9 @@ export default function PatientInfo() {
         )}
       </div>
 
-      {/* Personal Info */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Personal Information</h2>
-        <p className="text-gray-500 text-sm mb-6">Used to create your patient profile</p>
+        <p className="text-gray-500 text-sm mb-6">Used to create your patient profile after payment</p>
 
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -124,7 +126,6 @@ export default function PatientInfo() {
         </div>
       </div>
 
-      {/* Address */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Shipping Address</h2>
         <p className="text-gray-500 text-sm mb-6">Where should we send your treatment?</p>
@@ -151,3 +152,4 @@ export default function PatientInfo() {
     </form>
   );
 }
+
