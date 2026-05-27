@@ -155,6 +155,7 @@ describe("lifefile.createPharmacyOrder", () => {
     );
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.order.practice.id).toBe(1018988);
+    expect(body.order.patient.dateOfBirth).toBe("1978-03-22");
     expect(body.order.prescriber).toMatchObject({
       npi: "1760981450",
       licenseState: "FL",
@@ -164,6 +165,43 @@ describe("lifefile.createPharmacyOrder", () => {
       email: "service@missionwlw.com",
     });
     expect(body.order.shipping.service).toBe(6230);
+
+    process.env = original;
+    (global as unknown as { fetch?: unknown }).fetch = undefined;
+    jest.resetModules();
+  });
+
+  it("normalizes slash-formatted DOB before posting to Life File", async () => {
+    const original = { ...process.env };
+    process.env.USE_REAL_LIFEFILE = "true";
+    process.env.LF_X_VENDOR_ID = "11504";
+    process.env.LF_X_LOCATION_ID = "110285";
+    process.env.LF_X_API_NETWORK_ID = "1421";
+    process.env.LF_API_USERNAME = "sandbox-user";
+    process.env.LF_API_PASSWORD = "sandbox-pass";
+    process.env.LF_ENDPOINT_ORDER_API = "https://host100-7.lifefile.net/lfapi/v1/order";
+    process.env.LIFEFILE_PRACTICE_ID = "1018988";
+    process.env.LIFEFILE_SHIPPING_SERVICE_ID = "6230";
+
+    jest.resetModules();
+    const liveLifefile = await import("@/services/lifefile");
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ type: "success", message: "ok", data: { orderId: "900002" } }),
+    } as Response);
+    global.fetch = fetchMock;
+
+    const order = db.orderDb.getById("o1")!;
+    await liveLifefile.createPharmacyOrder(order, {
+      patient: {
+        ...db.patientDb.getById("p1")!,
+        dateOfBirth: "3/22/1978",
+      },
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.order.patient.dateOfBirth).toBe("1978-03-22");
 
     process.env = original;
     (global as unknown as { fetch?: unknown }).fetch = undefined;

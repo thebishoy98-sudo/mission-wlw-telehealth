@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import type { Patient, PracticeQMirror } from "@/types";
+import { resolvePatient } from "@/lib/patient-resolver";
+import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { requireAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +40,63 @@ function matchesSearch(order: dbServeredOrder, patient: dbServeredPatient | null
 type dbServeredOrder = Awaited<ReturnType<typeof dbServer.orderDb.getAll>>[number];
 type dbServeredPatient = NonNullable<Awaited<ReturnType<typeof dbServer.patientDb.getById>>>;
 
+function answerValue(practiceq: PracticeQMirror | null | undefined, pattern: RegExp): string {
+  const answer = practiceq?.answers.find((item) => pattern.test(item.question.toLowerCase()))?.answer?.trim() ?? "";
+  return answer.toLowerCase() === "no answer" ? "" : answer;
+}
+
+async function resolveAdminPatient(order: dbServeredOrder): Promise<Patient | null> {
+  const patient =
+    (await resolvePatient(order).catch(() => null)) ??
+    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+    db.patientDb.getById(order.patientId);
+
+  if (!patient || !order.practiceqClientId) return patient;
+
+  const hasName = !!(patient.firstName && patient.lastName);
+  if (hasName) return patient;
+
+  const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
+  const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
+  if (!practiceq?.available) return patient;
+
+  const hydrated = hydratePatientFromPracticeQ(patient, practiceq);
+  if (!practiceq.answers.length) return hydrated;
+
+  const firstName = hydrated.firstName || answerValue(practiceq, /^first name\b/);
+  const lastName = hydrated.lastName || answerValue(practiceq, /^last name\b/);
+  const phone = hydrated.phone || answerValue(practiceq, /^phone/);
+  const dateOfBirth = hydrated.dateOfBirth || answerValue(practiceq, /date of birth|dob/);
+  const street1 = hydrated.address?.street1 || answerValue(practiceq, /address/);
+  const city = hydrated.address?.city || answerValue(practiceq, /^city\b/);
+  const state = hydrated.address?.state || answerValue(practiceq, /^state\b/);
+  const zipCode = hydrated.address?.zipCode || answerValue(practiceq, /zip/);
+
+  return {
+    ...hydrated,
+    firstName,
+    lastName,
+    phone,
+    dateOfBirth,
+    address: {
+      ...hydrated.address,
+      street1,
+      city,
+      state,
+      zipCode,
+      country: hydrated.address?.country || "US",
+    },
+    shippingAddress: {
+      ...hydrated.shippingAddress,
+      street1: hydrated.shippingAddress?.street1 || street1,
+      city: hydrated.shippingAddress?.city || city,
+      state: hydrated.shippingAddress?.state || state,
+      zipCode: hydrated.shippingAddress?.zipCode || zipCode,
+      country: hydrated.shippingAddress?.country || "US",
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
@@ -46,9 +107,7 @@ export async function GET(req: NextRequest) {
     const products = await dbServer.productDb.getAll().catch(() => db.productDb.getAll());
 
     const allPatients = await Promise.all(
-      Array.from(new Set(orders.map((order) => order.patientId))).map(async (patientId) =>
-        (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId)
-      )
+      orders.map(resolveAdminPatient)
     );
     const patientMap = new Map(
       allPatients.filter(Boolean).map((patient) => [patient!.id, patient!])

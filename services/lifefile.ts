@@ -70,6 +70,35 @@ function formatPhone(phone: string): string {
   return phone.slice(0, 16);
 }
 
+function requiredText(value: unknown, label: string): string {
+  const text = String(value ?? "").trim();
+  if (!text || text.toLowerCase() === "null" || text.toLowerCase() === "undefined") {
+    throw new Error(`Invalid order data - missing patient ${label}`);
+  }
+  return text;
+}
+
+function formatLifeFileDateOfBirth(value: unknown): string {
+  const text = requiredText(value, "date of birth");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, month, day, year] = slashMatch;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear();
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  throw new Error("Invalid order data - patient date of birth must be YYYY-MM-DD");
+}
+
 function getLfProductId(product: Types.Product): number {
   const slug = product.slug?.toLowerCase() ?? "";
   if (LF_PRODUCT_MAP[slug]) return LF_PRODUCT_MAP[slug];
@@ -168,9 +197,9 @@ function buildPharmacyRxs(
   return [
     {
       rxType: "new",
-      drugName: product.name.slice(0, 254),
-      drugStrength: dose.strength.slice(0, 254),
-      drugForm: dose.label.slice(0, 255),
+      drugName: (product.name ?? "").slice(0, 254),
+      drugStrength: (dose.strength ?? dose.label ?? "").slice(0, 254),
+      drugForm: (dose.label ?? dose.strength ?? "INJECTABLE").slice(0, 255),
       lfProductID: lfProductId,
       quantity: String(dose.quantity),
       quantityUnits: "each",
@@ -234,7 +263,27 @@ export const createPharmacyOrder = async (
 
   const c = cfg();
   const lfProductId = getLfProductId(product);
-  const ship = patient.shippingAddress;
+  const patientFirstName = requiredText(patient.firstName, "first name");
+  const patientLastName = requiredText(patient.lastName, "last name");
+  const patientDob = formatLifeFileDateOfBirth(patient.dateOfBirth);
+  const patientPhone = requiredText(patient.phone, "phone");
+  const patientEmail = requiredText(patient.email, "email");
+  const patientAddress = {
+    street1: requiredText(patient.address?.street1, "address"),
+    street2: patient.address?.street2,
+    city: requiredText(patient.address?.city, "city"),
+    state: requiredText(patient.address?.state, "state"),
+    zipCode: requiredText(patient.address?.zipCode, "zip code"),
+    country: patient.address?.country ?? "US",
+  };
+  const ship = {
+    street1: requiredText(patient.shippingAddress?.street1 ?? patient.address?.street1, "shipping address"),
+    street2: patient.shippingAddress?.street2 ?? patient.address?.street2,
+    city: requiredText(patient.shippingAddress?.city ?? patient.address?.city, "shipping city"),
+    state: requiredText(patient.shippingAddress?.state ?? patient.address?.state, "shipping state"),
+    zipCode: requiredText(patient.shippingAddress?.zipCode ?? patient.address?.zipCode, "shipping zip code"),
+    country: patient.shippingAddress?.country ?? patient.address?.country ?? "US",
+  };
   const dateWritten = new Date().toISOString().split("T")[0];
   const rxs = buildPharmacyRxs(product, dose, lfProductId, dateWritten);
 
@@ -262,25 +311,25 @@ export const createPharmacyOrder = async (
         id: parseInt(c.practiceId, 10),
       },
       patient: {
-        firstName: patient.firstName.slice(0, 30),
-        lastName: patient.lastName.slice(0, 30),
+        firstName: patientFirstName.slice(0, 30),
+        lastName: patientLastName.slice(0, 30),
         gender: mapGender(patient.gender),
-        dateOfBirth: patient.dateOfBirth, // already yyyy-mm-dd
-        address1: patient.address.street1.slice(0, 60),
-        ...(patient.address.street2 ? { address2: patient.address.street2.slice(0, 60) } : {}),
-        city: patient.address.city.slice(0, 30),
-        state: patient.address.state.slice(0, 2),
-        zip: patient.address.zipCode.slice(0, 10),
-        country: (patient.address.country ?? "US").slice(0, 2),
-        phoneMobile: formatPhone(patient.phone),
-        email: patient.email.slice(0, 100),
+        dateOfBirth: patientDob,
+        address1: patientAddress.street1.slice(0, 60),
+        ...(patientAddress.street2 ? { address2: patientAddress.street2.slice(0, 60) } : {}),
+        city: patientAddress.city.slice(0, 30),
+        state: patientAddress.state.slice(0, 2),
+        zip: patientAddress.zipCode.slice(0, 10),
+        country: patientAddress.country.slice(0, 2),
+        phoneMobile: formatPhone(patientPhone),
+        email: patientEmail.slice(0, 100),
       },
       shipping: {
         recipientType: "patient" as const,
-        recipientLastName: patient.lastName.slice(0, 30),
-        recipientFirstName: patient.firstName.slice(0, 30),
-        recipientPhone: formatPhone(patient.phone),
-        recipientEmail: patient.email.slice(0, 100),
+        recipientLastName: patientLastName.slice(0, 30),
+        recipientFirstName: patientFirstName.slice(0, 30),
+        recipientPhone: formatPhone(patientPhone),
+        recipientEmail: patientEmail.slice(0, 100),
         addressLine1: ship.street1.slice(0, 60),
         ...(ship.street2 ? { addressLine2: ship.street2.slice(0, 60) } : {}),
         city: ship.city.slice(0, 100),
@@ -309,7 +358,7 @@ export const createPharmacyOrder = async (
 
       if (!httpOk || body.type === "error") {
         throw new Error(
-          `Life File API ${httpStatus}: ${body.message || JSON.stringify(body)}`
+          `Life File API ${httpStatus}: ${body.message || JSON.stringify(body)}${body.data ? ` ${JSON.stringify(body.data)}` : ""}`
         );
       }
 

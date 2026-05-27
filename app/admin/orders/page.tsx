@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { Image as ImageIcon, Video } from "lucide-react";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "@/lib/utils";
@@ -30,6 +31,14 @@ type AdminDashboardData = {
 
 type OrderDetailData = {
   practiceq: Types.PracticeQMirror | null;
+  identity?: {
+    status: Types.IdentityStatus | "missing";
+    reason?: string;
+    reviewedAt?: string;
+    reviewedBy?: string;
+    aiResult?: Types.IdentityAiResult | null;
+    uploads: Types.Upload[];
+  };
 };
 
 const cleanText = (value: unknown) => {
@@ -53,6 +62,7 @@ export default function OrdersManagement() {
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [selectedPracticeQ, setSelectedPracticeQ] = useState<Types.PracticeQMirror | null>(null);
+  const [selectedIdentity, setSelectedIdentity] = useState<OrderDetailData["identity"] | null>(null);
   const [practiceQLoading, setPracticeQLoading] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -88,7 +98,7 @@ export default function OrdersManagement() {
       setProducts(Object.fromEntries(data.products.map((product) => [product.id, product])));
       setPayments(Object.fromEntries(data.payments.map((payment) => [payment.orderId, payment])));
       setPharmacyOrders(Object.fromEntries(data.pharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
-      setSelectedOrder((current) => current ? sortedOrders.find((order) => order.id === current.id) ?? current : current);
+      setSelectedOrder((current) => current ? sortedOrders.find((order) => order.id === current.id) ?? current : sortedOrders[0] ?? null);
       setPagination(data.pagination ?? { page, pageSize: 25, total: sortedOrders.length, totalPages: 1, q: searchQuery });
     } catch {
       const localOrders = db.orderDb.getAll().sort(
@@ -109,6 +119,7 @@ export default function OrdersManagement() {
   useEffect(() => {
     if (!selectedOrder) {
       setSelectedPracticeQ(null);
+      setSelectedIdentity(null);
       return;
     }
 
@@ -120,10 +131,16 @@ export default function OrdersManagement() {
         return (await response.json()) as OrderDetailData;
       })
       .then((detail) => {
-        if (!cancelled) setSelectedPracticeQ(detail.practiceq ?? null);
+        if (!cancelled) {
+          setSelectedPracticeQ(detail.practiceq ?? null);
+          setSelectedIdentity(detail.identity ?? null);
+        }
       })
       .catch(() => {
-        if (!cancelled) setSelectedPracticeQ(null);
+        if (!cancelled) {
+          setSelectedPracticeQ(null);
+          setSelectedIdentity(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setPracticeQLoading(false);
@@ -294,7 +311,7 @@ export default function OrdersManagement() {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-8">
             <div className="min-w-0">
               <Card>
                 <CardContent className="p-0">
@@ -382,8 +399,15 @@ export default function OrdersManagement() {
               </Card>
             </div>
 
-            {selectedOrder && (
-              <div className="space-y-6">
+            <div className="space-y-6">
+              {!selectedOrder ? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-gray-500">
+                    Select an order to view details, identity evidence, and PracticeQ linkage.
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
                 <Card>
                   <CardContent className="p-6">
                     <h3 className="font-bold text-gray-900 mb-4">Order Details</h3>
@@ -429,6 +453,68 @@ export default function OrdersManagement() {
                         </Button>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-bold text-gray-900 mb-4">Identity Evidence</h3>
+                    <div className="mb-4 space-y-2 text-sm">
+                      <p><strong>Status:</strong> {selectedIdentity?.status ?? selectedOrder.identityStatus ?? "missing"}</p>
+                      {(selectedIdentity?.reason || selectedOrder.identityReason) && (
+                        <p className="text-gray-600">{selectedIdentity?.reason ?? selectedOrder.identityReason}</p>
+                      )}
+                      {selectedIdentity?.reviewedAt && (
+                        <p className="text-xs text-gray-500">
+                          Reviewed {formatDateTime(selectedIdentity.reviewedAt)}
+                          {selectedIdentity.reviewedBy ? ` by ${selectedIdentity.reviewedBy}` : ""}
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedIdentity?.aiResult ? (
+                      <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm">
+                        <p className="font-semibold text-gray-900">AI Analysis</p>
+                        <p className="mt-1 text-gray-700">{selectedIdentity.aiResult.summary}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className={getStatusColor(selectedIdentity.aiResult.status)}>
+                            {getStatusLabel(selectedIdentity.aiResult.status)}
+                          </Badge>
+                          <Badge className="bg-blue-100 text-blue-800">
+                            {Math.round((selectedIdentity.aiResult.confidence ?? 0) * 100)}% confidence
+                          </Badge>
+                        </div>
+                        {selectedIdentity.aiResult.flags?.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-semibold uppercase text-gray-500">Reasons / Flags</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-gray-600">
+                              {selectedIdentity.aiResult.flags.map((flag) => <li key={flag}>{flag}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mb-4 text-sm text-gray-500">No AI identity analysis has been recorded yet.</p>
+                    )}
+
+                    {selectedIdentity?.uploads?.length ? (
+                      <div className="grid grid-cols-1 gap-3">
+                        {selectedIdentity.uploads.map((upload) => (
+                          <div key={upload.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {upload.type === "driver_license" ? "Submitted License" : "Identity Video"}
+                              </p>
+                              {upload.type === "selfie_video" ? <Video className="h-4 w-4 text-gray-400" /> : <ImageIcon className="h-4 w-4 text-gray-400" />}
+                            </div>
+                            <AdminIdentityUploadPreview upload={upload} />
+                            <p className="mt-2 truncate text-xs text-gray-500">{upload.filename}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No ID or identity video has been submitted for this order.</p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -521,12 +607,30 @@ export default function OrdersManagement() {
                     </CardContent>
                   </Card>
                 )}
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </>
   );
+}
+
+function AdminIdentityUploadPreview({ upload }: { upload: Types.Upload }) {
+  const src = `/api/provider/uploads/${encodeURIComponent(upload.id)}`;
+  if (!upload.base64Data && !upload.storageUrl) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-lg bg-white text-sm text-gray-500">
+        Media is stored securely, but no preview URL is available.
+      </div>
+    );
+  }
+
+  if (upload.mimeType.startsWith("video/")) {
+    return <video controls playsInline src={src} className="aspect-video w-full rounded-lg bg-white object-contain" />;
+  }
+
+  return <img src={src} alt={upload.type === "driver_license" ? "Submitted license" : "Submitted identity capture"} className="aspect-video w-full rounded-lg bg-white object-contain" />;
 }

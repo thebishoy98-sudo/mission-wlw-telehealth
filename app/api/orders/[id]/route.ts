@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { isAdminRequest, isProviderRequest } from "@/lib/server-auth";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const order =
@@ -27,6 +28,13 @@ export async function GET(
   const pharmacyOrder = serverPharmacyOrder ?? db.pharmacyOrderDb.getByOrder(order.id);
   const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
   const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket).catch(() => null);
+  const canViewIdentity = isAdminRequest(req) || isProviderRequest(req);
+  const [uploads, review] = canViewIdentity
+    ? await Promise.all([
+        dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
+        dbServer.providerReviewDb.getByOrder(order.id).catch(() => db.providerReviewDb.getByOrder(order.id)),
+      ])
+    : [[], null];
 
   return NextResponse.json({
     order,
@@ -55,5 +63,15 @@ export async function GET(
           answers: [],
         }
       : null),
+    identity: canViewIdentity
+      ? {
+          status: order.identityStatus ?? "missing",
+          reason: order.identityReason,
+          reviewedAt: order.identityReviewedAt,
+          reviewedBy: order.identityReviewedBy,
+          aiResult: order.identityAiResult ?? review?.identityAiResult ?? null,
+          uploads,
+        }
+      : undefined,
   });
 }
