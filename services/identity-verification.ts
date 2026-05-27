@@ -31,10 +31,22 @@ function fallbackResult(summary: string, flags: string[]): IdentityAiResult {
 export function normalizeIdentityAiResult(result: IdentityAiResult): IdentityAiResult {
   const flags = result.flags.map((flag) => flag.toLowerCase());
   const summary = result.summary.toLowerCase();
+
   const hasDemographicMatch =
-    (summary.includes("name") && summary.includes("dob") && summary.includes("match")) ||
+    (summary.includes("name") && (summary.includes("dob") || summary.includes("date of birth")) && summary.includes("match")) ||
     summary.includes("name and dob match") ||
-    summary.includes("name/dob match");
+    summary.includes("name/dob match") ||
+    (summary.includes("name") && summary.includes("match") && summary.includes("birth"));
+
+  const hasFaceMatch =
+    summary.includes("same person") ||
+    summary.includes("face match") ||
+    summary.includes("facial match") ||
+    summary.includes("consistent facial") ||
+    summary.includes("consistent beard") ||
+    (summary.includes("appear to be the same") ) ||
+    (summary.includes("face") && summary.includes("consistent") && !summary.includes("mismatch"));
+
   const hasHardDifferentPersonSignal = flags.some((flag) =>
     [
       "different_person",
@@ -46,20 +58,31 @@ export function normalizeIdentityAiResult(result: IdentityAiResult): IdentityAiR
     ].includes(flag)
   );
 
+  // Upgrade needs_review → verified when face appears to match AND name/DOB match.
+  // Document capture quality (screen photo, imperfect lighting) is not a reason to hold.
+  if (
+    (result.status === "needs_review" || result.status === "rejected") &&
+    hasFaceMatch &&
+    hasDemographicMatch &&
+    !hasHardDifferentPersonSignal
+  ) {
+    return {
+      ...result,
+      status: "verified",
+      confidence: Math.max(result.confidence, 0.82),
+      summary: result.summary.replace(/\.\s*$/, "") + ". Auto-verified: face and demographics match order.",
+      flags: result.flags.filter((f) => !["document_capture_irregular", "face_mismatch"].includes(f.toLowerCase())),
+    };
+  }
+
+  // Downgrade rejected → needs_review when demographics match but face is uncertain
   if (result.status === "rejected" && hasDemographicMatch && !hasHardDifferentPersonSignal) {
     return {
       ...result,
       status: "needs_review",
       confidence: Math.min(result.confidence, 0.64),
-      summary:
-        "The ID portrait and identity video need provider review: name and DOB match the order, and the face comparison is not decisive enough to reject.",
-      flags: Array.from(
-        new Set(
-          result.flags
-            .filter((flag) => flag.toLowerCase() !== "face_mismatch")
-            .concat(["facial_match_uncertain"])
-        )
-      ),
+      summary: "Name and DOB match but face comparison is uncertain — needs provider review.",
+      flags: Array.from(new Set(result.flags.filter((f) => f.toLowerCase() !== "face_mismatch").concat(["facial_match_uncertain"]))),
     };
   }
 

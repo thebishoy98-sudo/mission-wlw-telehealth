@@ -26,6 +26,7 @@ import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
 import * as spruceServer from "@/services/spruce.server";
 import { checkEligibility } from "@/lib/eligibility";
+import { seedQuestions } from "@/data/seed-data";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
@@ -120,7 +121,8 @@ export async function POST(req: NextRequest) {
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : db.answerDb.getByOrder(orderId);
     const questions = await dbServer.questionDb.getAll().catch(() => []);
-    const fallbackQuestions = questions.length ? questions : db.questionDb.getAll();
+    const localQuestions = db.questionDb.getAll();
+    const fallbackQuestions = questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions);
 
     const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
     if (!eligibility.eligible) {
