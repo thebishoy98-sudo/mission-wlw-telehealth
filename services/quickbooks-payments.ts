@@ -168,7 +168,15 @@ export async function chargeCard(
     body: JSON.stringify(payload),
   });
 
-  const charge: QBChargeResponse = await res.json();
+  const rawBody = await res.text();
+  let charge: QBChargeResponse;
+  try {
+    charge = JSON.parse(rawBody) as QBChargeResponse;
+  } catch {
+    // QB Payments sometimes returns XML error pages (e.g. auth failures, bad tokens)
+    const xmlDetail = rawBody.match(/<(?:message|errorMessage|detail)[^>]*>([^<]+)</i)?.[1] ?? rawBody.slice(0, 200);
+    throw new Error(`QuickBooks Payments error (HTTP ${res.status}): ${xmlDetail}`);
+  }
 
   if (!res.ok || charge.errors?.length) {
     const errMsg = charge.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`;
