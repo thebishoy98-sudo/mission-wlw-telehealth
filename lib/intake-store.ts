@@ -80,7 +80,7 @@ const getDefaultState = (): IntakeFormState => ({
 
 export const getIntakeState = (): IntakeFormState => {
   if (typeof window === "undefined") return getDefaultState();
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = sessionStorage.getItem(STORAGE_KEY);
   if (!stored) return getDefaultState();
   try {
     return JSON.parse(stored);
@@ -93,12 +93,12 @@ export const saveIntakeState = (state: Partial<IntakeFormState>): void => {
   if (typeof window === "undefined") return;
   const current = getIntakeState();
   const updated = { ...current, ...state };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 };
 
 export const clearIntakeState = (): void => {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(STORAGE_KEY);
 };
 
 export const getIntakeProgress = (): number => {
