@@ -50,20 +50,23 @@ export default function Payment() {
   const [paymentError, setPaymentError] = useState("");
   const [productLoading, setProductLoading] = useState(true);
   const [qbCardReady, setQbCardReady] = useState(false);
+  const [qbLoadFailed, setQbLoadFailed] = useState(false);
   const cardRef = useRef<any>(null);
 
   const appKey = process.env.NEXT_PUBLIC_QB_PAYMENTS_APP_KEY;
-  const useQBTokenizer = !!appKey;
+  const useQBTokenizer = !!appKey && !qbLoadFailed;
   const paymentsReady =
     useQBTokenizer ||
     process.env.NEXT_PUBLIC_ALLOW_RAW_PAYMENT_FORM === "true";
 
-  // Load Intuit QB Payments JS and mount hosted card fields
+  // Load Intuit QB Payments JS and mount hosted card fields.
+  // Falls back to raw card inputs after 6 s if the tokenizer never fires ready.
   useEffect(() => {
-    if (!useQBTokenizer) return;
+    if (!appKey || qbLoadFailed) return;
     const script = document.createElement("script");
     script.src = "https://js.intuit.com/v2/ui/payments.js";
     script.async = true;
+    const fallbackTimer = setTimeout(() => setQbLoadFailed(true), 6000);
     script.onload = () => {
       try {
         const client = window.intuit!.ipp.payments.create({
@@ -72,18 +75,21 @@ export default function Payment() {
         });
         const card = client.card();
         card.mount("#intuit-card-element");
-        card.on("ready", () => setQbCardReady(true));
+        card.on("ready", () => { clearTimeout(fallbackTimer); setQbCardReady(true); });
         cardRef.current = card;
       } catch (err) {
         console.error("QB Payments JS init error:", err);
+        setQbLoadFailed(true);
       }
     };
+    script.onerror = () => setQbLoadFailed(true);
     document.head.appendChild(script);
     return () => {
+      clearTimeout(fallbackTimer);
       cardRef.current?.unmount?.();
       script.remove();
     };
-  }, [appKey, useQBTokenizer]);
+  }, [appKey, qbLoadFailed]);
 
   useEffect(() => {
     if (intakeState.productId) {
@@ -360,9 +366,6 @@ export default function Payment() {
             Test checkout mode is active. Your card will only be charged {formatCurrency(dueToday)} today.
           </div>
         )}
-        <div className="mt-5 p-4 bg-teal-50 rounded-xl text-sm text-gray-600">
-          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy - no additional approval steps needed.
-        </div>
       </div>
 
       {/* Payment */}
