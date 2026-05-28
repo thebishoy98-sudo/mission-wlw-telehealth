@@ -177,16 +177,31 @@ export async function submitPracticeQInBackground(page: Page, fillOutcome: FillO
     };
   }
 
+  if (looksSubmitted(bodyText)) {
+    return {
+      status: "completed",
+      handoffUrl: undefined,
+      intakeId: extractPracticeQIntakeId(page.url()),
+    };
+  }
+
   const submitted = await clickFinalSubmit(page);
   if (!submitted) {
     return {
       status: "failed",
-      error: "PracticeQ submit button was not found after filling the intake.",
+      error: `PracticeQ submit button was not found after filling the intake. Visible page text: ${bodyText.slice(0, 600)}`,
     };
   }
 
   await page.waitForTimeout(1500);
   const postSubmitText = await page.locator("body").innerText().catch(() => "");
+  if (looksSubmitted(postSubmitText)) {
+    return {
+      status: "completed",
+      handoffUrl: undefined,
+      intakeId: extractPracticeQIntakeId(page.url()),
+    };
+  }
   if (/required|invalid|please complete|missing/i.test(postSubmitText)) {
     return {
       status: "failed",
@@ -252,16 +267,41 @@ async function clickContinue(page: Page): Promise<boolean> {
 }
 
 async function clickFinalSubmit(page: Page): Promise<boolean> {
-  const button = page
+  const direct = page
     .getByRole("button", { name: /submit|finish|done|complete/i })
-    .or(page.locator("button, input[type='button'], input[type='submit']").filter({ hasText: /submit|finish|done|complete/i }))
+    .or(page.getByText(/submit|finish|done|complete/i))
     .first();
-  if (!(await button.isVisible().catch(() => false))) return false;
-  await button.click();
-  return true;
+  if (await direct.isVisible().catch(() => false)) {
+    await direct.click();
+    return true;
+  }
+
+  const candidates = page.locator("button, input[type='button'], input[type='submit'], a");
+  const count = await candidates.count();
+  for (let i = 0; i < count; i += 1) {
+    const candidate = candidates.nth(i);
+    if (!(await candidate.isVisible().catch(() => false))) continue;
+    const label = await candidate.evaluate((el) =>
+      [
+        el.textContent,
+        el.getAttribute("value"),
+        el.getAttribute("aria-label"),
+        el.getAttribute("title"),
+      ].filter(Boolean).join(" ")
+    ).catch(() => "");
+    if (!/submit|finish|done|complete/i.test(label)) continue;
+    await candidate.click();
+    return true;
+  }
+
+  return false;
 }
 
 function extractPracticeQIntakeId(url: string): string | undefined {
   const match = url.match(/\/(?:history|intake|forms?)\/([^/?#]+)/i) ?? url.match(/[?&](?:intakeId|id)=([^&#]+)/i);
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+function looksSubmitted(text: string): boolean {
+  return /thank you|submitted|received your form|form is complete|successfully submitted/i.test(text);
 }
