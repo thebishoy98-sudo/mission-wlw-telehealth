@@ -45,6 +45,7 @@ type RemoteSession = {
 const remoteSessions = new Map<string, RemoteSession>();
 const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
 const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
+const PRACTICEQ_CONSENT_TIMEOUT_MS = 60000;
 const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
@@ -217,7 +218,7 @@ export async function fillPracticeQQuestionPages(
     );
     await withPracticeQTimeout(
       completeVisibleConsentDocument(page, fillPlan),
-      20000,
+      PRACTICEQ_CONSENT_TIMEOUT_MS,
       "PracticeQ consent signing step timed out."
     );
 

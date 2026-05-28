@@ -7,7 +7,9 @@ describe("PracticeQ remote worker resilience", () => {
 
   it("allows enough time for IntakeQ Angular pages with many visible fields", () => {
     expect(workerSource).toContain("PRACTICEQ_PAGE_FILL_TIMEOUT_MS");
+    expect(workerSource).toContain("PRACTICEQ_CONSENT_TIMEOUT_MS");
     expect(workerSource).toContain("45000");
+    expect(workerSource).toContain("60000");
     expect(workerSource).not.toContain("PracticeQ text field fill step timed out.\")\n    );");
   });
 
