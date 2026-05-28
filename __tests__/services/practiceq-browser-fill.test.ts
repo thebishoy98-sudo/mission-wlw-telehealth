@@ -45,6 +45,7 @@ describe("PracticeQ browser fill plan", () => {
         { prompt: "What is your height?", value: "5 ft 11 in" },
         { prompt: "What is your current body weight?", value: "215" },
         { prompt: "Print your name", value: "Bishoy Kamel" },
+        { prompt: "Initials", value: "BK" },
         { prompt: "I consent to treatment", value: "I consent" },
       ])
     );

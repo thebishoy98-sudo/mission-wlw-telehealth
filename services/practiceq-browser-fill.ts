@@ -18,6 +18,12 @@ export function buildPracticeQFillPlan(
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const shippingAddress = patient.shippingAddress?.street1 ? patient.shippingAddress : patient.address;
   const signedName = consent?.signedName?.trim();
+  const initials = signedName
+    ?.split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase();
   const demographics: PracticeQFillItem[] = [
     { prompt: "First Name", value: patient.firstName },
     { prompt: "Last Name", value: patient.lastName },
@@ -45,6 +51,7 @@ export function buildPracticeQFillPlan(
         { prompt: "Print your name", value: signedName },
         { prompt: "Signature", value: signedName },
         { prompt: "Patient Name", value: signedName },
+        ...(initials ? [{ prompt: "Initials", value: initials }] : []),
         { prompt: "Consent for Medical Treatment", value: "I consent" },
         { prompt: "I consent to treatment", value: "I consent" },
       ]

@@ -164,6 +164,7 @@ export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnTyp
 
     const filled = await fillVisibleFields(page, fillPlan);
     await clickMatchingChoices(page, fillPlan);
+    await completeVisibleConsentDocument(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
@@ -240,21 +241,95 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
       const label = el.closest("label")?.textContent ?? "";
       const parent = el.parentElement?.textContent ?? "";
       const grand = el.parentElement?.parentElement?.textContent ?? "";
-      return [label, parent, grand, el.getAttribute("placeholder") ?? "", el.getAttribute("aria-label") ?? ""].join(" ");
+      const questionBlock = el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "";
+      return [
+        label,
+        parent,
+        grand,
+        questionBlock,
+        el.getAttribute("placeholder") ?? "",
+        el.getAttribute("aria-label") ?? "",
+      ].join(" ");
     });
     const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!answer) continue;
     const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
-    await field.fill(normalizedAnswer).catch(() => {});
-    await field.evaluate((el) => {
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-      el.dispatchEvent(new Event("blur", { bubbles: true }));
-    }).catch(() => {});
+    await enterFieldValue(field, normalizedAnswer);
     filled += 1;
   }
 
   return filled;
+}
+
+async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  const signedName = findPracticeQAnswerForPrompt("Print your name", fillPlan)
+    ?? findPracticeQAnswerForPrompt("Signature", fillPlan)
+    ?? findPracticeQAnswerForPrompt("Patient Name", fillPlan);
+  if (!signedName) return;
+
+  const readAndSign = page.getByRole("button", { name: /read\s*&?\s*sign/i }).first();
+  if (await readAndSign.isVisible().catch(() => false)) {
+    await readAndSign.scrollIntoViewIfNeeded().catch(() => {});
+    await readAndSign.click();
+    await page.waitForTimeout(1000);
+  }
+
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (!/please read and sign|submit signature|consent for medical treatment/i.test(bodyText)) return;
+
+  await page.getByRole("link", { name: /type it/i }).first().click().catch(() => {});
+  await fillVisibleFields(page, fillPlan);
+
+  const uncheckedBoxes = page.locator("input[type='checkbox']:not(:checked)");
+  const checkboxCount = await uncheckedBoxes.count();
+  for (let i = 0; i < checkboxCount; i += 1) {
+    const checkbox = uncheckedBoxes.nth(i);
+    await checkbox.scrollIntoViewIfNeeded().catch(() => {});
+    if (await checkbox.isVisible().catch(() => false)) {
+      await checkPracticeQCheckbox(checkbox);
+    }
+  }
+
+  const submitSignature = page.getByRole("button", { name: /submit signature|click to sign/i }).first();
+  if (await submitSignature.isVisible().catch(() => false)) {
+    await submitSignature.scrollIntoViewIfNeeded().catch(() => {});
+    await submitSignature.click();
+    await page.waitForTimeout(1500);
+  }
+
+  const back = page.getByText(/back to questionnaire/i).first();
+  if (await back.isVisible().catch(() => false)) {
+    await back.click();
+    await page.waitForTimeout(1000);
+  }
+}
+
+async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string) {
+  await field.scrollIntoViewIfNeeded().catch(() => {});
+  await field.click().catch(() => {});
+  await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
+  await field.fill("").catch(() => {});
+  await field.type(value, { delay: 5 }).catch(async () => {
+    await field.fill(value).catch(() => {});
+  });
+  await field.evaluate((el) => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+  }).catch(() => {});
+}
+
+async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
+  await checkbox.check().catch(async () => {
+    await checkbox.evaluate((el) => {
+      const target = el.parentElement?.querySelector("ins.iCheck-helper")
+        ?? el.parentElement
+        ?? el;
+      (target as HTMLElement).click();
+    }).catch(async () => {
+      await checkbox.click({ force: true }).catch(() => {});
+    });
+  });
 }
 
 async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
@@ -278,17 +353,30 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
     if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
       const childInput = label.locator("input[type='checkbox'], input[type='radio']").first();
       if (await childInput.isVisible().catch(() => false)) {
-        await childInput.click().catch(() => {});
+        await clickPracticeQChoiceInput(childInput);
         continue;
       }
       const followingInput = label.locator("xpath=following::input[@type='checkbox' or @type='radio'][1]").first();
       if (await followingInput.isVisible().catch(() => false)) {
-        await followingInput.click().catch(() => {});
+        await clickPracticeQChoiceInput(followingInput);
         continue;
       }
       await label.click().catch(() => {});
     }
   }
+}
+
+async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {
+  await input.click().catch(async () => {
+    await input.evaluate((el) => {
+      const target = el.parentElement?.querySelector("ins.iCheck-helper")
+        ?? el.parentElement
+        ?? el;
+      (target as HTMLElement).click();
+    }).catch(async () => {
+      await input.click({ force: true }).catch(() => {});
+    });
+  });
 }
 
 async function clickContinue(page: Page): Promise<boolean> {
