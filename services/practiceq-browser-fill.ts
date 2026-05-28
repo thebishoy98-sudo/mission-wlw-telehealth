@@ -68,11 +68,13 @@ export function findPracticeQAnswerForPrompt(
   const exact = fillPlan.find((item) => normalizePrompt(item.prompt) === normalizedPrompt);
   if (exact) return exact.value;
 
-  const partial = fillPlan.find((item) => {
-    const candidate = normalizePrompt(item.prompt);
-    return candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt));
-  });
-  return partial?.value ?? null;
+  const partial = fillPlan
+    .map((item) => ({ item, candidate: normalizePrompt(item.prompt) }))
+    .filter(({ candidate }) =>
+      candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+    )
+    .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+  return partial?.item.value ?? null;
 }
 
 export function requiresUnhandledPatientConsent(text: string, fillPlan: PracticeQFillItem[]): boolean {

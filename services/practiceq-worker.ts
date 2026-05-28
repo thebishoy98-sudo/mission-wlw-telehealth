@@ -58,6 +58,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
+    await resolvePracticeQResumePrompt(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
 
@@ -133,6 +134,7 @@ export async function startPracticeQRemoteSession(
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
+    await resolvePracticeQResumePrompt(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
     const verifiedResult = await verifyPracticeQSavedSubmission(submitResult, {
@@ -175,19 +177,45 @@ export async function fillKnownPracticeQLogin(page: Page, patient: { firstName: 
 export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<FillOutcome> {
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
+    await waitForPracticeQPageText(page);
     const bodyText = await page.locator("body").innerText().catch(() => "");
+    if (await resolvePracticeQResumePrompt(page, bodyText)) continue;
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
     const filled = await fillVisibleFields(page, fillPlan);
-    await clickMatchingChoices(page, fillPlan);
-    await completeVisibleConsentDocument(page, fillPlan);
+    await withPracticeQTimeout(
+      clickMatchingChoices(page, fillPlan),
+      12000,
+      "PracticeQ choice selection step timed out."
+    );
+    await withPracticeQTimeout(
+      completeVisibleConsentDocument(page, fillPlan),
+      20000,
+      "PracticeQ consent signing step timed out."
+    );
+    await savePracticeQPage(page);
     await waitForPracticeQSaved(page);
     await assertVisiblePracticeQFieldsFilled(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
+    if (moved) await waitForPracticeQPageText(page);
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
   return { stoppedForPatientConsent: false };
+}
+
+async function withPracticeQTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export async function submitPracticeQInBackground(
@@ -195,7 +223,14 @@ export async function submitPracticeQInBackground(
   fillOutcome: FillOutcome,
   fillPlan: ReturnType<typeof buildPracticeQFillPlan> = []
 ): Promise<WorkerResult> {
+  await waitForPracticeQPageText(page);
   const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQResumePrompt(bodyText)) {
+    return {
+      status: "failed",
+      error: "PracticeQ is asking whether to resume an old partial intake or start a new intake. The worker could not get past that prompt.",
+    };
+  }
   const hasUnhandledConsent = requiresUnhandledPatientConsent(bodyText, fillPlan);
   if (fillOutcome.stoppedForPatientConsent || hasUnhandledConsent) {
     return {
@@ -253,6 +288,7 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
     const field = fields.nth(i);
     await field.scrollIntoViewIfNeeded().catch(() => {});
     if (!(await field.isVisible().catch(() => false))) continue;
+    if (!(await isPracticeQDataEntryField(field))) continue;
     const current = await field.inputValue().catch(() => "");
     if (current.trim()) continue;
     const prompt = await getPracticeQFieldPrompt(field);
@@ -274,6 +310,7 @@ async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnTy
   for (let i = 0; i < count; i += 1) {
     const field = fields.nth(i);
     if (!(await field.isVisible().catch(() => false))) continue;
+    if (!(await isPracticeQDataEntryField(field))) continue;
     const prompt = await getPracticeQFieldPrompt(field);
     const expected = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!expected) continue;
@@ -288,8 +325,37 @@ async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnTy
   }
 }
 
+async function isPracticeQDataEntryField(field: ReturnType<Page["locator"]>): Promise<boolean> {
+  return field.evaluate((el) => {
+    const ngModel = el.getAttribute("ng-model") ?? "";
+    if (/signature\.Typed|FurtherExplanation/i.test(ngModel)) return false;
+    if ((el as HTMLTextAreaElement).value?.includes("This is a form preview only")) return false;
+    const styleText = (el as HTMLTextAreaElement).value ?? "";
+    if (/body\s*\{\s*background|Intake Form Mission WLW/i.test(styleText)) return false;
+    const text = [
+      el.closest("label")?.textContent ?? "",
+      el.parentElement?.textContent ?? "",
+      el.parentElement?.parentElement?.textContent ?? "",
+    ].join(" ");
+    if (/draw instead|type instead|submit signature|signature captured/i.test(text)) return false;
+    return true;
+  }).catch(() => false);
+}
+
 async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Promise<string> {
   return field.evaluate((el) => {
+    let current: Element | null = el;
+    for (let depth = 0; current && depth < 5; depth += 1) {
+      const label = current.querySelector?.("label")?.textContent?.trim();
+      if (label) {
+        return [
+          label,
+          el.getAttribute("placeholder") ?? "",
+          el.getAttribute("aria-label") ?? "",
+        ].join(" ");
+      }
+      current = current.parentElement;
+    }
     const label = el.closest("label")?.textContent ?? "";
     const parent = el.parentElement?.textContent ?? "";
     const grand = el.parentElement?.parentElement?.textContent ?? "";
@@ -316,10 +382,18 @@ async function getPracticeQFieldValue(field: ReturnType<Page["locator"]>): Promi
       .replace(/\s+/g, " ")
       .trim();
     const prompt = [
+      (() => {
+        let current: Element | null = el;
+        for (let depth = 0; current && depth < 5; depth += 1) {
+          const label = current.querySelector?.("label")?.textContent?.trim();
+          if (label) return label;
+          current = current.parentElement;
+        }
+        return "";
+      })(),
       el.closest("label")?.textContent ?? "",
       el.parentElement?.textContent ?? "",
       el.parentElement?.parentElement?.textContent ?? "",
-      el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "",
       el.getAttribute("placeholder") ?? "",
       el.getAttribute("aria-label") ?? "",
     ].join(" ");
@@ -376,6 +450,65 @@ async function waitForPracticeQSaved(page: Page) {
   if (await saved.isVisible().catch(() => false)) await page.waitForTimeout(500);
 }
 
+async function savePracticeQPage(page: Page) {
+  const save = page
+    .getByRole("button", { name: /^save$/i })
+    .or(page.locator("button, input[type='button']").filter({ hasText: /^save$/i }))
+    .first();
+  if (await save.isVisible().catch(() => false)) {
+    const disabled = await save.isDisabled().catch(() => false);
+    const text = await save.innerText().catch(() => "");
+    if (!disabled && /^save$/i.test(text.trim())) {
+      await save.click({ timeout: 8000 }).catch(async () => {
+        await save.click({ force: true, timeout: 5000 }).catch(() => {});
+      });
+    }
+  }
+}
+
+async function resolvePracticeQResumePrompt(page: Page, bodyText?: string): Promise<boolean> {
+  const text = bodyText ?? await page.locator("body").innerText().catch(() => "");
+  if (!isPracticeQResumePrompt(text)) return false;
+
+  const clicked = await page.evaluate(() => {
+    const candidates = Array.from(document.querySelectorAll("button, a, input[type='button'], input[type='submit'], .btn"));
+    const target = candidates.find((el) => /start\s+new\s+intake\s+form/i.test([
+      el.textContent,
+      el.getAttribute("value"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+    ].filter(Boolean).join(" "))) as HTMLElement | undefined;
+    target?.click();
+    return Boolean(target);
+  }).catch(() => false);
+
+  if (!clicked) {
+    const startNew = page
+      .getByRole("button", { name: /start\s+new\s+intake\s+form/i })
+      .or(page.getByRole("link", { name: /start\s+new\s+intake\s+form/i }))
+      .or(page.locator("button, a, input[type='button'], input[type='submit'], .btn").filter({ hasText: /start\s+new\s+intake\s+form/i }))
+      .first();
+
+    if (!(await startNew.isVisible().catch(() => false))) {
+      throw new Error("PracticeQ resume prompt appeared, but the Start New Intake Form control was not visible.");
+    }
+
+    await startNew.scrollIntoViewIfNeeded().catch(() => {});
+    await startNew.click();
+  }
+
+  await page.waitForTimeout(2000);
+  const afterClickText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQResumePrompt(afterClickText)) {
+    throw new Error("PracticeQ resume prompt stayed open after clicking Start New Intake Form.");
+  }
+  return true;
+}
+
+function isPracticeQResumePrompt(text: string): boolean {
+  return /didn['’]?t submit your last form|resume existing form|start new intake form/i.test(text);
+}
+
 function fieldValueMatches(actual: string, expected: string, prompt: string): boolean {
   const normalizedActual = normalizePracticeQText(actual);
   const normalizedExpected = normalizePracticeQText(expected);
@@ -418,14 +551,16 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
     .first();
   if (await readAndSign.isVisible().catch(() => false)) {
     await readAndSign.scrollIntoViewIfNeeded().catch(() => {});
-    await readAndSign.click();
+    await readAndSign.click({ timeout: 8000 }).catch(async () => {
+      await readAndSign.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
     await page.waitForTimeout(1000);
   }
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
   if (!/please read and sign|submit signature|consent for medical treatment/i.test(bodyText)) return;
 
-  await page.getByRole("link", { name: /type it/i }).first().click().catch(() => {});
+  await page.getByRole("link", { name: /type it/i }).first().click({ timeout: 3000 }).catch(() => {});
   await fillVisibleConsentFields(page, fillPlan, signedName);
   await fillVisibleFields(page, fillPlan);
 
@@ -433,7 +568,7 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   const checkboxCount = await uncheckedBoxes.count();
   for (let i = 0; i < checkboxCount; i += 1) {
     const checkbox = uncheckedBoxes.nth(i);
-    await checkbox.scrollIntoViewIfNeeded().catch(() => {});
+    await checkbox.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await checkPracticeQCheckbox(checkbox);
   }
 
@@ -451,13 +586,17 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
         await page.mouse.up();
       }
     }
-    await submitSignature.click();
-    await page.waitForTimeout(1500);
+    await submitSignature.click({ timeout: 8000 }).catch(async () => {
+      await submitSignature.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
+    await page.waitForTimeout(2000);
   }
 
   const back = page.getByText(/back to questionnaire/i).first();
   if (await back.isVisible().catch(() => false)) {
-    await back.click();
+    await back.click({ timeout: 5000 }).catch(async () => {
+      await back.click({ force: true, timeout: 3000 }).catch(() => {});
+    });
     await page.waitForTimeout(1000);
   }
 }
@@ -497,80 +636,13 @@ async function fillVisibleConsentFields(
 }
 
 async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string, prompt = "") {
-  await field.scrollIntoViewIfNeeded().catch(() => {});
-  await field.click().catch(() => {});
-  await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
-  await field.fill("").catch(() => {});
-  await field.type(value, { delay: 5 }).catch(async () => {
-    await field.fill(value).catch(() => {});
+  await field.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+  await field.fill(value, { timeout: 5000 }).catch(async () => {
+    await field.click({ timeout: 3000 }).catch(() => {});
+    await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A", { timeout: 3000 }).catch(() => {});
+    await field.type(value, { delay: 5, timeout: 5000 }).catch(() => {});
   });
-  await field.evaluate((el, input) => {
-    const normalize = (raw: unknown) => String(raw ?? "")
-      .toLowerCase()
-      .replace(/\([^)]*\)/g, " ")
-      .replace(/[^a-z0-9]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const findIntakeScope = (root: any) => {
-      const seen = new Set<number>();
-      const stack = [root];
-      while (stack.length) {
-        const scope = stack.pop();
-        if (!scope || seen.has(scope.$id)) continue;
-        seen.add(scope.$id);
-        if (scope.intake?.Questionnaire?.Questions) return scope;
-        if (scope.$$childHead) stack.push(scope.$$childHead);
-        let sibling = scope.$$nextSibling;
-        while (sibling) {
-          stack.push(sibling);
-          sibling = sibling.$$nextSibling;
-        }
-      }
-      return null;
-    };
-    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-    setter?.call(el, input.value);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-    el.dispatchEvent(new Event("blur", { bubbles: true }));
-    const angular = (window as any).angular;
-    const injector = angular?.element(document.body).injector?.();
-    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
-    const questions = intakeScope?.intake?.Questionnaire?.Questions;
-    if (!Array.isArray(questions)) return;
-    const normalizedPrompt = normalize(input.prompt);
-    let changed = false;
-    for (const question of questions) {
-      const questionText = normalize(question?.Text);
-      if (questionText && (normalizedPrompt.includes(questionText) || questionText.includes(normalizedPrompt))) {
-        question.Answer = input.value;
-        changed = true;
-      }
-      if (Array.isArray(question?.QuestionItems)) {
-        for (const item of question.QuestionItems) {
-          const itemText = normalize(item?.Text);
-          if (itemText && (normalizedPrompt.includes(itemText) || itemText.includes(normalizedPrompt))) {
-            item.Answer = input.value;
-            intakeScope?.onblur?.(question, item.Answer, item);
-            changed = true;
-          }
-        }
-      }
-    }
-    if (changed) {
-      intakeScope?.changed?.();
-      intakeScope?.textChanged?.();
-      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
-      intakeScope?.$applyAsync?.();
-    }
-  }, { prompt, value }).catch(() => {});
-  await field.fill(value).catch(() => {});
-  await field.evaluate((el) => {
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-    el.dispatchEvent(new Event("blur", { bubbles: true }));
-  }).catch(() => {});
+  await field.press("Tab", { timeout: 2000 }).catch(() => {});
 }
 
 async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
@@ -584,7 +656,7 @@ async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
     scope?.changed?.();
     scope?.$applyAsync?.();
   }).catch(() => {});
-  await checkbox.check().catch(async () => {
+  await checkbox.check({ timeout: 5000 }).catch(async () => {
     await checkbox.evaluate((el) => {
       const target = el.parentElement?.querySelector("ins.iCheck-helper")
         ?? el.parentElement
@@ -596,17 +668,30 @@ async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
       scope?.changed?.();
       scope?.$applyAsync?.();
     }).catch(async () => {
-      await checkbox.click({ force: true }).catch(() => {});
+      await checkbox.click({ force: true, timeout: 3000 }).catch(() => {});
     });
   });
 }
 
 async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  for (const item of fillPlan) {
+    const values = item.value.split(",").map((value) => value.trim()).filter(Boolean);
+    for (const value of values) {
+      if (/^(none|none of the above|none apply to me)$/i.test(value)) continue;
+      const exactChoice = page.getByText(new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i")).first();
+      if (await exactChoice.isVisible().catch(() => false)) {
+        await exactChoice.click({ timeout: 2000 }).catch(async () => {
+          await exactChoice.click({ force: true, timeout: 1000 }).catch(() => {});
+        });
+      }
+    }
+  }
+
   const labels = page.locator("label");
   const count = await labels.count();
   for (let i = 0; i < count; i += 1) {
     const label = labels.nth(i);
-    await label.scrollIntoViewIfNeeded().catch(() => {});
+    await label.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
     if (!(await label.isVisible().catch(() => false))) continue;
     const text = (await label.innerText().catch(() => "")).trim();
     if (!text) continue;
@@ -634,17 +719,63 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
       await label.click().catch(() => {});
     }
   }
+
+  const inputs = page.locator("input[type='checkbox'], input[type='radio']");
+  const inputCount = await inputs.count();
+  for (let i = 0; i < inputCount; i += 1) {
+    const input = inputs.nth(i);
+    if (!(await input.isVisible().catch(() => false))) continue;
+    if (await input.isChecked().catch(() => false)) continue;
+    const choice = await input.evaluate((el) => {
+      const label = el.closest("label")?.textContent
+        ?? el.parentElement?.textContent
+        ?? "";
+      const context = [
+        el.closest("label")?.textContent ?? "",
+        el.parentElement?.textContent ?? "",
+        el.parentElement?.parentElement?.textContent ?? "",
+        el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "",
+      ].join(" ");
+      return {
+        label: label.replace(/\s+/g, " ").trim(),
+        context: context.replace(/\s+/g, " ").trim(),
+      };
+    }).catch(() => ({ label: "", context: "" }));
+    if (!choice.label || !findPracticeQChoiceForLabel(choice.label, choice.context, fillPlan)) continue;
+    await setPracticeQAngularChoice(page, choice.context, choice.label);
+    await clickPracticeQChoiceInput(input);
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {
-  await input.click().catch(async () => {
+  await input.evaluate((el) => {
+    const input = el as HTMLInputElement;
+    input.checked = true;
+    input.setAttribute("checked", "checked");
+    const angular = (window as any).angular;
+    const scope = angular?.element(el).scope?.();
+    if (scope?.question) {
+      scope.question.Answer = input.value || scope.question.Answer || true;
+      scope.changed?.(scope.question);
+      scope.textChanged?.();
+      scope.$applyAsync?.();
+    }
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }).catch(() => {});
+  await input.click({ timeout: 5000 }).catch(async () => {
     await input.evaluate((el) => {
       const target = el.parentElement?.querySelector("ins.iCheck-helper")
         ?? el.parentElement
         ?? el;
       (target as HTMLElement).click();
     }).catch(async () => {
-      await input.click({ force: true }).catch(() => {});
+      await input.click({ force: true, timeout: 3000 }).catch(() => {});
     });
   });
 }
@@ -708,24 +839,52 @@ async function setPracticeQAngularChoice(page: Page, questionContext: string, la
 
 async function clickContinue(page: Page): Promise<boolean> {
   const button = page
+    .getByRole("button", { name: /next\s+page/i })
+    .or(page.getByText(/next\s+page/i))
+    .or(page.locator("button, input[type='button'], input[type='submit'], a").filter({ hasText: /next\s+page/i }))
+    .or(page.locator("input[value*='Next Page'], input[value*='next page']"))
+    .or(page
     .getByRole("button", { name: /continue|next/i })
     .or(page.locator("button, input[type='button'], input[type='submit']").filter({ hasText: /continue|next/i }))
+    )
     .first();
   if (!(await button.isVisible().catch(() => false))) return false;
-  await button.click();
+  await button.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+  await button.click({ timeout: 8000 }).catch(async () => {
+    await button.click({ force: true, timeout: 3000 }).catch(async () => {
+      await page.evaluate(() => {
+        const candidates = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"));
+        const target = candidates.find((el) => /continue|next/i.test([
+          el.textContent,
+          el.getAttribute("value"),
+          el.getAttribute("aria-label"),
+          el.getAttribute("title"),
+        ].filter(Boolean).join(" "))) as HTMLElement | undefined;
+        target?.click();
+      }).catch(() => {});
+    });
+  });
   return true;
 }
 
 async function clickFinalSubmit(page: Page): Promise<boolean> {
+  await waitForPracticeQReady(page);
   const direct = page
     .getByRole("button", { name: /submit(?: form)?|finish|done|complete/i })
     .or(page.locator("input[type='submit'], input[type='button'], button").filter({ hasText: /submit(?: form)?|finish|done|complete/i }))
     .or(page.locator("input[value*='Submit'], input[value*='submit']"))
-    .or(page.getByText(/submit form|submit|finish|done|complete/i))
     .first();
   if (await direct.isVisible().catch(() => false)) {
     await direct.scrollIntoViewIfNeeded().catch(() => {});
-    await direct.click();
+    await direct.click({ timeout: 8000 }).catch(async () => {
+      await waitForPracticeQReady(page);
+      await direct.click({ force: true, timeout: 5000 }).catch(async () => {
+        await page.evaluate(() => {
+          const button = document.querySelector("#btnSubmit") as HTMLElement | null;
+          button?.click();
+        }).catch(() => {});
+      });
+    });
     return true;
   }
 
@@ -761,6 +920,21 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
   if (clicked) return true;
 
   return false;
+}
+
+async function waitForPracticeQReady(page: Page) {
+  await page
+    .locator(".spinner.full-height-width, spinner .spinner")
+    .first()
+    .waitFor({ state: "hidden", timeout: 10000 })
+    .catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+async function waitForPracticeQPageText(page: Page) {
+  await page
+    .waitForFunction(() => (document.body?.innerText ?? "").trim().length > 20, null, { timeout: 12000 })
+    .catch(() => {});
 }
 
 async function verifyPracticeQSavedSubmission(
