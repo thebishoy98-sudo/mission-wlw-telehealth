@@ -118,6 +118,7 @@ export const patientDb = {
   },
 
   async create(p: Patient): Promise<Patient> {
+    if (!isDbAvailable()) return p;
     await sql`
       INSERT INTO patients (id, first_name, last_name, date_of_birth, gender, phone, email,
         address, shipping_address, emergency_contact, created_at, updated_at)
@@ -130,6 +131,7 @@ export const patientDb = {
   },
 
   async update(id: string, data: Partial<Patient>): Promise<Patient | null> {
+    if (!isDbAvailable()) return null;
     const now = new Date().toISOString();
     await sql`
       UPDATE patients SET
@@ -164,6 +166,7 @@ export const orderDb = {
   },
 
   async getByPatient(patientId: string): Promise<Order[]> {
+    if (!isDbAvailable()) return [];
     const { rows } = await sql`
       SELECT * FROM orders WHERE patient_id = ${patientId} ORDER BY created_at DESC
     `;
@@ -171,6 +174,7 @@ export const orderDb = {
   },
 
   async getByStatus(status: string): Promise<Order[]> {
+    if (!isDbAvailable()) return [];
     const { rows } = await sql`
       SELECT * FROM orders WHERE status = ${status} ORDER BY created_at DESC
     `;
@@ -178,11 +182,13 @@ export const orderDb = {
   },
 
   async getAll(): Promise<Order[]> {
+    if (!isDbAvailable()) return [];
     const { rows } = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
     return rows.map(rowToOrder);
   },
 
   async create(o: Order): Promise<Order> {
+    if (!isDbAvailable()) return o;
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
@@ -198,6 +204,7 @@ export const orderDb = {
   },
 
   async update(id: string, data: Partial<Order>): Promise<Order | null> {
+    if (!isDbAvailable()) return null;
     const now = new Date().toISOString();
     await sql`
       UPDATE orders SET
@@ -241,6 +248,7 @@ export const uploadDb = {
   },
 
   async create(upload: Upload): Promise<Upload> {
+    if (!isDbAvailable()) return upload;
     await sql`
       INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
         storage_url, base64_data, uploaded_at, status, verification_notes)
@@ -263,6 +271,7 @@ export const paymentDb = {
   },
 
   async create(p: Payment): Promise<Payment> {
+    if (!isDbAvailable()) return p;
     await sql`
       INSERT INTO payments (id, order_id, patient_id, amount, currency, status,
         payment_method, card_last4, card_brand, transaction_id, created_at, processed_at)
@@ -274,6 +283,7 @@ export const paymentDb = {
   },
 
   async update(id: string, data: Partial<Payment>): Promise<void> {
+    if (!isDbAvailable()) return;
     await sql`
       UPDATE payments SET
         status         = COALESCE(${data.status ?? null}, status),
@@ -300,6 +310,7 @@ export const answerDb = {
   },
 
   async create(a: QuestionnaireAnswer): Promise<QuestionnaireAnswer> {
+    if (!isDbAvailable()) return a;
     await sql`
       INSERT INTO questionnaire_answers (id, order_id, question_id, answer, created_at)
       VALUES (${a.id}, ${a.orderId}, ${a.questionId}, ${a.answer}, ${a.createdAt})
@@ -320,6 +331,7 @@ export const consentDb = {
     return rows[0] ? rowToConsent(rows[0]) : null;
   },
   async create(c: ConsentRecord): Promise<ConsentRecord> {
+    if (!isDbAvailable()) return c;
     await sql`
       INSERT INTO consent_records (id, order_id, consent_text, acknowledgments, signed_name, signed_at)
       VALUES (${c.id}, ${c.orderId}, ${c.consentText}, ${JSON.stringify(c.acknowledgments)},
@@ -356,11 +368,13 @@ export const providerReviewDb = {
   },
 
   async getAll(): Promise<ProviderReview[]> {
+    if (!isDbAvailable()) return [];
     const { rows } = await sql`SELECT * FROM provider_reviews ORDER BY created_at DESC`;
     return rows.map(rowToReview);
   },
 
   async create(r: ProviderReview): Promise<ProviderReview> {
+    if (!isDbAvailable()) return r;
     await sql`
       INSERT INTO provider_reviews (id, order_id, patient_id, status, reviewed_at,
         reviewed_by, notes, rejection_reason, chart_viewed_at, chart_viewed_by,
@@ -377,6 +391,7 @@ export const providerReviewDb = {
   },
 
   async update(id: string, data: Partial<ProviderReview> & { aiSummary?: string; aiFlags?: any[] }): Promise<ProviderReview | null> {
+    if (!isDbAvailable()) return null;
     await sql`
       UPDATE provider_reviews SET
         status           = COALESCE(${data.status ?? null}, status),
@@ -408,6 +423,7 @@ export const pharmacyOrderDb = {
   },
 
   async getByLifeFileId(lifeFileOrderId: string): Promise<PharmacyOrder | null> {
+    if (!isDbAvailable()) return null;
     const { rows } = await sql`
       SELECT * FROM pharmacy_orders WHERE life_file_order_id = ${lifeFileOrderId} LIMIT 1
     `;
@@ -415,6 +431,7 @@ export const pharmacyOrderDb = {
   },
 
   async create(o: PharmacyOrder): Promise<PharmacyOrder> {
+    if (!isDbAvailable()) return o;
     await sql`
       INSERT INTO pharmacy_orders (id, order_id, patient_id, life_file_order_id, status,
         payload, submitted_at, last_error)
@@ -426,6 +443,7 @@ export const pharmacyOrderDb = {
   },
 
   async update(id: string, data: Partial<PharmacyOrder>): Promise<void> {
+    if (!isDbAvailable()) return;
     await sql`
       UPDATE pharmacy_orders SET
         status           = COALESCE(${data.status ?? null}, status),
@@ -442,6 +460,7 @@ export const pharmacyOrderDb = {
 
 export const integrationLogDb = {
   async create(log: IntegrationLog): Promise<void> {
+    if (!isDbAvailable()) return;
     await sql`
       INSERT INTO integration_logs (id, timestamp, integration_name, action, order_id,
         patient_id, status, details, error)
@@ -452,6 +471,7 @@ export const integrationLogDb = {
   },
 
   async getAll(): Promise<IntegrationLog[]> {
+    if (!isDbAvailable()) return [];
     const { rows } = await sql`
       SELECT * FROM integration_logs ORDER BY timestamp DESC LIMIT 500
     `;
@@ -543,6 +563,7 @@ export const aiConversationDb = {
   },
 
   async create(data: { id: string; patientId?: string; orderId?: string; role: string; messages: any[] }) {
+    if (!isDbAvailable()) return data;
     const now = new Date().toISOString();
     await sql`
       INSERT INTO ai_conversations (id, patient_id, order_id, role, messages, created_at, updated_at)
@@ -553,6 +574,7 @@ export const aiConversationDb = {
   },
 
   async appendMessage(id: string, message: { role: string; content: string }) {
+    if (!isDbAvailable()) return;
     await sql`
       UPDATE ai_conversations
       SET messages   = messages || ${JSON.stringify([message])}::jsonb,
