@@ -202,6 +202,7 @@ export async function fillPracticeQQuestionPages(
     await waitForPracticeQPageText(page);
     const bodyText = await page.locator("body").innerText().catch(() => "");
     if (await resolvePracticeQResumePrompt(page, bodyText)) continue;
+    if (await resolvePracticeQIntroPage(page, bodyText)) continue;
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
     const filled = await withPracticeQTimeout(
@@ -594,6 +595,17 @@ function isPracticeQResumePrompt(text: string): boolean {
   return /didn['’]?t submit your last form|resume existing form|start new intake form/i.test(text);
 }
 
+async function resolvePracticeQIntroPage(page: Page, bodyText?: string): Promise<boolean> {
+  const text = bodyText ?? await page.locator("body").innerText().catch(() => "");
+  if (!/fill this out by hand/i.test(text) || !/0\s*%\s*Complete/i.test(text)) return false;
+
+  const clicked = await clickPracticeQControlByText(page, /fill\s+this\s+out\s+by\s+hand/i);
+  if (!clicked) return false;
+
+  await page.waitForTimeout(1500);
+  return true;
+}
+
 function fieldValueMatches(actual: string, expected: string, prompt: string): boolean {
   const normalizedActual = normalizePracticeQText(actual);
   const normalizedExpected = normalizePracticeQText(expected);
@@ -779,7 +791,6 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
   for (const item of fillPlan) {
     const values = item.value.split(",").map((value) => value.trim()).filter(Boolean);
     for (const value of values) {
-      if (/^(none|none of the above|none apply to me)$/i.test(value)) continue;
       const exactChoice = page.getByText(new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i")).first();
       if (await exactChoice.isVisible().catch(() => false)) {
         await exactChoice.click({ timeout: 2000 }).catch(async () => {

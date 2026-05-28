@@ -34,4 +34,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("return result;");
     expect(workerSource).not.toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
   });
+
+  it("allows the real IntakeQ none option to be clicked when configured", () => {
+    expect(workerSource).not.toContain("none apply to me)$/i.test(value)) continue");
+  });
+
+  it("enters the IntakeQ intro page before filling questions", () => {
+    expect(workerSource).toContain("resolvePracticeQIntroPage");
+    expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
+  });
 });
