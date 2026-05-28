@@ -461,6 +461,24 @@ export const integrationLogDb = {
       status: r.status, details: r.details, error: r.error,
     }));
   },
+
+  async getByOrder(orderId: string): Promise<IntegrationLog[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM integration_logs WHERE order_id = ${orderId} ORDER BY timestamp DESC LIMIT 50
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      integrationName: r.integration_name,
+      action: r.action,
+      orderId: r.order_id,
+      patientId: r.patient_id,
+      status: r.status,
+      details: r.details,
+      error: r.error,
+    }));
+  },
 };
 
 // ── Spruce Messages ───────────────────────────────────────────────────────────

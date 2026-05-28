@@ -16,6 +16,11 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).toContain("PracticeQ automation queue failed");
   });
 
+  it("wakes the remote PracticeQ worker immediately after queueing the job", () => {
+    expect(source).toContain("wakePracticeQRemoteWorker");
+    expect(source).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
+  });
+
   it("does not submit the legacy intake route to PracticeQ before payment", () => {
     expect(legacyIntakeSource).not.toContain("submitIntakePacket");
     expect(legacyIntakeSource).toContain("/api/payments/charge");

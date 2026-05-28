@@ -36,6 +36,22 @@ import { resolvePersistedDose } from "@/lib/product-dose";
 import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import type { Payment, Upload } from "@/types";
 
+async function wakePracticeQRemoteWorker() {
+  const remoteBase = process.env.PRACTICEQ_REMOTE_PUBLIC_URL;
+  if (!remoteBase) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+  try {
+    await fetch(new URL("/health", remoteBase).toString(), {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -346,6 +362,7 @@ export async function POST(req: NextRequest) {
       db.practiceqAutomationJobDb.create(automationJob);
       db.orderDb.update(orderId, { practiceQStatus: "pending" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
+      await wakePracticeQRemoteWorker().catch(() => {});
     } catch (e) {
       const errorMessage = (e as Error).message;
       practiceQAutomationStatus = "error";

@@ -16,11 +16,12 @@ export async function GET(
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  const [serverPatient, serverProduct, serverPharmacyOrder, serverPracticeQPacket] = await Promise.all([
+  const [serverPatient, serverProduct, serverPharmacyOrder, serverPracticeQPacket, practiceqAutomationJob] = await Promise.all([
     dbServer.patientDb.getById(order.patientId).catch(() => null),
     dbServer.productDb.getById(order.productId).catch(() => null),
     dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null),
     dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null),
+    dbServer.practiceqAutomationJobDb.getByOrder(order.id).catch(() => db.practiceqAutomationJobDb.getByOrder(order.id)),
   ]);
 
   const patient = serverPatient ?? db.patientDb.getById(order.patientId);
@@ -29,12 +30,15 @@ export async function GET(
   const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
   const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket).catch(() => null);
   const canViewIdentity = isAdminRequest(req) || isProviderRequest(req);
-  const [uploads, review] = canViewIdentity
+  const [uploads, review, integrationLogs] = canViewIdentity
     ? await Promise.all([
         dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
         dbServer.providerReviewDb.getByOrder(order.id).catch(() => db.providerReviewDb.getByOrder(order.id)),
+        dbServer.integrationLogDb.getByOrder(order.id).catch(() =>
+          db.integrationLogDb.getAll().filter((log) => log.orderId === order.id)
+        ),
       ])
-    : [[], null];
+    : [[], null, []];
 
   return NextResponse.json({
     order,
@@ -71,6 +75,30 @@ export async function GET(
           reviewedBy: order.identityReviewedBy,
           aiResult: order.identityAiResult ?? review?.identityAiResult ?? null,
           uploads,
+        }
+      : undefined,
+    diagnostics: canViewIdentity
+      ? {
+          practiceqAutomation: practiceqAutomationJob
+            ? {
+                status: practiceqAutomationJob.status,
+                attempts: practiceqAutomationJob.attempts,
+                handoffUrl: practiceqAutomationJob.handoffUrl,
+                handoffExpiresAt: practiceqAutomationJob.handoffExpiresAt,
+                intakeId: practiceqAutomationJob.intakeId,
+                lastError: practiceqAutomationJob.lastError,
+                updatedAt: practiceqAutomationJob.updatedAt,
+              }
+            : null,
+          integrationLogs: integrationLogs.map((log) => ({
+            id: log.id,
+            timestamp: log.timestamp,
+            integrationName: log.integrationName,
+            action: log.action,
+            status: log.status,
+            details: log.details,
+            error: log.error,
+          })),
         }
       : undefined,
   });
