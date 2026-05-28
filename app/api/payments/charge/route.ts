@@ -319,8 +319,13 @@ export async function POST(req: NextRequest) {
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
 
-    // Build updatedOrder from known data (localStorage not available server-side)
-    const updatedOrder = { ...order, ...orderUpdates };
+    // Build updatedOrder from known persisted data (localStorage not available server-side).
+    const orderForIntegrations = {
+      ...order,
+      productId: persistedProduct?.id ?? order.productId,
+      doseId: persistedDose?.id ?? order.doseId,
+    };
+    const updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
     let practiceQAutomationStatus: "queued" | "error" = "queued";
@@ -330,7 +335,7 @@ export async function POST(req: NextRequest) {
       const qbCustomerId = await quickbooks.createCustomerRecord(patient);
       const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
         patient,
-        product: productData ?? null,
+        product: persistedProduct ?? productData ?? null,
         qbCustomerId,
       });
       await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
@@ -386,7 +391,7 @@ export async function POST(req: NextRequest) {
     const practiceQReadyForPharmacy = false;
     if (dispatchGate.canDispatch && practiceQReadyForPharmacy) {
       try {
-        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: persistedProduct ?? productData ?? null });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});

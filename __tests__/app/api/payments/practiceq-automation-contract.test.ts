@@ -21,6 +21,11 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
   });
 
+  it("uses the persisted server product for QuickBooks invoices", () => {
+    expect(source).toContain("product: persistedProduct ?? productData ?? null");
+    expect(source).not.toContain("product: productData ?? null,\n        qbCustomerId");
+  });
+
   it("does not submit the legacy intake route to PracticeQ before payment", () => {
     expect(legacyIntakeSource).not.toContain("submitIntakePacket");
     expect(legacyIntakeSource).toContain("/api/payments/charge");
