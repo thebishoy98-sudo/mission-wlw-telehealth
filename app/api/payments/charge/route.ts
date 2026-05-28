@@ -333,16 +333,27 @@ export async function POST(req: NextRequest) {
     // and do not dispatch pharmacy until PracticeQ is completed/signed.
     try {
       const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
+      await dbServer.practiceqAutomationJobDb.create(automationJob);
       db.practiceqAutomationJobDb.create(automationJob);
-      await dbServer.practiceqAutomationJobDb.create(automationJob).catch(() => {});
       db.orderDb.update(orderId, { practiceQStatus: "pending" });
-      await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" }).catch(() => {});
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
     } catch (e) {
       const errorMessage = (e as Error).message;
       practiceQAutomationStatus = "error";
       errors.push(`PracticeQ automation: ${errorMessage}`);
       db.orderDb.update(orderId, { practiceQStatus: "error" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "error" }).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "practiceq",
+        action: "PracticeQ automation queue failed",
+        orderId,
+        patientId: patient.id,
+        status: "error",
+        details: { source: "payment_charge" },
+        error: errorMessage,
+      }).catch(() => {});
     }
 
     // 10. Life File — pharmacy prescription order

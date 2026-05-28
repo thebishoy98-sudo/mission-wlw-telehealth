@@ -9,5 +9,9 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).toContain("practiceqAutomationJobDb.create");
     expect(source).not.toContain("practiceq.submitIntakePacket");
   });
-});
 
+  it("does not swallow failed server PracticeQ job inserts as a pending state", () => {
+    expect(source).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
+    expect(source).toContain("PracticeQ automation queue failed");
+  });
+});
