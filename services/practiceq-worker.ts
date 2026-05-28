@@ -303,10 +303,13 @@ async function clickContinue(page: Page): Promise<boolean> {
 
 async function clickFinalSubmit(page: Page): Promise<boolean> {
   const direct = page
-    .getByRole("button", { name: /submit|finish|done|complete/i })
-    .or(page.getByText(/submit|finish|done|complete/i))
+    .getByRole("button", { name: /submit(?: form)?|finish|done|complete/i })
+    .or(page.locator("input[type='submit'], input[type='button'], button").filter({ hasText: /submit(?: form)?|finish|done|complete/i }))
+    .or(page.locator("input[value*='Submit'], input[value*='submit']"))
+    .or(page.getByText(/submit form|submit|finish|done|complete/i))
     .first();
   if (await direct.isVisible().catch(() => false)) {
+    await direct.scrollIntoViewIfNeeded().catch(() => {});
     await direct.click();
     return true;
   }
@@ -328,6 +331,19 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     await candidate.click();
     return true;
   }
+
+  const clicked = await page.evaluate(() => {
+    const candidates = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"));
+    const target = candidates.find((el) => /submit\s*form|submit|finish|done|complete/i.test([
+      el.textContent,
+      el.getAttribute("value"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+    ].filter(Boolean).join(" "))) as HTMLElement | undefined;
+    target?.click();
+    return Boolean(target);
+  }).catch(() => false);
+  if (clicked) return true;
 
   return false;
 }
