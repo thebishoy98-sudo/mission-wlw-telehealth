@@ -943,7 +943,7 @@ function titlePracticeQProfileQuestion(question: string) {
   return titles[question] ?? question;
 }
 
-async function populateAndUpdatePracticeQIntake(
+export async function populateAndUpdatePracticeQIntake(
   intake: PracticeQIntake | null,
   context: {
     patient: Types.Patient;
@@ -963,8 +963,8 @@ async function populateAndUpdatePracticeQIntake(
 
   if (!changed) return null;
 
-  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(fullIntake.Id!)}`, {
-    method: "PUT",
+  const response = await fetch(`${pqBase()}/intakes`, {
+    method: "POST",
     headers: pqHeaders(),
     body: JSON.stringify(fullIntake),
   });

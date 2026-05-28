@@ -8,6 +8,11 @@ import {
   findPracticeQChoiceForLabel,
   requiresUnhandledPatientConsent,
 } from "@/services/practiceq-browser-fill";
+import {
+  getIntakeById,
+  getIntakeSummaryFeed,
+  populateAndUpdatePracticeQIntake,
+} from "@/services/practiceq";
 
 type WorkerResult = {
   status: PracticeQAutomationJob["status"];
@@ -56,7 +61,12 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
 
-    return submitResult;
+    return verifyPracticeQSavedSubmission(submitResult, {
+      patient,
+      answers,
+      questions,
+      startedAt: job.createdAt,
+    });
   } catch (error) {
     return { status: "failed", error: (error as Error).message };
   } finally {
@@ -125,8 +135,14 @@ export async function startPracticeQRemoteSession(
     await clickContinue(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
+    const verifiedResult = await verifyPracticeQSavedSubmission(submitResult, {
+      patient,
+      answers,
+      questions,
+      startedAt: job.createdAt,
+    });
     await browser.close().catch(() => {});
-    return submitResult;
+    return verifiedResult;
   } catch (error) {
     await browser.close().catch(() => {});
     return { status: "failed", error: (error as Error).message };
@@ -243,7 +259,7 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
     const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!answer) continue;
     const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
-    await enterFieldValue(field, normalizedAnswer);
+    await enterFieldValue(field, normalizedAnswer, prompt);
     filled += 1;
   }
 
@@ -290,10 +306,13 @@ async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Prom
 }
 
 async function waitForPracticeQSaved(page: Page) {
-  const saved = page.getByRole("button", { name: /saved/i }).first();
-  if (await saved.isVisible().catch(() => false)) {
-    await page.waitForTimeout(300);
-  }
+  await page.keyboard.press("Tab").catch(() => {});
+  await page.waitForTimeout(800);
+  await page
+    .waitForFunction(() => !/saving/i.test(document.body?.innerText ?? ""), null, { timeout: 8000 })
+    .catch(() => {});
+  const saved = page.getByText(/saved/i).first();
+  if (await saved.isVisible().catch(() => false)) await page.waitForTimeout(500);
 }
 
 function fieldValueMatches(actual: string, expected: string, prompt: string): boolean {
@@ -331,7 +350,11 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
     ?? findPracticeQAnswerForPrompt("Patient Name", fillPlan);
   if (!signedName) return;
 
-  const readAndSign = page.getByRole("button", { name: /read\s*&?\s*sign/i }).first();
+  const readAndSign = page
+    .getByRole("button", { name: /read\s*&?\s*sign/i })
+    .or(page.getByRole("link", { name: /read\s*&?\s*sign/i }))
+    .or(page.getByText(/read\s*&?\s*sign/i))
+    .first();
   if (await readAndSign.isVisible().catch(() => false)) {
     await readAndSign.scrollIntoViewIfNeeded().catch(() => {});
     await readAndSign.click();
@@ -342,6 +365,7 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   if (!/please read and sign|submit signature|consent for medical treatment/i.test(bodyText)) return;
 
   await page.getByRole("link", { name: /type it/i }).first().click().catch(() => {});
+  await fillVisibleConsentFields(page, fillPlan, signedName);
   await fillVisibleFields(page, fillPlan);
 
   const uncheckedBoxes = page.locator("input[type='checkbox']:not(:checked)");
@@ -357,6 +381,17 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   const submitSignature = page.getByRole("button", { name: /submit signature|click to sign/i }).first();
   if (await submitSignature.isVisible().catch(() => false)) {
     await submitSignature.scrollIntoViewIfNeeded().catch(() => {});
+    const canvas = page.locator("canvas.pad, canvas").first();
+    if (await canvas.isVisible().catch(() => false)) {
+      const box = await canvas.boundingBox().catch(() => null);
+      if (box) {
+        await page.mouse.move(box.x + 30, box.y + 55);
+        await page.mouse.down();
+        await page.mouse.move(box.x + 105, box.y + 35);
+        await page.mouse.move(box.x + 180, box.y + 60);
+        await page.mouse.up();
+      }
+    }
     await submitSignature.click();
     await page.waitForTimeout(1500);
   }
@@ -368,7 +403,41 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   }
 }
 
-async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string) {
+async function fillVisibleConsentFields(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
+  signedName: string
+) {
+  const dob = findPracticeQAnswerForPrompt("Date of Birth", fillPlan) ?? "";
+  const initials = findPracticeQAnswerForPrompt("Initials", fillPlan) ?? signedName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+  const inputs = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const count = await inputs.count();
+  for (let i = 0; i < count; i += 1) {
+    const input = inputs.nth(i);
+    if (!(await input.isVisible().catch(() => false))) continue;
+    const current = await input.inputValue().catch(() => "");
+    const prompt = await getPracticeQFieldPrompt(input);
+    const placeholder = await input.getAttribute("placeholder").catch(() => "");
+    if (/initials/i.test(`${prompt} ${placeholder}`) && !current.trim()) {
+      await enterFieldValue(input, initials, "Initials");
+      continue;
+    }
+    if (/date of birth|dob|m\/d\/yyyy/i.test(`${prompt} ${placeholder}`) && !current.trim()) {
+      await enterFieldValue(input, dob, "Date of Birth");
+      continue;
+    }
+    if (/patient name|print your name|signature/i.test(prompt) && !current.trim()) {
+      await enterFieldValue(input, signedName, "Print your name");
+    }
+  }
+}
+
+async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string, prompt = "") {
   await field.scrollIntoViewIfNeeded().catch(() => {});
   await field.click().catch(() => {});
   await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
@@ -376,11 +445,67 @@ async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string
   await field.type(value, { delay: 5 }).catch(async () => {
     await field.fill(value).catch(() => {});
   });
-  await field.evaluate((el) => {
+  await field.evaluate((el, input) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    setter?.call(el, input.value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
     el.dispatchEvent(new Event("blur", { bubbles: true }));
-  }).catch(() => {});
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+    const normalizedPrompt = normalize(input.prompt);
+    let changed = false;
+    for (const question of questions) {
+      const questionText = normalize(question?.Text);
+      if (questionText && (normalizedPrompt.includes(questionText) || questionText.includes(normalizedPrompt))) {
+        question.Answer = input.value;
+        changed = true;
+      }
+      if (Array.isArray(question?.QuestionItems)) {
+        for (const item of question.QuestionItems) {
+          const itemText = normalize(item?.Text);
+          if (itemText && (normalizedPrompt.includes(itemText) || itemText.includes(normalizedPrompt))) {
+            item.Answer = input.value;
+            intakeScope?.onblur?.(question, item.Answer, item);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      intakeScope?.changed?.();
+      intakeScope?.textChanged?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, { prompt, value }).catch(() => {});
 }
 
 async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
@@ -415,6 +540,7 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
       return chunks.join(" ");
     }).catch(() => text);
     if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
+      await setPracticeQAngularChoice(page, context, text);
       const childInput = label.locator("input[type='checkbox'], input[type='radio']").first();
       if (await childInput.isVisible().catch(() => false)) {
         await clickPracticeQChoiceInput(childInput);
@@ -441,6 +567,63 @@ async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {
       await input.click({ force: true }).catch(() => {});
     });
   });
+}
+
+async function setPracticeQAngularChoice(page: Page, questionContext: string, labelText: string) {
+  await page.evaluate(({ questionContext, labelText }) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+    const normalizedContext = normalize(questionContext);
+    const normalizedLabel = normalize(labelText);
+    let changed = false;
+    for (const question of questions) {
+      const questionText = normalize(question?.Text);
+      if (questionText && !(normalizedContext.includes(questionText) || questionText.includes(normalizedContext))) continue;
+      if (Array.isArray(question?.QuestionOptions)) {
+        for (const option of question.QuestionOptions) {
+          if (normalize(option?.Text) === normalizedLabel) {
+            option.Checked = true;
+            option.Answer = option.Text;
+            question.Answer = option.Text;
+            intakeScope?.onblur?.(question, question.Answer, option);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      intakeScope?.changed?.();
+      intakeScope?.textChanged?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, { questionContext, labelText }).catch(() => {});
 }
 
 async function clickContinue(page: Page): Promise<boolean> {
@@ -498,6 +681,124 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
   if (clicked) return true;
 
   return false;
+}
+
+async function verifyPracticeQSavedSubmission(
+  result: WorkerResult,
+  context: {
+    patient: { firstName: string; lastName: string; email: string };
+    answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>;
+    questions: Awaited<ReturnType<typeof dbServer.questionDb.getAll>>;
+    startedAt: string;
+  }
+): Promise<WorkerResult> {
+  if (result.status === "failed") return result;
+
+  const matchedIntake = await findRecentPracticeQIntake(context).catch(() => null);
+  if (!matchedIntake) {
+    return {
+      ...result,
+      status: "failed",
+      error: "PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.",
+    };
+  }
+
+  let intake = await getIntakeById(matchedIntake.id).catch(() => null);
+  if (!intake) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ intake ${matchedIntake.id} was found in summary but could not be loaded for verification.`,
+    };
+  }
+
+  const beforeStats = countPracticeQAnswers(intake);
+  if (beforeStats.answered < expectedPracticeQAnswerCount(context.answers)) {
+    intake = await populateAndUpdatePracticeQIntake(intake, {
+      patient: context.patient as any,
+      answers: context.answers,
+      questions: context.questions,
+    }).catch(() => intake);
+  }
+
+  const refreshed = await getIntakeById(matchedIntake.id).catch(() => intake);
+  const verifiedIntake = refreshed ?? intake;
+  const answerStats = countPracticeQAnswers(verifiedIntake);
+  const consentSigned = hasSignedConsent(verifiedIntake);
+  const status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
+
+  if (!/completed/i.test(status) || !consentSigned) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ intake ${matchedIntake.id} is ${status || "not completed"}; consent signed=${consentSigned}; answers saved=${answerStats.answered}/${answerStats.total}.`,
+    };
+  }
+
+  if (answerStats.answered < expectedPracticeQAnswerCount(context.answers)) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ completed intake ${matchedIntake.id}, but only ${answerStats.answered}/${answerStats.total} answers were saved.`,
+    };
+  }
+
+  return { ...result, status: "completed", intakeId: matchedIntake.id };
+}
+
+async function findRecentPracticeQIntake(context: {
+  patient: { firstName: string; lastName: string; email: string };
+  startedAt: string;
+}) {
+  const startDate = new Date(context.startedAt);
+  startDate.setUTCDate(startDate.getUTCDate() - 1);
+  const feed = await getIntakeSummaryFeed({
+    client: context.patient.email,
+    startDate: startDate.toISOString().slice(0, 10),
+  });
+  const patientName = normalizePracticeQLookup(`${context.patient.firstName} ${context.patient.lastName}`);
+  const patientEmail = context.patient.email.toLowerCase();
+  return feed.all.find((form) =>
+    normalizePracticeQLookup(form.clientName ?? "") === patientName ||
+    String(form.clientEmail ?? "").toLowerCase() === patientEmail
+  ) ?? null;
+}
+
+function countPracticeQAnswers(intake: any) {
+  const questions = Array.isArray(intake?.Questions) ? intake.Questions : [];
+  const answered = questions.filter((question: any) => {
+    const answer = question?.Answer ?? question?.Value ?? question?.AnswerText ?? question?.Response;
+    if (Array.isArray(answer)) return answer.length > 0;
+    if (String(answer ?? "").trim()) return true;
+    if (Array.isArray(question?.Rows)) {
+      return question.Rows.some((row: any) =>
+        Array.isArray(row?.Answers) && row.Answers.some((value: unknown) => String(value ?? "").trim())
+      );
+    }
+    return false;
+  }).length;
+  return { total: questions.length, answered };
+}
+
+function expectedPracticeQAnswerCount(answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>) {
+  const clinical = answers.filter((answer) =>
+    answer.answer.trim() &&
+    !/^(none|none of the above|none apply to me)$/i.test(answer.answer.trim())
+  ).length;
+  return Math.max(8, clinical + 6);
+}
+
+function hasSignedConsent(intake: any) {
+  const forms = Array.isArray(intake?.ConsentForms) ? intake.ConsentForms : [];
+  if (!forms.length) return true;
+  return forms.every((form: any) => form?.Signed === true || form?.DateSubmitted);
+}
+
+function normalizePracticeQLookup(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function extractPracticeQIntakeId(url: string): string | undefined {
