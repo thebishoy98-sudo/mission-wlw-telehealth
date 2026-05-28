@@ -6,7 +6,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ success: true, role: "provider" });
+  const response = NextResponse.json({
+    success: true,
+    role: "provider",
+    user: {
+      id: "provider_session",
+      name: "Dr. Sarah Johnson",
+      email: "dr.johnson@telehealth.com",
+      role: "provider",
+    },
+  });
   response.cookies.set("provider_secret", process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET ?? "", {
     httpOnly: true,
     sameSite: "lax",
