@@ -109,7 +109,16 @@ export function answerMatchesPracticeQChoice(answer: string, labelText: string):
   const normalizedAnswer = normalizePrompt(answer);
   const normalizedLabel = normalizePrompt(labelText);
   if (!normalizedAnswer || !normalizedLabel) return false;
-  if (normalizedAnswer === "none of the above" || normalizedAnswer === "none apply to me" || normalizedAnswer === "none") return false;
+  const negativeAnswer = (
+    normalizedAnswer === "none of the above" ||
+    normalizedAnswer === "none apply to me" ||
+    normalizedAnswer === "none" ||
+    normalizedAnswer === "no" ||
+    normalizedAnswer.includes("no known") ||
+    normalizedAnswer.includes("no allergies") ||
+    normalizedAnswer.includes("not applicable")
+  );
+  if (negativeAnswer) return normalizedLabel === "no" || normalizedLabel.includes("none");
   if (normalizedAnswer === normalizedLabel) return true;
 
   const selectedValues = normalizedAnswer.split(/\s*,\s*/).map(normalizePrompt).filter(Boolean);

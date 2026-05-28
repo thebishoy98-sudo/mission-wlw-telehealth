@@ -71,7 +71,7 @@ describe("PracticeQ browser fill plan", () => {
       { id: "a_conditions", orderId: "order_1", questionId: "conditions", answer: "I'm Pregnant, History of Diabetes", createdAt: "2026-05-27T00:00:00.000Z" },
     ], [
       ...questions,
-      { id: "gender", category: "demographics", text: "Gender", type: "radio", required: true, displayOrder: 3 },
+      { id: "gender", category: "screening", text: "Gender", type: "radio", required: true, displayOrder: 3 },
       { id: "conditions", category: "medical_history", text: "Select any that apply to you?", type: "checkbox", required: true, displayOrder: 4 },
     ], { signedName: "Bishoy Kamel" });
 
@@ -88,6 +88,8 @@ describe("PracticeQ browser fill plan", () => {
     expect(answerMatchesPracticeQChoice("History of Diabetes", "I'm Pregnant")).toBe(false);
     expect(answerMatchesPracticeQChoice("None of the above", "History of Diabetes")).toBe(false);
     expect(answerMatchesPracticeQChoice("None apply to me", "History of Diabetes")).toBe(false);
+    expect(answerMatchesPracticeQChoice("None", "No")).toBe(true);
+    expect(answerMatchesPracticeQChoice("No known drug allergies", "No")).toBe(true);
   });
 
   it("only blocks consent pages when Mission does not have a signed consent to use", () => {

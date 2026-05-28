@@ -666,6 +666,7 @@ export const practiceqAutomationJobDb = {
     const { rows } = await sql`
       SELECT * FROM practiceq_automation_jobs
       WHERE status = 'queued'
+         OR (status = 'running' AND locked_at < NOW() - INTERVAL '10 minutes')
       ORDER BY created_at ASC
       LIMIT ${limit}
     `;

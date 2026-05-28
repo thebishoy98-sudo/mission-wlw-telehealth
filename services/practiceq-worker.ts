@@ -28,6 +28,12 @@ type FillOutcome = {
   stoppedForPatientConsent: boolean;
 };
 
+type PracticeQUploadFile = {
+  base64Data: string;
+  mimeType: string;
+  extension: string;
+};
+
 type RemoteSession = {
   jobId: string;
   token: string;
@@ -37,6 +43,8 @@ type RemoteSession = {
 };
 
 const remoteSessions = new Map<string, RemoteSession>();
+const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
+const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -54,7 +62,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
   if (!patient) return { status: "failed", error: "Patient not found" };
 
   const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
-  const licenseBase64 = uploads.find((u) => u.type === "driver_license")?.base64Data ?? null;
+  const uploadFile = selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({ headless: process.env.PRACTICEQ_WORKER_HEADLESS !== "false" });
   const page = await browser.newPage();
   page.setDefaultTimeout(8000);
@@ -65,7 +73,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
     await resolvePracticeQResumePrompt(page);
-    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, licenseBase64);
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
 
     return verifyPracticeQSavedSubmission(submitResult, {
@@ -130,7 +138,7 @@ export async function startPracticeQRemoteSession(
   if (!patient) return { status: "failed", error: "Patient not found" };
 
   const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
-  const licenseBase64 = uploads.find((u) => u.type === "driver_license")?.base64Data ?? null;
+  const uploadFile = selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
@@ -144,7 +152,7 @@ export async function startPracticeQRemoteSession(
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
     await resolvePracticeQResumePrompt(page);
-    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, licenseBase64);
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
     const verifiedResult = await verifyPracticeQSavedSubmission(submitResult, {
       patient,
@@ -186,7 +194,7 @@ export async function fillKnownPracticeQLogin(page: Page, patient: { firstName: 
 export async function fillPracticeQQuestionPages(
   page: Page,
   fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
-  licenseBase64: string | null = null,
+  uploadFile: PracticeQUploadFile | null = null,
 ): Promise<FillOutcome> {
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
@@ -197,12 +205,12 @@ export async function fillPracticeQQuestionPages(
 
     const filled = await withPracticeQTimeout(
       fillVisibleFields(page, fillPlan),
-      12000,
+      PRACTICEQ_PAGE_FILL_TIMEOUT_MS,
       "PracticeQ text field fill step timed out."
     );
     await withPracticeQTimeout(
       clickMatchingChoices(page, fillPlan),
-      12000,
+      PRACTICEQ_CHOICE_TIMEOUT_MS,
       "PracticeQ choice selection step timed out."
     );
     await withPracticeQTimeout(
@@ -211,9 +219,9 @@ export async function fillPracticeQQuestionPages(
       "PracticeQ consent signing step timed out."
     );
 
-    // Upload identity document (question 10 file input) if available and not yet uploaded
-    if (licenseBase64) {
-      await uploadIdentityDocument(page, licenseBase64).catch(() => {});
+    // Upload the patient video for IntakeQ's required upload question when present.
+    if (uploadFile) {
+      await uploadPracticeQFile(page, uploadFile).catch(() => {});
     }
 
     await savePracticeQPage(page);
@@ -227,22 +235,38 @@ export async function fillPracticeQQuestionPages(
   return { stoppedForPatientConsent: false };
 }
 
-async function uploadIdentityDocument(page: Page, base64Data: string) {
+function selectPracticeQUploadFile(
+  uploads: Awaited<ReturnType<typeof dbServer.uploadDb.getByOrder>>
+): PracticeQUploadFile | null {
+  const video = uploads.find((u) => u.type === "selfie_video" && u.base64Data);
+  if (video?.base64Data) {
+    return {
+      base64Data: video.base64Data,
+      mimeType: video.mimeType || "video/webm",
+      extension: video.mimeType?.includes("mp4") ? "mp4" : "webm",
+    };
+  }
+
+  const license = uploads.find((u) => u.type === "driver_license" && u.base64Data);
+  if (!license?.base64Data) return null;
+  return { base64Data: license.base64Data, mimeType: license.mimeType || "image/jpeg", extension: "jpg" };
+}
+
+async function uploadPracticeQFile(page: Page, uploadFile: PracticeQUploadFile) {
   const fileInput = page.locator('input[type="file"]').first();
-  if (!(await fileInput.isVisible({ timeout: 1000 }).catch(() => false))) return;
+  if (!(await fileInput.count().catch(() => 0))) return;
   // Skip if already has a file
   const currentValue = await fileInput.inputValue().catch(() => "");
   if (currentValue) return;
 
   let tmpPath: string | null = null;
   try {
-    const buffer = Buffer.from(
-      base64Data.replace(/^data:image\/[a-z]+;base64,/, ""),
-      "base64",
-    );
-    tmpPath = path.join(os.tmpdir(), `pq-id-${Date.now()}.jpg`);
+    const base64 = uploadFile.base64Data.replace(/^data:[^;]+;base64,/, "");
+    const buffer = Buffer.from(base64, "base64");
+    tmpPath = path.join(os.tmpdir(), `pq-upload-${Date.now()}.${uploadFile.extension}`);
     fs.writeFileSync(tmpPath, buffer);
     await fileInput.setInputFiles(tmpPath);
+    await page.waitForTimeout(3000);
   } finally {
     if (tmpPath) fs.unlink(tmpPath, () => {});
   }
@@ -398,29 +422,45 @@ async function isPracticeQDataEntryField(field: ReturnType<Page["locator"]>): Pr
 
 async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Promise<string> {
   return field.evaluate((el) => {
+    const fieldId = el.getAttribute("id") ?? "";
+    const escapedFieldId = fieldId && (window as any).CSS?.escape
+      ? (window as any).CSS.escape(fieldId)
+      : fieldId.replace(/["\\]/g, "\\$&");
+    const directLabel = [
+      fieldId
+        ? document.querySelector(`label[for="${escapedFieldId}"]`)?.textContent?.trim() ?? ""
+        : "",
+      el.closest("label")?.textContent?.trim() ?? "",
+      (el.previousElementSibling?.matches("label") ? el.previousElementSibling.textContent?.trim() : "") ?? "",
+    ].find(Boolean);
+    const ancestorText: string[] = [];
     let current: Element | null = el;
-    for (let depth = 0; current && depth < 5; depth += 1) {
-      const label = current.querySelector?.("label")?.textContent?.trim();
-      if (label) {
-        return [
-          label,
-          el.getAttribute("placeholder") ?? "",
-          el.getAttribute("aria-label") ?? "",
-        ].join(" ");
+    for (let depth = 0; current && depth < 8; depth += 1) {
+      const entryFields = current.querySelectorAll?.("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea, select").length ?? 0;
+      const headingOrLabel = entryFields <= 2
+        ? current.querySelector?.("h1,h2,h3,h4,h5,h6,label")?.textContent?.trim()
+        : "";
+      if (headingOrLabel && !ancestorText.includes(headingOrLabel)) {
+        ancestorText.push(headingOrLabel);
       }
       current = current.parentElement;
     }
-    const label = el.closest("label")?.textContent ?? "";
+    const fieldHints = [
+      el.getAttribute("placeholder") ?? "",
+      el.getAttribute("aria-label") ?? "",
+      el.getAttribute("name") ?? "",
+    ];
+    if (directLabel) return [directLabel, ...fieldHints].join(" ");
+    if (ancestorText.length > 0) return [...ancestorText, ...fieldHints].join(" ");
+
     const parent = el.parentElement?.textContent ?? "";
     const grand = el.parentElement?.parentElement?.textContent ?? "";
     const questionBlock = el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "";
     return [
-      label,
       parent,
       grand,
       questionBlock,
-      el.getAttribute("placeholder") ?? "",
-      el.getAttribute("aria-label") ?? "",
+      ...fieldHints,
     ].join(" ");
   });
 }
@@ -759,7 +799,7 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
     const context = await label.evaluate((el) => {
       const chunks: string[] = [];
       let current: Element | null = el;
-      for (let depth = 0; current && depth < 6; depth += 1) {
+      for (let depth = 0; current && depth < 10; depth += 1) {
         chunks.push(current.textContent ?? "");
         current = current.parentElement;
       }
@@ -785,23 +825,31 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
   const inputCount = await inputs.count();
   for (let i = 0; i < inputCount; i += 1) {
     const input = inputs.nth(i);
-    if (!(await input.isVisible().catch(() => false))) continue;
     if (await input.isChecked().catch(() => false)) continue;
     const choice = await input.evaluate((el) => {
+      const chunks: string[] = [];
+      let current: Element | null = el;
+      for (let depth = 0; current && depth < 10; depth += 1) {
+        chunks.push(current.textContent ?? "");
+        current = current.parentElement;
+      }
       const label = el.closest("label")?.textContent
         ?? el.parentElement?.textContent
         ?? "";
-      const context = [
-        el.closest("label")?.textContent ?? "",
-        el.parentElement?.textContent ?? "",
-        el.parentElement?.parentElement?.textContent ?? "",
-        el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "",
-      ].join(" ");
+      const visibleTarget = el.closest("label")
+        ?? el.parentElement?.querySelector("ins.iCheck-helper")
+        ?? el.parentElement
+        ?? el;
+      const targetElement = visibleTarget as HTMLElement;
+      const style = window.getComputedStyle(targetElement);
+      const rect = targetElement.getBoundingClientRect();
       return {
         label: label.replace(/\s+/g, " ").trim(),
-        context: context.replace(/\s+/g, " ").trim(),
+        context: chunks.join(" ").replace(/\s+/g, " ").trim(),
+        visible: style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0,
       };
-    }).catch(() => ({ label: "", context: "" }));
+    }).catch(() => ({ label: "", context: "", visible: false }));
+    if (!choice.visible) continue;
     if (!choice.label || !findPracticeQChoiceForLabel(choice.label, choice.context, fillPlan)) continue;
     await setPracticeQAngularChoice(page, choice.context, choice.label);
     await clickPracticeQChoiceInput(input);
