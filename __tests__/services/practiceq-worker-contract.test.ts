@@ -18,4 +18,9 @@ describe("PracticeQ worker background submission contract", () => {
   it("reads PracticeQ question text from the Angular repeat block around answer fields", () => {
     expect(source).toContain('el.closest("[ng-repeat], .question, .panel, fieldset")');
   });
+
+  it("fails the job instead of reporting completed when expected visible answers are not written", () => {
+    expect(source).toContain("assertVisiblePracticeQFieldsFilled");
+    expect(source).toContain("PracticeQ did not keep the expected answer");
+  });
 });

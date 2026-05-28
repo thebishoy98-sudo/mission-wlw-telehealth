@@ -165,6 +165,8 @@ export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnTyp
     const filled = await fillVisibleFields(page, fillPlan);
     await clickMatchingChoices(page, fillPlan);
     await completeVisibleConsentDocument(page, fillPlan);
+    await waitForPracticeQSaved(page);
+    await assertVisiblePracticeQFieldsFilled(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
@@ -237,20 +239,7 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
     if (!(await field.isVisible().catch(() => false))) continue;
     const current = await field.inputValue().catch(() => "");
     if (current.trim()) continue;
-    const prompt = await field.evaluate((el) => {
-      const label = el.closest("label")?.textContent ?? "";
-      const parent = el.parentElement?.textContent ?? "";
-      const grand = el.parentElement?.parentElement?.textContent ?? "";
-      const questionBlock = el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "";
-      return [
-        label,
-        parent,
-        grand,
-        questionBlock,
-        el.getAttribute("placeholder") ?? "",
-        el.getAttribute("aria-label") ?? "",
-      ].join(" ");
-    });
+    const prompt = await getPracticeQFieldPrompt(field);
     const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!answer) continue;
     const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
@@ -259,6 +248,81 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
   }
 
   return filled;
+}
+
+async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  const fields = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const count = await fields.count();
+  const missing: string[] = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const field = fields.nth(i);
+    if (!(await field.isVisible().catch(() => false))) continue;
+    const prompt = await getPracticeQFieldPrompt(field);
+    const expected = findPracticeQAnswerForPrompt(prompt, fillPlan);
+    if (!expected) continue;
+    const actual = await field.inputValue().catch(() => "");
+    if (!fieldValueMatches(actual, expected, prompt)) {
+      missing.push(`${shortenPracticeQPrompt(prompt)} expected "${expected}" but saw "${actual}"`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`PracticeQ did not keep the expected answer: ${missing.slice(0, 4).join("; ")}`);
+  }
+}
+
+async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Promise<string> {
+  return field.evaluate((el) => {
+    const label = el.closest("label")?.textContent ?? "";
+    const parent = el.parentElement?.textContent ?? "";
+    const grand = el.parentElement?.parentElement?.textContent ?? "";
+    const questionBlock = el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "";
+    return [
+      label,
+      parent,
+      grand,
+      questionBlock,
+      el.getAttribute("placeholder") ?? "",
+      el.getAttribute("aria-label") ?? "",
+    ].join(" ");
+  });
+}
+
+async function waitForPracticeQSaved(page: Page) {
+  const saved = page.getByRole("button", { name: /saved/i }).first();
+  if (await saved.isVisible().catch(() => false)) {
+    await page.waitForTimeout(300);
+  }
+}
+
+function fieldValueMatches(actual: string, expected: string, prompt: string): boolean {
+  const normalizedActual = normalizePracticeQText(actual);
+  const normalizedExpected = normalizePracticeQText(expected);
+  if (!normalizedExpected) return true;
+  if (normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected)) return true;
+
+  if (/phone/i.test(prompt)) {
+    return actual.replace(/\D/g, "") === expected.replace(/\D/g, "");
+  }
+  if (/date of birth|dob/i.test(prompt)) {
+    return normalizeDateLike(actual) === normalizeDateLike(expected);
+  }
+  return false;
+}
+
+function normalizePracticeQText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeDateLike(value: string) {
+  const parts = value.match(/(\d{1,2})\D+(\d{1,2})\D+(\d{4})/);
+  if (!parts) return normalizePracticeQText(value);
+  return `${Number(parts[1])}/${Number(parts[2])}/${parts[3]}`;
+}
+
+function shortenPracticeQPrompt(prompt: string) {
+  return prompt.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
