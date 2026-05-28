@@ -277,7 +277,7 @@ async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnTy
     const prompt = await getPracticeQFieldPrompt(field);
     const expected = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!expected) continue;
-    const actual = await field.inputValue().catch(() => "");
+    const actual = await getPracticeQFieldValue(field);
     if (!fieldValueMatches(actual, expected, prompt)) {
       missing.push(`${shortenPracticeQPrompt(prompt)} expected "${expected}" but saw "${actual}"`);
     }
@@ -303,6 +303,67 @@ async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Prom
       el.getAttribute("aria-label") ?? "",
     ].join(" ");
   });
+}
+
+async function getPracticeQFieldValue(field: ReturnType<Page["locator"]>): Promise<string> {
+  const visibleValue = await field.inputValue().catch(() => "");
+  if (visibleValue.trim()) return visibleValue;
+  return field.evaluate((el) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const prompt = [
+      el.closest("label")?.textContent ?? "",
+      el.parentElement?.textContent ?? "",
+      el.parentElement?.parentElement?.textContent ?? "",
+      el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "",
+      el.getAttribute("placeholder") ?? "",
+      el.getAttribute("aria-label") ?? "",
+    ].join(" ");
+    const normalizedPrompt = normalize(prompt);
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return "";
+    for (const question of questions) {
+      const questionText = normalize(question?.Text);
+      if (questionText && (normalizedPrompt.includes(questionText) || questionText.includes(normalizedPrompt))) {
+        const answer = String(question?.Answer ?? "").trim();
+        if (answer) return answer;
+      }
+      if (Array.isArray(question?.QuestionItems)) {
+        for (const item of question.QuestionItems) {
+          const itemText = normalize(item?.Text);
+          if (itemText && (normalizedPrompt.includes(itemText) || itemText.includes(normalizedPrompt))) {
+            const answer = String(item?.Answer ?? "").trim();
+            if (answer) return answer;
+          }
+        }
+      }
+    }
+    return "";
+  }).catch(() => "");
 }
 
 async function waitForPracticeQSaved(page: Page) {
@@ -504,6 +565,12 @@ async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string
       intakeScope?.$applyAsync?.();
     }
   }, { prompt, value }).catch(() => {});
+  await field.fill(value).catch(() => {});
+  await field.evaluate((el) => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+  }).catch(() => {});
 }
 
 async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
