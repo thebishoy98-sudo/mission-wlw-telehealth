@@ -92,6 +92,10 @@ async function pollQueuedJobs() {
       });
       if (result.status === "failed") {
         await dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+      } else if (result.status === "completed") {
+        await completePracticeQSession(job.id).catch((error) => {
+          console.error("PracticeQ completion follow-up failed:", error instanceof Error ? error.message : error);
+        });
       }
     }
   } finally {

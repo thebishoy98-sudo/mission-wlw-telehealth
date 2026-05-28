@@ -14,6 +14,10 @@ type WorkerResult = {
   error?: string;
 };
 
+type FillOutcome = {
+  stoppedForPatientConsent: boolean;
+};
+
 type RemoteSession = {
   jobId: string;
   token: string;
@@ -46,12 +50,10 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
-    await fillPracticeQQuestionPages(page, fillPlan);
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome);
 
-    return {
-      status: "awaiting_patient_signature",
-      handoffUrl: page.url(),
-    };
+    return submitResult;
   } catch (error) {
     return { status: "failed", error: (error as Error).message };
   } finally {
@@ -117,20 +119,10 @@ export async function startPracticeQRemoteSession(
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
-    await fillPracticeQQuestionPages(page, fillPlan);
-
-    remoteSessions.set(job.id, {
-      jobId: job.id,
-      token: job.handoffToken,
-      browser,
-      page,
-      expiresAt: job.handoffExpiresAt,
-    });
-
-    return {
-      status: "awaiting_patient_signature",
-      handoffUrl: `${publicBaseUrl.replace(/\/$/, "")}/session/${encodeURIComponent(job.id)}?token=${encodeURIComponent(job.handoffToken)}`,
-    };
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome);
+    await browser.close().catch(() => {});
+    return submitResult;
   } catch (error) {
     await browser.close().catch(() => {});
     return { status: "failed", error: (error as Error).message };
@@ -160,18 +152,53 @@ export async function fillKnownPracticeQLogin(page: Page, patient: { firstName: 
   await page.locator("#Email").fill(patient.email || patient.phone).catch(() => {});
 }
 
-export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<FillOutcome> {
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
     const bodyText = await page.locator("body").innerText().catch(() => "");
-    if (shouldStopForPatientConsent(bodyText)) return;
+    if (shouldStopForPatientConsent(bodyText)) return { stoppedForPatientConsent: true };
 
     const filled = await fillVisibleFields(page, fillPlan);
     await clickMatchingChoices(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
-    if (!moved && filled === 0) return;
+    if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
+  return { stoppedForPatientConsent: false };
+}
+
+export async function submitPracticeQInBackground(page: Page, fillOutcome: FillOutcome): Promise<WorkerResult> {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (fillOutcome.stoppedForPatientConsent || shouldStopForPatientConsent(bodyText)) {
+    return {
+      status: "failed",
+      error:
+        "PracticeQ form requires patient consent/signature. The background worker will not sign as the patient; remove the PracticeQ signature step or use Mission's signed consent/PDF as the consent source.",
+    };
+  }
+
+  const submitted = await clickFinalSubmit(page);
+  if (!submitted) {
+    return {
+      status: "failed",
+      error: "PracticeQ submit button was not found after filling the intake.",
+    };
+  }
+
+  await page.waitForTimeout(1500);
+  const postSubmitText = await page.locator("body").innerText().catch(() => "");
+  if (/required|invalid|please complete|missing/i.test(postSubmitText)) {
+    return {
+      status: "failed",
+      error: `PracticeQ rejected the background submit: ${postSubmitText.slice(0, 500)}`,
+    };
+  }
+
+  return {
+    status: "completed",
+    handoffUrl: undefined,
+    intakeId: extractPracticeQIntakeId(page.url()),
+  };
 }
 
 async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<number> {
@@ -222,4 +249,19 @@ async function clickContinue(page: Page): Promise<boolean> {
   if (!(await button.isVisible().catch(() => false))) return false;
   await button.click();
   return true;
+}
+
+async function clickFinalSubmit(page: Page): Promise<boolean> {
+  const button = page
+    .getByRole("button", { name: /submit|finish|done|complete/i })
+    .or(page.locator("button, input[type='button'], input[type='submit']").filter({ hasText: /submit|finish|done|complete/i }))
+    .first();
+  if (!(await button.isVisible().catch(() => false))) return false;
+  await button.click();
+  return true;
+}
+
+function extractPracticeQIntakeId(url: string): string | undefined {
+  const match = url.match(/\/(?:history|intake|forms?)\/([^/?#]+)/i) ?? url.match(/[?&](?:intakeId|id)=([^&#]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
 }
