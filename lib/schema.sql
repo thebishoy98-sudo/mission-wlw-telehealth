@@ -234,6 +234,18 @@ CREATE TABLE IF NOT EXISTS practiceq_automation_jobs (
 CREATE INDEX IF NOT EXISTS idx_practiceq_automation_jobs_order_id ON practiceq_automation_jobs(order_id);
 CREATE INDEX IF NOT EXISTS idx_practiceq_automation_jobs_status_created ON practiceq_automation_jobs(status, created_at);
 
+ALTER TABLE IF EXISTS practiceq_automation_jobs
+  ADD COLUMN IF NOT EXISTS handoff_token TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE IF EXISTS practiceq_automation_jobs
+  ADD COLUMN IF NOT EXISTS handoff_expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE IF EXISTS practiceq_automation_jobs
+  ADD COLUMN IF NOT EXISTS handoff_url TEXT;
+
+ALTER TABLE IF EXISTS practiceq_automation_jobs
+  ADD COLUMN IF NOT EXISTS intake_id TEXT;
+
 -- ── QuickBooks Records ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS quickbooks_records (
   id                TEXT PRIMARY KEY,
