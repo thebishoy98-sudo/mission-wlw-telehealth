@@ -111,7 +111,7 @@ export interface Order {
   paymentStatus: PaymentStatus;
   pharmacyStatus: PharmacyStatus;
   practiceQStatus: "pending" | "submitted" | "completed" | "error";
-  quickbooksStatus: "pending" | "created" | "invoiced" | "error";
+  quickbooksStatus: "pending" | "created" | "invoiced" | "error" | "skipped";
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;
@@ -124,6 +124,7 @@ export interface Order {
   identityReviewedBy?: string;
   identityAiResult?: IdentityAiResult;
   identityUploadToken?: string;
+  /** PracticeQ/IntakeQ client ID — used to look up patient PHI from PracticeQ API */
   practiceqClientId?: string;
 }
 
@@ -172,9 +173,9 @@ export interface Upload {
   filename: string;
   fileSize: number;
   mimeType: string;
-  base64Data: string; // For demo, store base64 instead of file
   storageUrl?: string;
   storageKey?: string;
+  base64Data: string;
   uploadedAt: string;
   status: "uploaded" | "verified" | "rejected";
   verificationNotes?: string;
@@ -223,10 +224,18 @@ export interface PracticeQPacket {
     questionnaireAnswers: QuestionnaireAnswer[];
     consentRecord: Partial<ConsentRecord>;
     uploads: Upload[];
+    practiceQAnswerFile?: {
+      fileId: string;
+      filename: string;
+      uploadedAt: string;
+    };
+    practiceQPdfFile?: {
+      fileId: string;
+      filename: string;
+      uploadedAt: string;
+    };
     productRequested: string;
     doseSelected: string;
-    practiceQAnswerFile?: { fileId: string; filename?: string };
-    practiceQPdfFile?: { fileId: string; filename?: string };
   };
   status: "pending" | "submitted" | "completed" | "error";
   lastSyncAt?: string;
@@ -266,7 +275,7 @@ export interface PracticeQFormSummary {
   questionnaireId?: string;
   practitionerName?: string;
   externalClientId?: string;
-  practiceQUrl?: string;
+  practiceQUrl: string;
 }
 
 export interface PracticeQFormFeed {

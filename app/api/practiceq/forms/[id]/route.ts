@@ -1,19 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireProvider } from "@/lib/server-auth";
+import { NextResponse } from "next/server";
 import { getPracticeQFormDetail } from "@/services/practiceq";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  req: NextRequest | Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
-  const nextReq = req instanceof NextRequest ? req : new NextRequest(req);
-  const denied = requireProvider(nextReq);
-  if (denied) {
-    return NextResponse.json({ error: "Provider authorization required" }, { status: 401 });
-  }
+  try {
+    const unauthorized = requireProviderOrAdmin(req);
+    if (unauthorized) return unauthorized;
 
-  const detail = await getPracticeQFormDetail(params.id);
-  return NextResponse.json(detail);
+    const detail = await getPracticeQFormDetail(params.id);
+    return NextResponse.json(detail);
+  } catch (error) {
+    console.error("PracticeQ form detail load error:", error);
+    return NextResponse.json({ error: "PracticeQ form detail load failed" }, { status: 500 });
+  }
 }

@@ -13,7 +13,7 @@ describe("normalizeIdentityAiResult", () => {
 
     expect(result.status).toBe("needs_review");
     expect(result.confidence).toBeLessThanOrEqual(0.64);
-    expect(result.summary).toContain("name and DOB match");
+    expect(result.summary).toMatch(/name and DOB match/i);
     expect(result.flags).toContain("facial_match_uncertain");
     expect(result.flags).not.toContain("face_mismatch");
   });

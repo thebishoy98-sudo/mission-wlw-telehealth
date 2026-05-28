@@ -19,6 +19,15 @@ type DashboardData = {
   reviews: Types.ProviderReview[];
 };
 
+const patientDisplayName = (patient: Types.Patient | undefined) => {
+  if (!patient) return "Unknown patient";
+  const fullName = [patient.firstName, patient.lastName]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return fullName || patient.email || patient.phone || "Unknown patient";
+};
+
 function ProviderDashboardContent() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
@@ -143,7 +152,7 @@ function ProviderDashboardContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="provider" />
-      <div className="container-max py-8 sm:py-12">
+      <div className="container-max pt-12 pb-8 sm:pt-16 sm:pb-12">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Provider Dashboard</h1>
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -211,7 +220,7 @@ function ProviderDashboardContent() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-gray-900">
-                            {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                            {patientDisplayName(patient)}
                           </h3>
                           {rev?.chartViewedAt ? (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">
@@ -281,7 +290,7 @@ function ProviderDashboardContent() {
                     return (
                       <tr key={order.id}>
                         <td className="px-6 py-4 text-sm text-gray-900">
-                          {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                          {patientDisplayName(patient)}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <Badge className={getStatusColor(order.status)}>
@@ -326,7 +335,7 @@ function ProviderDashboardContent() {
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                        {patientDisplayName(patient)}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(order.createdAt)}</p>
                     </div>

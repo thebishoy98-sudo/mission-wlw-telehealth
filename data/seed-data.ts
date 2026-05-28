@@ -1,65 +1,13 @@
 import * as Types from "@/types";
 import { generateId } from "@/lib/utils";
+import { tirzepatideProduct } from "@/data/products";
 
 const now = new Date();
 const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
 // Products
 export const seedProducts: Types.Product[] = [
-  {
-    id: generateId(),
-    name: "Tirzepatide (GLP-1 Injectable)",
-    slug: "tirzepatide",
-    description: "Weekly injectable treatment for weight management",
-    longDescription:
-      "Tirzepatide is a dual GIP/GLP-1 receptor agonist designed to support sustainable weight management when combined with lifestyle modifications.",
-    startingPrice: 299,
-    image: "/product-tirzepatide.svg",
-    doses: [
-      {
-        id: generateId(),
-        label: "2.5mg Weekly",
-        strength: "2.5mg",
-        quantity: 4,
-        price: 299,
-      },
-      {
-        id: generateId(),
-        label: "5mg Weekly",
-        strength: "5mg",
-        quantity: 4,
-        price: 399,
-      },
-      {
-        id: generateId(),
-        label: "7.5mg Weekly",
-        strength: "7.5mg",
-        quantity: 4,
-        price: 499,
-      },
-    ],
-    eligibilityNote:
-      "Must be 18+, BMI 27+, or diagnosed with type 2 diabetes. Final eligibility determined by provider.",
-    isActive: true,
-    faqs: [
-      {
-        id: generateId(),
-        question: "How often do I inject?",
-        answer: "Once per week, on the same day each week. You can self-administer.",
-      },
-      {
-        id: generateId(),
-        question: "What are common side effects?",
-        answer: "Nausea, vomiting, and constipation are most common and often decrease over time.",
-      },
-      {
-        id: generateId(),
-        question: "How long does it take to work?",
-        answer: "Most people see results within 2-4 weeks. Maximum effects typically occur at 16-20 weeks.",
-      },
-    ],
-    createdAt: now.toISOString(),
-  },
+  { ...tirzepatideProduct, createdAt: now.toISOString() },
 ];
 
 // Patients
@@ -316,58 +264,76 @@ export const seedPayments: Types.Payment[] = [
 // Default Questions
 export const seedQuestions: Types.Question[] = [
   {
-    id: generateId(),
-    category: "medical_history",
-    text: "Do you have a history of diabetes?",
-    type: "radio",
-    options: ["Yes", "No", "Unsure"],
+    id: "pq_height",
+    category: "screening",
+    text: "What is your height?",
+    type: "text",
     required: true,
     displayOrder: 1,
   },
   {
-    id: generateId(),
-    category: "medical_history",
-    text: "Do you have a history of thyroid cancer or Multiple Endocrine Neoplasia syndrome type 2 (MEN 2)?",
-    type: "radio",
-    options: ["Yes", "No", "Unsure"],
+    id: "pq_current_weight",
+    category: "screening",
+    text: "What is your current body weight?",
+    type: "text",
     required: true,
     displayOrder: 2,
-    disqualifying: "Yes",
   },
   {
-    id: generateId(),
-    category: "medications",
-    text: "List all current medications:",
-    type: "textarea",
+    id: "pq_ideal_weight",
+    category: "screening",
+    text: "What is your ideal body weight?",
+    type: "text",
     required: true,
     displayOrder: 3,
   },
   {
-    id: generateId(),
-    category: "allergies",
-    text: "Do you have any drug allergies?",
+    id: "pq_conditions",
+    category: "medical_history",
+    text: "Select any that apply to you?",
+    type: "checkbox",
+    options: [
+      "I'm Pregnant",
+      "I'm Breastfeeding",
+      "History of Diabetes",
+      "History of Anorexia",
+      "History of Intestine Problems",
+      "History of Stomach Problems",
+      "Allergic to Tirzepatide",
+      "Allergic to Vitamin B12",
+      "History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2)",
+      "Allergic to Vitamin B6",
+      "History of Medullary Thyroid Cancer",
+      "None apply to me",
+    ],
+    required: true,
+    displayOrder: 4,
+    disqualifying: "I'm Pregnant, I'm Breastfeeding, Allergic to Tirzepatide, History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2), History of Medullary Thyroid Cancer",
+  },
+  {
+    id: "pq_surgical_history",
+    category: "screening",
+    text: "Any surgical history?",
     type: "textarea",
     required: false,
-    displayOrder: 4,
-  },
-  {
-    id: generateId(),
-    category: "screening",
-    text: "Are you currently pregnant, breastfeeding, or planning to become pregnant?",
-    type: "radio",
-    options: ["Yes", "No", "Not applicable"],
-    required: true,
     displayOrder: 5,
-    disqualifying: "Yes",
   },
   {
-    id: generateId(),
-    category: "screening",
-    text: "Have you used GLP-1 medications before?",
-    type: "radio",
-    options: ["Yes", "No"],
-    required: true,
+    id: "pq_medication_allergies",
+    category: "allergies",
+    text: "Any Allergies to medication?",
+    type: "textarea",
+    required: false,
     displayOrder: 6,
+  },
+  {
+    id: "pq_intake_purpose",
+    category: "screening",
+    text: "This intake form is for....",
+    type: "radio",
+    options: ["Weight loss", "Medication refill", "Dose adjustment", "General consultation"],
+    required: true,
+    displayOrder: 7,
   },
 ];
 

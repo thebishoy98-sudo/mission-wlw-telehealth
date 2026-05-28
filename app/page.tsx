@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -17,7 +16,10 @@ export default function Home() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
-    setProducts(db.productDb.getActive());
+    fetch("/api/products", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => setProducts(payload.products ?? []))
+      .catch(() => setProducts([]));
   }, []);
 
   const steps = [
@@ -34,7 +36,7 @@ export default function Home() {
     {
       icon: Package,
       title: "Prescription filled",
-      body: "Your prescription goes directly to our FDA-regulated pharmacy — no extra steps.",
+      body: "Your prescription goes directly to our FDA-regulated pharmacy - no extra steps.",
     },
     {
       icon: Smile,
@@ -47,7 +49,7 @@ export default function Home() {
     {
       name: "Sarah M.",
       location: "Texas",
-      text: "I've tried everything. Within 3 months on Tirzepatide I was down 28 lbs. The process was so easy — no doctor's office, no waiting.",
+      text: "I've tried everything. Within 3 months on Tirzepatide I was down 28 lbs. The process was so easy - no doctor's office, no waiting.",
       stars: 5,
     },
     {
@@ -65,10 +67,9 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { dose: "2.5 mg", price: 299, note: "Starting dose", popular: false },
-    { dose: "5 mg", price: 349, note: "Most popular", popular: true },
-    { dose: "7.5 mg", price: 399, note: "", popular: false },
-    { dose: "10 mg", price: 479, note: "", popular: false },
+    { dose: "Tirzepatide 20mg", price: 349, note: "2.5mg weekly", popular: false },
+    { dose: "Tirzepatide 40mg", price: 479, note: "5mg weekly", popular: true },
+    { dose: "Tirzepatide 60mg", price: 799, note: "7.5mg weekly", popular: false },
   ];
 
   const faqs = [
@@ -78,11 +79,11 @@ export default function Home() {
     },
     {
       q: "How long does it take to get started?",
-      a: "Our online intake takes about 10 minutes. Once submitted and eligible, your prescription goes directly to our pharmacy — no waiting room, no delays.",
+      a: "Our online intake takes about 10 minutes. Once submitted and eligible, your prescription goes directly to our pharmacy - no waiting room, no delays.",
     },
     {
       q: "What results can I expect?",
-      a: "Clinical studies show patients on Tirzepatide achieve an average of 15–20% body weight reduction when combined with a healthy diet and exercise.",
+      a: "Clinical studies show patients on Tirzepatide achieve an average of 15-20% body weight reduction when combined with a healthy diet and exercise.",
     },
     {
       q: "Are there any hidden fees?",
@@ -94,7 +95,7 @@ export default function Home() {
     },
     {
       q: "How is my health data protected?",
-      a: "All data is HIPAA-compliant, encrypted in transit and at rest. We never sell or share your information with third parties.",
+      a: "We use privacy and security safeguards for sensitive health data, including encrypted transport and restricted operational access. Full HIPAA readiness also depends on signed BAAs, production auth, storage, and operating policies.",
     },
   ];
 
@@ -117,12 +118,12 @@ export default function Home() {
               <span className="text-teal-400">starts here.</span>
             </h1>
             <p className="text-lg text-slate-400 leading-relaxed mb-10 max-w-lg">
-              Medical weight management with GLP-1 therapy. Personalized, supervised, and shipped overnight — no office visits, no waiting rooms.
+              Medical weight management with GLP-1 therapy. Personalized, supervised, and shipped overnight - no office visits, no waiting rooms.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link href="/start/info">
                 <span className="inline-flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-400 text-white font-semibold px-8 py-4 rounded-2xl transition-all text-base w-full sm:w-auto shadow-lg shadow-teal-500/25">
-                  Get Started — Free Intake
+                  Get Started - Free Intake
                   <ArrowRight className="w-4 h-4" />
                 </span>
               </Link>
@@ -135,7 +136,7 @@ export default function Home() {
             <div className="flex flex-wrap gap-x-6 gap-y-2 mt-8 text-sm text-slate-500">
               <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />Free overnight shipping</span>
               <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />No enrollment fees</span>
-              <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />HIPAA-compliant</span>
+              <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-teal-500" />Privacy-first care</span>
             </div>
           </div>
         </div>
@@ -149,7 +150,7 @@ export default function Home() {
               { icon: Users, label: "Board-Certified Providers", sub: "Expert medical care" },
               { icon: Shield, label: "FDA-Regulated Pharmacy", sub: "Safe, verified medications" },
               { icon: Truck, label: "Free Overnight Shipping", sub: "Cold-packed to your door" },
-              { icon: CheckCircle, label: "HIPAA Compliant", sub: "Your data stays private" },
+              { icon: CheckCircle, label: "Privacy-first care", sub: "Safeguards for sensitive data" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -171,10 +172,10 @@ export default function Home() {
           <div className="text-center mb-14">
             <p className="text-teal-600 font-semibold text-sm uppercase tracking-widest mb-3">Simple Process</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">How it works</h2>
-            <p className="text-gray-500 mt-3 max-w-md mx-auto">From your first question to delivery at your door — completely online.</p>
+            <p className="text-gray-500 mt-3 max-w-md mx-auto">From your first question to delivery at your door - completely online.</p>
           </div>
 
-          {/* Steps — connected line on desktop */}
+          {/* Steps - connected line on desktop */}
           <div className="relative">
             {/* Connector line */}
             <div className="hidden md:block absolute top-10 left-[12.5%] right-[12.5%] h-0.5 bg-gradient-to-r from-teal-200 via-teal-400 to-teal-200" />
@@ -218,14 +219,14 @@ export default function Home() {
                 Real science.<br />Real results.
               </h2>
               <p className="text-gray-500 leading-relaxed mb-8">
-                Tirzepatide is a dual-action GLP-1/GIP receptor agonist that works with your body's natural hormones — reducing appetite, slowing digestion, and regulating blood sugar.
+                Tirzepatide is a dual-action GLP-1/GIP receptor agonist that works with your body&apos;s natural hormones - reducing appetite, slowing digestion, and regulating blood sugar.
               </p>
               <div className="grid grid-cols-2 gap-4 mb-8">
                 {[
-                  { stat: "15–20%", label: "average body weight reduction" },
+                  { stat: "15-20%", label: "average body weight reduction" },
                   { stat: "~10 min", label: "to complete your intake" },
                   { stat: "48 hrs", label: "to your door after approval" },
-                  { stat: "100%", label: "online — no office visits" },
+                  { stat: "100%", label: "online - no office visits" },
                 ].map(({ stat, label }) => (
                   <div key={label} className="bg-gray-50 rounded-2xl p-4">
                     <p className="text-2xl font-bold text-teal-600 mb-1">{stat}</p>
@@ -236,7 +237,7 @@ export default function Home() {
               <ul className="space-y-2.5">
                 {[
                   "Signals the brain to reduce appetite",
-                  "Slows digestion — you feel full longer",
+                  "Slows digestion - you feel full longer",
                   "Prompts natural insulin release",
                   "Reduces liver glucose production",
                 ].map((point) => (
@@ -254,7 +255,7 @@ export default function Home() {
             <div className="bg-gray-950 rounded-3xl p-8 text-white">
               <p className="text-teal-400 text-sm font-semibold uppercase tracking-widest mb-2">Transparent Pricing</p>
               <h3 className="text-2xl font-bold mb-1">Compound Tirzepatide</h3>
-              <p className="text-slate-400 text-sm mb-8">6-Week plans · Free overnight shipping included</p>
+              <p className="text-slate-400 text-sm mb-8">8-week prescriptions · Free overnight shipping included</p>
 
               <div className="space-y-3">
                 {pricingPlans.map((plan) => (
@@ -266,7 +267,7 @@ export default function Home() {
                           <span className="text-xs bg-teal-500 text-white px-2 py-0.5 rounded-full font-medium">Popular</span>
                         )}
                       </div>
-                      {plan.note && !plan.popular && <p className="text-xs text-slate-400 mt-0.5">{plan.note}</p>}
+                      {plan.note && <p className="text-xs text-slate-400 mt-0.5">{plan.note}</p>}
                     </div>
                     <span className="text-2xl font-bold text-white">${plan.price}</span>
                   </div>
@@ -353,7 +354,7 @@ export default function Home() {
                       <h3 className="text-lg font-bold text-gray-900">{product.name}</h3>
                       <div className="text-right flex-shrink-0">
                         <span className="text-xl font-bold text-teal-600">{formatCurrency(product.startingPrice)}</span>
-                        <span className="text-xs text-gray-400 block">/ 6-week plan</span>
+                        <span className="text-xs text-gray-400 block">starting price</span>
                       </div>
                     </div>
                     <p className="text-gray-500 text-sm leading-relaxed mb-4">{product.description}</p>

@@ -40,6 +40,26 @@ type OrderDetailData = {
     aiResult?: Types.IdentityAiResult | null;
     uploads: Types.Upload[];
   };
+  diagnostics?: {
+    practiceqAutomation: {
+      status: string;
+      attempts: number;
+      handoffUrl?: string;
+      handoffExpiresAt?: string;
+      intakeId?: string;
+      lastError?: string;
+      updatedAt?: string;
+    } | null;
+    integrationLogs: Array<{
+      id: string;
+      timestamp: string;
+      integrationName: string;
+      action: string;
+      status: "success" | "pending" | "error";
+      details?: Record<string, unknown>;
+      error?: string;
+    }>;
+  };
 };
 
 const cleanText = (value: unknown) => {
@@ -64,6 +84,7 @@ export default function OrdersManagement() {
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [selectedPracticeQ, setSelectedPracticeQ] = useState<Types.PracticeQMirror | null>(null);
   const [selectedIdentity, setSelectedIdentity] = useState<OrderDetailData["identity"] | null>(null);
+  const [selectedDiagnostics, setSelectedDiagnostics] = useState<OrderDetailData["diagnostics"] | null>(null);
   const [practiceQLoading, setPracticeQLoading] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -121,6 +142,7 @@ export default function OrdersManagement() {
     if (!selectedOrder) {
       setSelectedPracticeQ(null);
       setSelectedIdentity(null);
+      setSelectedDiagnostics(null);
       return;
     }
 
@@ -135,12 +157,14 @@ export default function OrdersManagement() {
         if (!cancelled) {
           setSelectedPracticeQ(detail.practiceq ?? null);
           setSelectedIdentity(detail.identity ?? null);
+          setSelectedDiagnostics(detail.diagnostics ?? null);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSelectedPracticeQ(null);
           setSelectedIdentity(null);
+          setSelectedDiagnostics(null);
         }
       })
       .finally(() => {
@@ -275,6 +299,7 @@ export default function OrdersManagement() {
 
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
+  const latestErroredLogs = selectedDiagnostics?.integrationLogs.filter((log) => log.status === "error").slice(0, 3) ?? [];
 
   return (
     <>
@@ -432,6 +457,45 @@ export default function OrdersManagement() {
                         {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>LifeFile ID:</strong> <span className="font-mono text-xs">{selectedPharmacyOrder.lifeFileOrderId}</span></p>}
                         {selectedPharmacyOrder?.lastError && <p className="text-red-600">{selectedPharmacyOrder.lastError}</p>}
                       </div>
+
+                      {(selectedDiagnostics?.practiceqAutomation || latestErroredLogs.length > 0) && (
+                        <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm">
+                          <p className="font-semibold text-gray-900">Latest Integration Details</p>
+                          {latestErroredLogs.map((log) => (
+                            <div key={log.id} className="mt-2 border-t border-amber-100 pt-2">
+                              <p className="font-medium text-gray-800">
+                                {log.integrationName}: {log.action}
+                              </p>
+                              {log.error && <p className="mt-1 text-red-700">{log.error}</p>}
+                              {log.details && Object.keys(log.details).length > 0 && (
+                                <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-white/70 p-2 text-[11px] text-gray-600">
+                                  {JSON.stringify(log.details, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          ))}
+                          {selectedDiagnostics?.practiceqAutomation && (
+                            <div className="mt-2 border-t border-amber-100 pt-2">
+                              <p className="font-medium text-gray-800">PracticeQ Automation</p>
+                              <p>Status: {selectedDiagnostics.practiceqAutomation.status}</p>
+                              <p>Attempts: {selectedDiagnostics.practiceqAutomation.attempts}</p>
+                              {selectedDiagnostics.practiceqAutomation.lastError && (
+                                <p className="text-red-700">{selectedDiagnostics.practiceqAutomation.lastError}</p>
+                              )}
+                              {selectedDiagnostics.practiceqAutomation.handoffUrl && (
+                                <a
+                                  href={selectedDiagnostics.practiceqAutomation.handoffUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-1 inline-flex font-medium text-teal-700 hover:text-teal-800"
+                                >
+                                  Open PracticeQ consent handoff
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {!getIdentityGate(selectedOrder).canDispatch && selectedOrder.paymentStatus === "completed" && (
                         <div className="mt-4 space-y-2">

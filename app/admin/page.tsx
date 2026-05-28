@@ -19,6 +19,11 @@ type AdminDashboardData = {
   pharmacyOrders: Types.PharmacyOrder[];
 };
 
+const paymentAmount = (payment: Types.Payment) => {
+  const amount = Number(payment.amount);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
 function AdminDashboardContent() {
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -57,7 +62,7 @@ function AdminDashboardContent() {
 
       const totalRevenue = allPayments
         .filter((p) => p.status === "completed")
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + paymentAmount(p), 0);
 
       const paidOrders = allPayments.filter((p) => p.status === "completed").length;
       const fulfilled = allOrders.filter(
@@ -88,7 +93,7 @@ function AdminDashboardContent() {
               p.status === "completed" &&
               new Date(p.createdAt).toDateString() === date.toDateString()
           )
-          .reduce((sum, p) => sum + p.amount, 0);
+          .reduce((sum, p) => sum + paymentAmount(p), 0);
 
         last7Days.push({
           date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),

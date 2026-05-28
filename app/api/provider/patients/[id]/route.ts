@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { loadProviderPatientChart } from "@/lib/provider-chart";
+import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,20 @@ export async function GET(
       payments: dbServer.paymentDb,
       pharmacyOrders: dbServer.pharmacyOrderDb,
       reviews: dbServer.providerReviewDb,
+      practiceqPackets: dbServer.practiceqPacketDb,
+      practiceqMirror: { getForOrder: getPracticeQMirrorForOrder },
     });
 
     if (!chart) {
       return NextResponse.json({ error: "Patient chart not found" }, { status: 404 });
     }
 
-    return NextResponse.json(chart);
+    return NextResponse.json(chart, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+      },
+    });
   } catch (error) {
     console.error("Provider patient chart load error:", error);
     return NextResponse.json({ error: "Patient chart load failed" }, { status: 500 });

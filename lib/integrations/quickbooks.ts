@@ -3,7 +3,7 @@
  *
  * This file handles card collection and payment processing entirely through
  * QuickBooks Payments. When a charge succeeds, QuickBooks automatically
- * creates a paid invoice in QBO — no separate accounting call needed.
+ * creates a paid invoice in QBO - no separate accounting call needed.
  *
  * PRODUCTION SETUP:
  * 1. Add the QB JS SDK to your page (see payment/page.tsx)
@@ -13,7 +13,7 @@
  *    QUICKBOOKS_CLIENT_SECRET
  *    QUICKBOOKS_REALM_ID
  *    QUICKBOOKS_REFRESH_TOKEN   ← obtain via OAuth 2.0 flow once, then store
- * 3. OAuth access tokens expire every 1 hour — your server must auto-refresh
+ * 3. OAuth access tokens expire every 1 hour - your server must auto-refresh
  *    using the refresh token before each API call.
  *
  * FLOW:
@@ -52,7 +52,7 @@
 //       headers: {
 //         Authorization: `Bearer ${accessToken}`,
 //         "Content-Type": "application/json",
-//         "Request-Id": crypto.randomUUID(), // required by QB — must be unique per request
+//         "Request-Id": crypto.randomUUID(), // required by QB - must be unique per request
 //       },
 //       body: JSON.stringify({
 //         amount: (amount / 100).toFixed(2),   // QB expects dollars, not cents
@@ -97,7 +97,7 @@
 //     }),
 //   });
 //   const { access_token, refresh_token } = await res.json();
-//   // Persist the new refresh_token — it rotates on every use
+//   // Persist the new refresh_token - it rotates on every use
 //   await updateStoredRefreshToken(refresh_token);
 //   return access_token;
 // }

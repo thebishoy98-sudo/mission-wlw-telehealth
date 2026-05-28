@@ -1,8 +1,8 @@
 /**
- * PHI Audit Log — HIPAA § 164.312(b) Audit Controls
+ * PHI Audit Log - HIPAA § 164.312(b) Audit Controls
  *
  * Every access, modification, or disclosure of Protected Health Information (PHI)
- * MUST be logged via this module.  The log is immutable — records are INSERT-only.
+ * MUST be logged via this module.  The log is immutable - records are INSERT-only.
  *
  * PHI fields in this system:
  *   patients: first_name, last_name, date_of_birth, gender, phone, email, address
@@ -59,7 +59,7 @@ export interface PhiAuditEntry {
 
 /**
  * Log a PHI access event.
- * This is fire-and-forget — failures are swallowed so they never block the main flow,
+ * This is fire-and-forget - failures are swallowed so they never block the main flow,
  * but errors are printed to console so they appear in Vercel logs.
  */
 export function logPhiAccess(entry: Omit<PhiAuditEntry, "id" | "timestamp">): void {
@@ -98,7 +98,7 @@ export function logPhiAccess(entry: Omit<PhiAuditEntry, "id" | "timestamp">): vo
 
 /**
  * Log a PHI disclosure to a third-party integration.
- * Used whenever PHI leaves the system boundary (HIPAA § 164.314 — BA agreements).
+ * Used whenever PHI leaves the system boundary (HIPAA § 164.314 - BA agreements).
  */
 export function logPhiDisclosure(
   patientId: string,

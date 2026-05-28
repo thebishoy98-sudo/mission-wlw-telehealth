@@ -51,6 +51,36 @@ export const productDb = {
       ON CONFLICT (slug) DO NOTHING
     `;
   },
+
+  async update(id: string, data: Partial<Product>): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const updated: Product = { ...existing, ...data, id: existing.id };
+    await sql`
+      UPDATE products SET
+        name = ${updated.name},
+        slug = ${updated.slug},
+        description = ${updated.description},
+        long_description = ${updated.longDescription ?? null},
+        starting_price = ${updated.startingPrice},
+        image = ${updated.image},
+        doses = ${JSON.stringify(updated.doses)}::jsonb,
+        eligibility_note = ${updated.eligibilityNote},
+        is_active = ${updated.isActive},
+        faqs = ${JSON.stringify(updated.faqs ?? [])}::jsonb
+      WHERE id = ${id}
+    `;
+    return updated;
+  },
+
+  async archive(id: string): Promise<boolean> {
+    if (!isDbAvailable()) return false;
+    const { rowCount } = await sql`
+      UPDATE products SET is_active = false WHERE id = ${id}
+    `;
+    return (rowCount ?? 0) > 0;
+  },
 };
 
 const isDbAvailable = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
@@ -429,6 +459,24 @@ export const integrationLogDb = {
       id: r.id, timestamp: r.timestamp, integrationName: r.integration_name,
       action: r.action, orderId: r.order_id, patientId: r.patient_id,
       status: r.status, details: r.details, error: r.error,
+    }));
+  },
+
+  async getByOrder(orderId: string): Promise<IntegrationLog[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM integration_logs WHERE order_id = ${orderId} ORDER BY timestamp DESC LIMIT 50
+    `;
+    return rows.map((r) => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      integrationName: r.integration_name,
+      action: r.action,
+      orderId: r.order_id,
+      patientId: r.patient_id,
+      status: r.status,
+      details: r.details,
+      error: r.error,
     }));
   },
 };

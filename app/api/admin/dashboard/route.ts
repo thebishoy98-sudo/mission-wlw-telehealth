@@ -40,6 +40,33 @@ function matchesSearch(order: dbServeredOrder, patient: dbServeredPatient | null
 type dbServeredOrder = Awaited<ReturnType<typeof dbServer.orderDb.getAll>>[number];
 type dbServeredPatient = NonNullable<Awaited<ReturnType<typeof dbServer.patientDb.getById>>>;
 
+function patientCompleteness(patient: Patient | null | undefined): number {
+  if (!patient) return 0;
+  return [
+    patient.firstName,
+    patient.lastName,
+    patient.email,
+    patient.phone,
+    patient.dateOfBirth,
+    patient.address?.street1,
+    patient.address?.city,
+    patient.address?.state,
+    patient.address?.zipCode,
+  ].filter((value) => String(value ?? "").trim()).length;
+}
+
+function mergePatientMap(patients: Array<Patient | null>) {
+  const map = new Map<string, Patient>();
+  for (const patient of patients) {
+    if (!patient) continue;
+    const existing = map.get(patient.id);
+    if (!existing || patientCompleteness(patient) >= patientCompleteness(existing)) {
+      map.set(patient.id, patient);
+    }
+  }
+  return map;
+}
+
 function answerValue(practiceq: PracticeQMirror | null | undefined, pattern: RegExp): string {
   const answer = practiceq?.answers.find((item) => pattern.test(item.question.toLowerCase()))?.answer?.trim() ?? "";
   return answer.toLowerCase() === "no answer" ? "" : answer;
@@ -109,9 +136,7 @@ export async function GET(req: NextRequest) {
     const allPatients = await Promise.all(
       orders.map(resolveAdminPatient)
     );
-    const patientMap = new Map(
-      allPatients.filter(Boolean).map((patient) => [patient!.id, patient!])
-    );
+    const patientMap = mergePatientMap(allPatients);
 
     const filteredOrders = orders.filter((order) =>
       matchesSearch(order, patientMap.get(order.patientId) ?? null, q)

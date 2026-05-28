@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Card, CardContent } from "@/components/ui/Card";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -32,7 +31,7 @@ const INTEGRATIONS: Record<
     color: "bg-blue-100 text-blue-700",
     dot: "bg-blue-500",
     description: "A medical records and patient management platform used by licensed healthcare providers.",
-    role: "When a patient completes their intake form, their full profile — questionnaire answers, signed consents, and uploaded documents — is automatically packaged and delivered to the reviewing provider inside PracticeQ.",
+    role: "When a patient completes their intake form, their full profile - questionnaire answers, signed consents, and uploaded documents - is automatically packaged and delivered to the reviewing provider inside PracticeQ.",
   },
   quickbooks: {
     label: "QuickBooks",
@@ -46,19 +45,19 @@ const INTEGRATIONS: Record<
     color: "bg-purple-100 text-purple-700",
     dot: "bg-purple-500",
     description: "A compounding pharmacy partner that prepares and ships medications directly to patients.",
-    role: "Once a provider approves a prescription, the full order — drug, dose, quantity, and the patient's shipping address — is transmitted directly to Life File. Status updates and tracking numbers flow back automatically.",
+    role: "Once a provider approves a prescription, the full order - drug, dose, quantity, and the patient's shipping address - is transmitted directly to Life File. Status updates and tracking numbers flow back automatically.",
   },
   spruce: {
-    label: "Spruce Messaging",
+    label: "Spruce Texting",
     color: "bg-orange-100 text-orange-700",
     dot: "bg-orange-500",
-    description: "A HIPAA-compliant platform for sending text messages to patients.",
-    role: "Patients receive a plain-English text at every key moment in their order journey — no need to log in to find out what's happening.",
+    description: "Healthcare SMS texting for patient order updates and reminders.",
+    role: "Patients receive text updates for payment, identity verification, provider review, pharmacy dispatch, shipping, and delivery.",
     smsTemplates: [
       { trigger: "Intake submitted", message: "We've received your intake. A provider will review shortly." },
       { trigger: "Payment captured", message: "We've received your payment. Order ID confirmed." },
+      { trigger: "Identity reminder", message: "Please upload your ID and 10-second identity video." },
       { trigger: "Sent to pharmacy", message: "Your order has been sent to our pharmacy partner." },
-      { trigger: "Order fulfilled", message: "Your order has been fulfilled. Tracking info coming soon." },
       { trigger: "Order shipped", message: "Your tracking info is ready. Contact us with any questions." },
     ],
   },
@@ -68,14 +67,14 @@ const FLOW_STEPS = [
   {
     step: "1",
     title: "Patient Completes Intake",
-    body: "The patient fills out their health questionnaire, signs consent forms, uploads their ID, and pays online — all in one flow.",
+    body: "The patient fills out their health questionnaire, signs consent forms, uploads their ID, and pays online - all in one flow.",
     system: "Platform",
     detail: "Triggers: PracticeQ + QuickBooks",
   },
   {
     step: "2",
     title: "Records Sent to Provider via PracticeQ",
-    body: "The moment intake is complete, the patient's full profile — answers, consent, and uploaded files — is packaged and sent to the reviewing provider inside PracticeQ.",
+    body: "The moment intake is complete, the patient's full profile - answers, consent, and uploaded files - is packaged and sent to the reviewing provider inside PracticeQ.",
     system: "PracticeQ",
     detail: "Trigger: Patient submits intake",
   },
@@ -96,7 +95,7 @@ const FLOW_STEPS = [
   {
     step: "5",
     title: "Prescription Sent to Pharmacy",
-    body: "Once approved, the prescription — including drug, dose, quantity, and the patient's shipping address — is transmitted directly to Life File Pharmacy.",
+    body: "Once approved, the prescription - including drug, dose, quantity, and the patient's shipping address - is transmitted directly to Life File Pharmacy.",
     system: "Life File",
     detail: "Trigger: Provider approves order",
   },
@@ -118,6 +117,10 @@ function humanReadableAction(log: Types.IntegrationLog): string {
     "Pharmacy order submitted": "Prescription transmitted to pharmacy",
     "Pharmacy status updated": "Pharmacy sent a status update on the order",
     "SMS sent": "Text message sent to patient",
+    "SMS queued (Spruce disabled)": "Text message queued because live Spruce sending is disabled",
+    "SMS API send failed": "Text message failed to send through Spruce",
+    "Patient SMS reply received": "Patient replied by text",
+    "SMS delivery failed": "Spruce reported a text delivery failure",
   };
   return map[log.action] ?? log.action;
 }
@@ -126,11 +129,22 @@ function humanReadableAction(log: Types.IntegrationLog): string {
 
 export default function IntegrationsPage() {
   const [logs, setLogs] = useState<Types.IntegrationLog[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<Record<string, any>>({});
   const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const allLogs = db.integrationLogDb.getAll();
-    setLogs(allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    fetch("/api/admin/integration-logs", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error ?? "Could not load integration activity.");
+        const allLogs = (payload.logs ?? []) as Types.IntegrationLog[];
+        setLogs(allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+        setIntegrationStatus(payload.integrations ?? {});
+      })
+      .catch((err) => setError(err.message ?? "Could not load integration activity."))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = filter ? logs.filter((l) => l.integrationName === filter) : logs;
@@ -144,8 +158,8 @@ export default function IntegrationsPage() {
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">How the Platform Connects</h1>
           <p className="mt-2 text-gray-500 max-w-2xl">
-            This platform doesn't work in isolation — it talks to several specialised tools behind the scenes.
-            Here's what each one does and how they fit together.
+            This platform doesn&apos;t work in isolation - it talks to several specialised tools behind the scenes.
+            Here&apos;s what each one does and how they fit together.
           </p>
         </div>
 
@@ -165,11 +179,27 @@ export default function IntegrationsPage() {
                 {cfg.smsTemplates && (
                   <div className="border-t pt-3">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Messages patients receive</p>
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                      <span className={`rounded-full px-2 py-1 font-semibold ${
+                        integrationStatus.spruce?.liveSending ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {integrationStatus.spruce?.liveSending ? "Live sending on" : "Live sending off"}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 font-semibold ${
+                        integrationStatus.spruce?.configured ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      }`}>
+                        {integrationStatus.spruce?.configured ? "Credentials configured" : "Credentials missing"}
+                      </span>
+                    </div>
+                    <div className="mb-3 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                      <p className="font-semibold">Webhook</p>
+                      <p className="font-mono break-all">{integrationStatus.spruce?.webhookPath ?? "/api/webhooks/spruce"}</p>
+                    </div>
                     <div className="space-y-2">
                       {cfg.smsTemplates.map((t) => (
                         <div key={t.trigger} className="bg-orange-50 rounded-lg px-3 py-2">
                           <p className="text-xs text-orange-600 font-medium mb-0.5">{t.trigger}</p>
-                          <p className="text-sm text-gray-700 italic">"{t.message}"</p>
+                          <p className="text-sm text-gray-700 italic">&quot;{t.message}&quot;</p>
                         </div>
                       ))}
                     </div>
@@ -182,7 +212,7 @@ export default function IntegrationsPage() {
 
         {/* Step-by-step flow */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Journey — Step by Step</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Journey - Step by Step</h2>
           <div className="relative">
             {/* connecting line */}
             <div className="hidden md:block absolute left-6 top-6 bottom-6 w-0.5 bg-teal-200" />
@@ -237,10 +267,16 @@ export default function IntegrationsPage() {
 
           <Card>
             <CardContent className="p-0 divide-y max-h-[480px] overflow-y-auto">
-              {filtered.length === 0 && (
+              {loading && (
+                <p className="text-center text-gray-400 py-12 text-sm">Loading activity...</p>
+              )}
+              {!loading && error && (
+                <p className="text-center text-red-500 py-12 text-sm">{error}</p>
+              )}
+              {!loading && !error && filtered.length === 0 && (
                 <p className="text-center text-gray-400 py-12 text-sm">No activity found.</p>
               )}
-              {filtered.map((log) => {
+              {!loading && !error && filtered.map((log) => {
                 const cfg = INTEGRATIONS[log.integrationName] ?? INTEGRATIONS.system;
                 const isOk = log.status === "success";
                 return (

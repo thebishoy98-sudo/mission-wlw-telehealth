@@ -1,12 +1,13 @@
--- Mission WLW — PostgreSQL Schema
--- HIPAA-compliant. Compatible with Vercel Postgres / Neon.
+-- Mission WLW - PostgreSQL Schema
+-- Sensitive health data schema. HIPAA readiness also requires BAAs, access controls,
+-- audit controls, encryption controls, policies, and operational review.
 --
 -- HIPAA Technical Safeguards:
---   § 164.312(a)(1)  Access Control     — patient_id FKs enforce ownership
---   § 164.312(b)     Audit Controls     — phi_audit_logs (immutable, 6yr retention)
---   § 164.312(c)(1)  Integrity          — NOT NULL, FK constraints, CHECK constraints
---   § 164.312(e)(1)  Transmission Sec.  — TLS enforced by Neon/Vercel Postgres
---   Data Retention   § 164.530(j)       — retention_delete_after set at INSERT time
+--   § 164.312(a)(1)  Access Control     - patient_id FKs enforce ownership
+--   § 164.312(b)     Audit Controls     - phi_audit_logs (immutable, 6yr retention)
+--   § 164.312(c)(1)  Integrity          - NOT NULL, FK constraints, CHECK constraints
+--   § 164.312(e)(1)  Transmission Sec.  - TLS enforced by Neon/Vercel Postgres
+--   Data Retention   § 164.530(j)       - retention_delete_after set at INSERT time
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -83,24 +84,39 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_by TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_upload_token TEXT;
 
+-- ── PracticeQ-as-PHI-store migration ──────────────────────────────────────────
+-- Patient PHI lives in PracticeQ (HIPAA-compliant, BAA-signed).
+-- Our patients table is now a minimal stub: id + practiceq_client_id only.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS practiceq_client_id TEXT;
+ALTER TABLE patients ALTER COLUMN first_name DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN last_name DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN date_of_birth DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN gender DROP NOT NULL;
+ALTER TABLE patients ALTER COLUMN phone DROP NOT NULL;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS practiceq_client_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_patients_practiceq_client_id ON patients(practiceq_client_id);
+CREATE INDEX IF NOT EXISTS idx_orders_practiceq_client_id ON orders(practiceq_client_id);
+
 -- ── Payments ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS payments (
   id                TEXT PRIMARY KEY,
   order_id          TEXT NOT NULL REFERENCES orders(id),
   patient_id        TEXT NOT NULL REFERENCES patients(id),
-  amount            INTEGER NOT NULL,
+  amount            NUMERIC(10,2) NOT NULL,
   currency          TEXT NOT NULL DEFAULT 'usd',
   status            TEXT NOT NULL DEFAULT 'pending',
   payment_method    TEXT NOT NULL,
   card_last4        TEXT,
   card_brand        TEXT,
   transaction_id    TEXT,
-  refund_amount     INTEGER,
+  refund_amount     NUMERIC(10,2),
   retention_delete_after TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   processed_at      TIMESTAMPTZ,
   refunded_at       TIMESTAMPTZ
 );
+ALTER TABLE payments ALTER COLUMN amount TYPE NUMERIC(10,2) USING amount::numeric;
+ALTER TABLE payments ALTER COLUMN refund_amount TYPE NUMERIC(10,2) USING refund_amount::numeric;
 
 -- ── Questions ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS questions (
@@ -183,7 +199,7 @@ ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE provider_reviews ADD COLUMN IF NOT EXISTS identity_review_required BOOLEAN NOT NULL DEFAULT false;
 
 -- ── PHI Audit Logs ─────────────────────────────────────────────────────────────
--- HIPAA § 164.312(b) — INSERT ONLY. Never UPDATE or DELETE rows here.
+-- HIPAA § 164.312(b) - INSERT ONLY. Never UPDATE or DELETE rows here.
 -- Retain for 6 years from timestamp.
 CREATE TABLE IF NOT EXISTS phi_audit_logs (
   id            TEXT PRIMARY KEY,

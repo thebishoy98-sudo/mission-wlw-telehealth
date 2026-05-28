@@ -1,7 +1,7 @@
 /**
  * QuickBooks Payments Integration Service
  *
- * Uses the Intuit Payments API (v4) to tokenize and charge cards — same OAuth
+ * Uses the Intuit Payments API (v4) to tokenize and charge cards - same OAuth
  * token as the QuickBooks accounting API.
  *
  * Production setup:
@@ -29,8 +29,8 @@ interface QBChargeRequest {
   amount: string; // e.g. "299.00"
   currency: "USD";
   capture: boolean;
-  token?: string;         // card token from qbpayments.js (preferred — no PCI scope)
-  card?: {                // raw card — only for server-to-server, requires PCI compliance
+  token?: string;         // card token from qbpayments.js (preferred - no PCI scope)
+  card?: {                // raw card - only for server-to-server, requires PCI compliance
     number: string;
     expMonth: string;
     expYear: string;
@@ -115,6 +115,14 @@ export async function chargeCard(
   }
 
   // ── Real QB Payments API ───────────────────────────────────────────────────
+  if (!paymentDetails.token && process.env.QB_ALLOW_RAW_CARD_CHARGES !== "true") {
+    logPaymentEvent("QB Payments token missing", orderId, patientId, {
+      amount: amountDollars,
+      mode: "live",
+    }, "error");
+    throw new Error("QuickBooks Payments token is required in live mode. Configure Intuit client-side tokenization before taking production payments.");
+  }
+
   const accessToken = await getQBAccessToken();
   const requestId = generateId(); // idempotency key
 
@@ -160,7 +168,15 @@ export async function chargeCard(
     body: JSON.stringify(payload),
   });
 
-  const charge: QBChargeResponse = await res.json();
+  const rawBody = await res.text();
+  let charge: QBChargeResponse;
+  try {
+    charge = JSON.parse(rawBody) as QBChargeResponse;
+  } catch {
+    // QB Payments sometimes returns XML error pages (e.g. auth failures, bad tokens)
+    const xmlDetail = rawBody.match(/<(?:message|errorMessage|detail)[^>]*>([^<]+)</i)?.[1] ?? rawBody.slice(0, 200);
+    throw new Error(`QuickBooks Payments error (HTTP ${res.status}): ${xmlDetail}`);
+  }
 
   if (!res.ok || charge.errors?.length) {
     const errMsg = charge.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`;

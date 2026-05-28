@@ -1,4 +1,4 @@
-import { loadProviderPatientChart } from "@/lib/provider-chart";
+import { hydratePatientFromPracticeQ, loadProviderPatientChart } from "@/lib/provider-chart";
 import type { Order, Patient, Product, ProviderReview } from "@/types";
 
 const patient: Patient = {
@@ -87,5 +87,54 @@ describe("loadProviderPatientChart", () => {
     });
 
     expect(chart).toBeNull();
+  });
+});
+
+describe("hydratePatientFromPracticeQ", () => {
+  it("fills incomplete provider/admin patient rows from PracticeQ answers", () => {
+    const incompletePatient: Patient = {
+      ...patient,
+      firstName: "" as string,
+      lastName: "" as string,
+      email: "",
+      phone: "",
+      dateOfBirth: "",
+      address: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+      shippingAddress: { street1: "", city: "", state: "", zipCode: "", country: "US" },
+    };
+
+    const hydrated = hydratePatientFromPracticeQ(incompletePatient, {
+      available: true,
+      clientId: "81",
+      clientEmail: "chart@example.com",
+      intakeId: "intake-1",
+      questionnaireName: "Medical: Brief Intake",
+      submittedAt: "2026-05-27T00:00:00.000Z",
+      practiceQUrl: "https://intakeq.com/#/history/intake-1",
+      answers: [
+        { question: "First Name", answer: "Bishoy" },
+        { question: "Last Name", answer: "Kamel" },
+        { question: "Date of Birth", answer: "4/14/1998" },
+        { question: "Phone Number", answer: "7328228376" },
+        { question: "Address (For Medication Shipment)", answer: "123 Main St" },
+        { question: "City", answer: "Orlando" },
+        { question: "State", answer: "FL" },
+        { question: "Zip Code", answer: "32801" },
+      ],
+    });
+
+    expect(hydrated).toMatchObject({
+      firstName: "Bishoy",
+      lastName: "Kamel",
+      email: "chart@example.com",
+      phone: "7328228376",
+      dateOfBirth: "4/14/1998",
+      address: {
+        street1: "123 Main St",
+        city: "Orlando",
+        state: "FL",
+        zipCode: "32801",
+      },
+    });
   });
 });

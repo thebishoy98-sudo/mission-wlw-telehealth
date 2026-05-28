@@ -5,15 +5,24 @@ import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 
 export default function Products() {
   const [products, setProducts] = useState<Types.Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setProducts(db.productDb.getActive());
+    async function loadProducts() {
+      try {
+        const response = await fetch("/api/products", { cache: "no-store" });
+        const payload = await response.json();
+        setProducts(payload.products ?? []);
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadProducts();
   }, []);
 
   return (
@@ -60,7 +69,7 @@ export default function Products() {
                       <ul className="space-y-1 text-sm text-gray-600">
                         {product.doses.map((dose) => (
                           <li key={dose.id}>
-                            • {dose.label} - {formatCurrency(dose.price)}
+                            - {dose.label}: {dose.patientDescription ?? dose.strength} - {formatCurrency(dose.price)}
                           </li>
                         ))}
                       </ul>
@@ -87,12 +96,15 @@ export default function Products() {
           ))}
         </div>
 
-        {products.length === 0 && (
+        {!loading && products.length === 0 && (
           <div className="text-center py-12">
             <p className="text-lg text-gray-600">
               No products available at this time.
             </p>
           </div>
+        )}
+        {loading && (
+          <div className="text-center py-12 text-gray-500">Loading treatments...</div>
         )}
       </div>
     </div>

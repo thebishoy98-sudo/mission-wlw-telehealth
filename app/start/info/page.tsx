@@ -6,9 +6,21 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+
+const US_STATES = [
+  ["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],
+  ["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["FL","Florida"],["GA","Georgia"],
+  ["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],
+  ["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],
+  ["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],
+  ["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],
+  ["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],
+  ["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],
+  ["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],
+  ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],
+];
 
 export default function PatientInfo() {
   const router = useRouter();
@@ -18,17 +30,20 @@ export default function PatientInfo() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setProducts(db.productDb.getActive());
+    fetch("/api/products", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => setProducts(payload.products ?? []))
+      .catch(() => setProducts([]));
   }, []);
 
   useEffect(() => {
     if (formData.productId) {
-      const product = db.productDb.getById(formData.productId);
+      const product = products.find((item) => item.id === formData.productId);
       if (product && product.doses.length > 0 && !selectedDose) {
         setSelectedDose(product.doses[0].id);
       }
     }
-  }, [formData.productId, selectedDose]);
+  }, [formData.productId, products, selectedDose]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -50,11 +65,7 @@ export default function PatientInfo() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    saveIntakeState({
-      ...formData,
-      doseId: selectedDose,
-      shippingAddress: formData.shippingAddress || formData.address,
-    });
+    saveIntakeState({ ...formData, doseId: selectedDose, shippingAddress: formData.shippingAddress || formData.address });
     router.push("/start/questionnaire");
   };
 
@@ -64,10 +75,11 @@ export default function PatientInfo() {
   const updateAddress = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, address: { ...prev.address, [field]: value } }));
 
-  const selectedProduct = formData.productId ? db.productDb.getById(formData.productId) : null;
+  const selectedProduct = formData.productId ? products.find((item) => item.id === formData.productId) ?? null : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Product Selection */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Choose Your Treatment</h2>
         <p className="text-gray-500 text-sm mb-6">Select the treatment you&apos;re interested in</p>
@@ -83,21 +95,25 @@ export default function PatientInfo() {
         {selectedProduct && (
           <div className="mt-4">
             <Select
-              label="Dosage"
+              label="Prescription option"
               options={selectedProduct.doses.map((d) => ({
                 value: d.id,
-                label: `${d.label} - $${d.price}/month`,
+                label: `${d.label} - ${d.patientDescription ?? d.strength} - $${d.price}`,
               }))}
               value={selectedDose}
               onChange={(e) => setSelectedDose(e.target.value)}
             />
+            <p className="mt-2 text-xs text-gray-500">
+              These are 8-week prescription options. Your provider reviews the dose before the order is sent.
+            </p>
           </div>
         )}
       </div>
 
+      {/* Personal Info */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Personal Information</h2>
-        <p className="text-gray-500 text-sm mb-6">Used to create your patient profile after payment</p>
+        <p className="text-gray-500 text-sm mb-6">Used to create your patient profile</p>
 
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -106,7 +122,7 @@ export default function PatientInfo() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Email" type="email" autoComplete="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} error={errors.email} placeholder="jane@email.com" />
-            <Input label="Phone" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} error={errors.phone} placeholder="(555) 000-0000" />
+            <Input label="Phone" type="tel" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} error={errors.phone} placeholder="(555) 000-0000" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Date of Birth" type="date" autoComplete="bday" value={formData.dateOfBirth} onChange={(e) => updateField("dateOfBirth", e.target.value)} error={errors.dateOfBirth} />
@@ -126,6 +142,7 @@ export default function PatientInfo() {
         </div>
       </div>
 
+      {/* Address */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Shipping Address</h2>
         <p className="text-gray-500 text-sm mb-6">Where should we send your treatment?</p>
@@ -135,8 +152,14 @@ export default function PatientInfo() {
           <Input label="Apt, Suite (Optional)" autoComplete="shipping address-line2" value={formData.address.street2 || ""} onChange={(e) => updateAddress("street2", e.target.value)} placeholder="Apt 4B" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Input label="City" autoComplete="shipping address-level2" value={formData.address.city} onChange={(e) => updateAddress("city", e.target.value)} error={errors.city} />
-            <Input label="State" autoComplete="shipping address-level1" value={formData.address.state} onChange={(e) => updateAddress("state", e.target.value)} error={errors.state} placeholder="CA" />
-            <Input label="ZIP Code" autoComplete="shipping postal-code" inputMode="numeric" value={formData.address.zipCode} onChange={(e) => updateAddress("zipCode", e.target.value)} error={errors.zipCode} placeholder="90210" />
+            <Select
+              label="State"
+              options={[{ value: "", label: "State..." }, ...US_STATES.map(([code, name]) => ({ value: code, label: `${code} – ${name}` }))]}
+              value={formData.address.state}
+              onChange={(e) => updateAddress("state", e.target.value)}
+              error={errors.state}
+            />
+            <Input label="ZIP Code" autoComplete="shipping postal-code" inputMode="numeric" pattern="[0-9]*" maxLength={5} value={formData.address.zipCode} onChange={(e) => updateAddress("zipCode", e.target.value.replace(/\D/g, "").slice(0, 5))} error={errors.zipCode} placeholder="90210" />
           </div>
         </div>
       </div>
@@ -152,4 +175,3 @@ export default function PatientInfo() {
     </form>
   );
 }
-

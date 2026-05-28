@@ -4,6 +4,7 @@ import { generateId } from "@/lib/utils";
 
 type IdentityUploadInput = {
   orderId: string;
+  practiceqClientId?: string | number | null;
   idImageData: string;
   selfieFrameData: string;
   identityVideoData?: string | null;

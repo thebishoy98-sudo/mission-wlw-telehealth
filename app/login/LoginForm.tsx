@@ -48,28 +48,14 @@ export function LoginForm({ role }: { role: UserRole }) {
     setError("");
     setLoading(true);
 
-    const result = login(email, password, role);
+    const result = await login(email, password, role);
+
     if (!result.success) {
-      setLoading(false);
       setError(result.error || "Sign in failed.");
+      setLoading(false);
       return;
     }
 
-    if (role === "admin" || role === "provider") {
-      const sessionResponse = await fetch(`/api/auth/${role}-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!sessionResponse.ok) {
-        setLoading(false);
-        setError("Sign in failed.");
-        return;
-      }
-    }
-
-    setLoading(false);
     router.push(config.destination);
   };
 

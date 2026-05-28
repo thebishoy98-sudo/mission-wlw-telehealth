@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import { generateId } from "@/lib/utils";
 import { hasRequiredIdentityUploads, statusFromAiResult } from "@/lib/identity";
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
-import type { Upload } from "@/types";
+import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,35 +30,27 @@ export async function POST(req: NextRequest) {
     const patient =
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
+    const practiceqClientId =
+      order.practiceqClientId ??
+      (patient as { practiceqClientId?: string } | null)?.practiceqClientId ??
+      null;
 
     const now = new Date().toISOString();
-    const uploads: Upload[] = [
-      {
-        id: generateId(),
-        orderId: order.id,
-        type: "driver_license",
-        filename: "identity-document.jpg",
-        fileSize: idImageData.length,
-        mimeType: "image/jpeg",
-        base64Data: idImageData,
-        uploadedAt: now,
-        status: "uploaded",
-      },
-      {
-        id: generateId(),
-        orderId: order.id,
-        type: "selfie_video",
-        filename: "identity-video.webm",
-        fileSize: (identityVideoData ?? selfieFrameData).length,
-        mimeType: identityVideoData ? "video/webm" : "image/jpeg",
-        base64Data: identityVideoData ?? selfieFrameData,
-        uploadedAt: now,
-        status: "uploaded",
-      },
-    ];
-    const aiUploads = uploads.map((upload) =>
-      upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: selfieFrameData } : upload
-    );
+    try {
+      assertIdentityStorageReady();
+    } catch (error) {
+      return NextResponse.json(
+        { error: (error as Error).message },
+        { status: 503 }
+      );
+    }
+    const { uploads, aiUploads } = await buildIdentityUploads({
+      orderId: order.id,
+      practiceqClientId,
+      idImageData,
+      selfieFrameData,
+      identityVideoData,
+    });
 
     uploads.forEach((upload) => db.uploadDb.create(upload));
     await Promise.all(uploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
@@ -113,6 +104,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Identity upload error:", error);
-    return NextResponse.json({ error: "Identity upload failed" }, { status: 500 });
+    return NextResponse.json({ error: (error as Error).message || "Identity upload failed" }, { status: 500 });
   }
 }

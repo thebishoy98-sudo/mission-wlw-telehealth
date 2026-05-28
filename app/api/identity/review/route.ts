@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { getIdentityReviewUpdate } from "@/lib/identity";
+import { requireAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const orderId = req.nextUrl.searchParams.get("orderId");
     if (!orderId) {
@@ -38,8 +42,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
-    const { orderId, action, reviewedBy = "provider", notes } = await req.json();
+    const { orderId, action, reviewedBy = "admin", notes } = await req.json();
     if (!orderId || !["approve", "deny"].includes(action)) {
       return NextResponse.json({ error: "orderId and action approve/deny required" }, { status: 400 });
     }
@@ -71,7 +78,7 @@ export async function POST(req: NextRequest) {
       id: `log_identity_review_${Date.now()}`,
       timestamp: new Date().toISOString(),
       integrationName: "system",
-      action: `Identity ${action === "approve" ? "approved" : "denied"} by provider`,
+      action: `Identity ${action === "approve" ? "approved" : "denied"} by admin`,
       orderId,
       patientId: order.patientId,
       status: "success",

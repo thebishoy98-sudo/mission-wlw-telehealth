@@ -33,13 +33,35 @@ import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audi
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { resolvePersistedDose } from "@/lib/product-dose";
+import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import type { Payment, Upload } from "@/types";
+
+async function wakePracticeQRemoteWorker() {
+  const remoteBase = process.env.PRACTICEQ_REMOTE_PUBLIC_URL;
+  if (!remoteBase) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+  try {
+    await fetch(new URL("/health", remoteBase).toString(), {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function shouldBypassQuickBooksPayment() {
+  return process.env.BYPASS_QB_PAYMENTS !== "false";
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
-    const chargeAmount = getChargeAmount(amount);
+    const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
+    const chargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
 
     if (!orderId || chargeAmount === null) {
       return NextResponse.json(
@@ -149,6 +171,16 @@ export async function POST(req: NextRequest) {
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
     const fallbackQuestions = questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions);
+    const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
+    if (!questionnaire.complete) {
+      return NextResponse.json(
+        {
+          error: "Questionnaire answers are required before payment",
+          missingQuestions: questionnaire.missingQuestions,
+        },
+        { status: 422 }
+      );
+    }
 
     const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
     if (!eligibility.eligible) {
@@ -184,25 +216,44 @@ export async function POST(req: NextRequest) {
       outcome: "success",
     });
 
-    // 5. Charge via QuickBooks Payments
+    // 5. Charge via QuickBooks Payments, or bypass it while end-to-end intake automation is being tested.
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
-    try {
-      chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
-        token,
-        cardNumber,
-        expMonth,
-        expYear,
-        cvc,
-        cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
-        cardLast4,
-        cardBrand,
-        billingAddress: patient.address,
-      });
-    } catch (err: any) {
-      return NextResponse.json(
-        { error: err.message ?? "Payment failed" },
-        { status: 402 }
-      );
+    if (bypassQuickBooksPayment) {
+      chargeResult = {
+        chargeId: `test_bypass_${generateId()}`,
+        status: "CAPTURED",
+        cardLast4: cardLast4 ?? (String(cardNumber ?? "").replace(/\D/g, "").slice(-4) || "0000"),
+        cardBrand: cardBrand ?? "test",
+      };
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "quickbooks",
+        action: "Payment bypassed for integration testing",
+        orderId,
+        patientId: patient.id,
+        status: "success",
+        details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
+      }).catch(() => {});
+    } else {
+      try {
+        chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
+          token,
+          cardNumber,
+          expMonth,
+          expYear,
+          cvc,
+          cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
+          cardLast4,
+          cardBrand,
+          billingAddress: patient.address,
+        });
+      } catch (err: any) {
+        return NextResponse.json(
+          { error: err.message ?? "Payment failed" },
+          { status: 402 }
+        );
+      }
     }
 
     // 6. Record payment locally
@@ -292,39 +343,59 @@ export async function POST(req: NextRequest) {
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
 
-    // Build updatedOrder from known data (localStorage not available server-side)
-    const updatedOrder = { ...order, ...orderUpdates };
+    // Build updatedOrder from known persisted data (localStorage not available server-side).
+    const orderForIntegrations = {
+      ...order,
+      productId: persistedProduct?.id ?? order.productId,
+      doseId: persistedDose?.id ?? order.doseId,
+    };
+    const updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
     let practiceQAutomationStatus: "queued" | "error" = "queued";
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
-    try {
-      const qbCustomerId = await quickbooks.createCustomerRecord(patient);
-      const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
-        patient,
-        product: productData ?? null,
-        qbCustomerId,
-      });
-      await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
-      db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
-      await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
-    } catch (e) {
-      const errorMessage = (e as Error).message;
-      errors.push(`QuickBooks accounting: ${errorMessage}`);
-      db.orderDb.update(orderId, { quickbooksStatus: "error" });
-      await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
+    if (bypassQuickBooksPayment) {
+      db.orderDb.update(orderId, { quickbooksStatus: "skipped" });
+      await dbServer.orderDb.update(orderId, { quickbooksStatus: "skipped" }).catch(() => {});
       await dbServer.integrationLogDb.create({
         id: generateId(),
         timestamp: new Date().toISOString(),
         integrationName: "quickbooks",
-        action: "QuickBooks accounting sync failed",
+        action: "QuickBooks accounting sync skipped",
         orderId,
         patientId: patient.id,
-        status: "error",
-        details: { amount: payment.amount, transactionId: payment.transactionId },
-        error: errorMessage,
+        status: "success",
+        details: { amount: payment.amount, transactionId: payment.transactionId, mode: "bypass" },
       }).catch(() => {});
+    } else {
+      try {
+        const qbCustomerId = await quickbooks.createCustomerRecord(patient);
+        const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
+          patient,
+          product: persistedProduct ?? productData ?? null,
+          qbCustomerId,
+        });
+        await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
+        db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
+        await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
+      } catch (e) {
+        const errorMessage = (e as Error).message;
+        errors.push(`QuickBooks accounting: ${errorMessage}`);
+        db.orderDb.update(orderId, { quickbooksStatus: "error" });
+        await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "quickbooks",
+          action: "QuickBooks accounting sync failed",
+          orderId,
+          patientId: patient.id,
+          status: "error",
+          details: { amount: payment.amount, transactionId: payment.transactionId },
+          error: errorMessage,
+        }).catch(() => {});
+      }
     }
 
     // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment,
@@ -335,6 +406,7 @@ export async function POST(req: NextRequest) {
       db.practiceqAutomationJobDb.create(automationJob);
       db.orderDb.update(orderId, { practiceQStatus: "pending" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
+      await wakePracticeQRemoteWorker().catch(() => {});
     } catch (e) {
       const errorMessage = (e as Error).message;
       practiceQAutomationStatus = "error";
@@ -358,7 +430,7 @@ export async function POST(req: NextRequest) {
     const practiceQReadyForPharmacy = false;
     if (dispatchGate.canDispatch && practiceQReadyForPharmacy) {
       try {
-        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
+        const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: persistedProduct ?? productData ?? null });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});

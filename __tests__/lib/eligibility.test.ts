@@ -93,6 +93,43 @@ describe("checkEligibility", () => {
     // "yes, but mild" !== "yes", so should not disqualify
     expect(result.eligible).toBe(true);
   });
+
+  it("detects a disqualifying value inside a comma-separated multi-select answer", () => {
+    const multiQuestions: Question[] = [
+      makeQuestion(
+        "q_conditions",
+        "Select any that apply to you?",
+        true,
+        "Personal or family history of medullary thyroid cancer or MEN 2"
+      ),
+    ];
+    const answers = [
+      makeAnswer(
+        "q_conditions",
+        "Diabetes, Personal or family history of medullary thyroid cancer or MEN 2"
+      ),
+    ];
+
+    const result = checkEligibility(answers, multiQuestions);
+
+    expect(result.eligible).toBe(false);
+  });
+
+  it("detects any configured disqualifying option from a comma-separated disqualifying list", () => {
+    const multiQuestions: Question[] = [
+      makeQuestion(
+        "q_conditions",
+        "Select any that apply to you?",
+        true,
+        "I'm Pregnant, I'm Breastfeeding, History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2), History of Medullary Thyroid Cancer"
+      ),
+    ];
+    const answers = [makeAnswer("q_conditions", "History of Diabetes, I'm Breastfeeding")];
+
+    const result = checkEligibility(answers, multiQuestions);
+
+    expect(result.eligible).toBe(false);
+  });
 });
 
 describe("validateCompleteness", () => {

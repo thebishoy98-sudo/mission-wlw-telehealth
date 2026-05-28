@@ -3,6 +3,7 @@ import * as db from "@/lib/db";
 import { tirzepatideProduct } from "@/data/products";
 
 const seed = () => {
+  db.clearAllData();
   db.patientDb.create({
     id: "p1",
     firstName: "Carol",
@@ -206,6 +207,25 @@ describe("lifefile.createPharmacyOrder", () => {
     process.env = original;
     (global as unknown as { fetch?: unknown }).fetch = undefined;
     jest.resetModules();
+  });
+
+  it("does not crash when optional product display fields are null", async () => {
+    const order = db.orderDb.getById("o1")!;
+    const product = {
+      ...tirzepatideProduct,
+      id: "prod_1",
+      name: null as unknown as string,
+      doses: [
+        {
+          ...tirzepatideProduct.doses[0],
+          label: null as unknown as string,
+          strength: null as unknown as string,
+        },
+      ],
+    };
+
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product });
+    expect(pharmacyOrder.status).toBe("submitted");
   });
 });
 

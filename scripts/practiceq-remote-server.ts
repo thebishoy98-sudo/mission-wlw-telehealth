@@ -2,6 +2,7 @@ import { loadEnvConfig } from "@next/env";
 import http from "http";
 import { URL } from "url";
 import * as dbServer from "@/lib/db.server";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import {
   closePracticeQRemoteSession,
   getPracticeQRemoteSession,
@@ -55,7 +56,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
     if (action === "done" && req.method === "POST") {
-      await dbServer.practiceqAutomationJobDb.update(jobId, { status: "completed" }).catch(() => null);
+      await completePracticeQSession(jobId);
       await closePracticeQRemoteSession(jobId);
       return sendJson(res, 200, { ok: true });
     }
@@ -91,6 +92,10 @@ async function pollQueuedJobs() {
       });
       if (result.status === "failed") {
         await dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+      } else if (result.status === "completed") {
+        await completePracticeQSession(job.id).catch((error) => {
+          console.error("PracticeQ completion follow-up failed:", error instanceof Error ? error.message : error);
+        });
       }
     }
   } finally {

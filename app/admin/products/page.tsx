@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { generateId, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 
 export default function ProductsManagement() {
@@ -25,47 +24,44 @@ export default function ProductsManagement() {
   });
 
   useEffect(() => {
-    setProducts(db.productDb.getAll());
+    void loadProducts();
   }, []);
 
-  const handleSave = () => {
+  const loadProducts = async () => {
+    const response = await fetch("/api/admin/products", { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setToast(payload.error ?? "Could not load products.");
+      return;
+    }
+    setProducts(payload.products ?? []);
+  };
+
+  const handleSave = async () => {
     if (!formData.name) {
       setFormError("Please enter a product name.");
       return;
     }
     setFormError("");
 
-    if (editingId) {
-      db.productDb.update(editingId, {
+    const response = await fetch(editingId ? `/api/admin/products/${editingId}` : "/api/admin/products", {
+      method: editingId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         name: formData.name,
         description: formData.description,
         startingPrice: formData.startingPrice,
         eligibilityNote: formData.eligibilityNote,
-      });
-    } else {
-      db.productDb.create({
-        id: generateId(),
-        name: formData.name,
-        slug: formData.name.toLowerCase().replace(/\s+/g, "-"),
-        description: formData.description,
-        startingPrice: formData.startingPrice,
-        image: "/product-placeholder.svg",
-        doses: [
-          {
-            id: generateId(),
-            label: "Standard",
-            strength: "1x",
-            quantity: 4,
-            price: formData.startingPrice,
-          },
-        ],
-        eligibilityNote: formData.eligibilityNote,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      });
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setFormError(payload.error ?? "Product save failed.");
+      return;
     }
 
-    setProducts(db.productDb.getAll());
+    await loadProducts();
     setShowForm(false);
     setEditingId(null);
     setFormData({ name: "", description: "", startingPrice: 0, eligibilityNote: "" });
@@ -83,9 +79,14 @@ export default function ProductsManagement() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    db.productDb.delete(id);
-    setProducts(db.productDb.getAll());
+  const handleDelete = async (id: string) => {
+    const response = await fetch(`/api/admin/products/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      setToast(payload.error ?? "Product delete failed.");
+      return;
+    }
+    await loadProducts();
     setToast("Product deleted.");
   };
 

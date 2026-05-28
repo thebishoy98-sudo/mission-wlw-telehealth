@@ -19,9 +19,19 @@ export function checkEligibility(
     if (!question?.disqualifying) continue;
 
     const answerVal = answer.answer.trim().toLowerCase();
-    const disqualifyingVal = question.disqualifying.trim().toLowerCase();
+    const disqualifyingValues = question.disqualifying
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
 
-    if (answerVal === disqualifyingVal) {
+    const selectedValues = answerVal.split(",").map((value) => value.trim()).filter(Boolean);
+    const isDisqualified = disqualifyingValues.some((disqualifyingVal) => {
+      const isLongMultiSelectValue = disqualifyingVal.length > 3;
+      return answerVal === disqualifyingVal ||
+        (isLongMultiSelectValue && selectedValues.includes(disqualifyingVal));
+    });
+
+    if (isDisqualified) {
       return {
         eligible: false,
         reason: buildReason(question),

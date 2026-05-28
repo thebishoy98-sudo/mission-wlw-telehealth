@@ -6,15 +6,26 @@ import * as os from "os";
 import * as path from "path";
 import {
   buildPracticeQFillPlan,
+  formatPracticeQDate,
   findPracticeQAnswerForPrompt,
-  shouldStopForPatientConsent,
+  findPracticeQChoiceForLabel,
+  requiresUnhandledPatientConsent,
 } from "@/services/practiceq-browser-fill";
+import {
+  getIntakeById,
+  getIntakeSummaryFeed,
+  populateAndUpdatePracticeQIntake,
+} from "@/services/practiceq";
 
 type WorkerResult = {
   status: PracticeQAutomationJob["status"];
   handoffUrl?: string;
   intakeId?: string;
   error?: string;
+};
+
+type FillOutcome = {
+  stoppedForPatientConsent: boolean;
 };
 
 type RemoteSession = {
@@ -33,31 +44,36 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     return { status: "failed", error: "Order is missing or payment is not complete" };
   }
 
-  const [patient, answers, questions, uploads] = await Promise.all([
+  const [patient, answers, questions, consent, uploads] = await Promise.all([
     dbServer.patientDb.getById(job.patientId),
     dbServer.answerDb.getByOrder(job.orderId),
     dbServer.questionDb.getAll(),
+    dbServer.consentDb.getByOrder(job.orderId).catch(() => null),
     dbServer.uploadDb.getByOrder(job.orderId).catch(() => [] as Awaited<ReturnType<typeof dbServer.uploadDb.getByOrder>>),
   ]);
   if (!patient) return { status: "failed", error: "Patient not found" };
 
-  const fillPlan = buildPracticeQFillPlan(patient, answers, questions);
-  const licenseUpload = uploads.find((u) => u.type === "driver_license");
-
+  const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
+  const licenseBase64 = uploads.find((u) => u.type === "driver_license")?.base64Data ?? null;
   const browser = await chromium.launch({ headless: process.env.PRACTICEQ_WORKER_HEADLESS !== "false" });
   const page = await browser.newPage();
+  page.setDefaultTimeout(8000);
 
   try {
     await page.goto(job.practiceQStartUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
-    await fillPracticeQQuestionPages(page, fillPlan, licenseUpload?.base64Data ?? null);
+    await resolvePracticeQResumePrompt(page);
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, licenseBase64);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
 
-    return {
-      status: "awaiting_patient_signature",
-      handoffUrl: page.url(),
-    };
+    return verifyPracticeQSavedSubmission(submitResult, {
+      patient,
+      answers,
+      questions,
+      startedAt: job.createdAt,
+    });
   } catch (error) {
     return { status: "failed", error: (error as Error).message };
   } finally {
@@ -104,42 +120,40 @@ export async function startPracticeQRemoteSession(
     return { status: "failed", error: "Order is missing or payment is not complete" };
   }
 
-  const [patient, answers, questions, uploads] = await Promise.all([
+  const [patient, answers, questions, consent, uploads] = await Promise.all([
     dbServer.patientDb.getById(job.patientId),
     dbServer.answerDb.getByOrder(job.orderId),
     dbServer.questionDb.getAll(),
+    dbServer.consentDb.getByOrder(job.orderId).catch(() => null),
     dbServer.uploadDb.getByOrder(job.orderId).catch(() => [] as Awaited<ReturnType<typeof dbServer.uploadDb.getByOrder>>),
   ]);
   if (!patient) return { status: "failed", error: "Patient not found" };
 
-  const fillPlan = buildPracticeQFillPlan(patient, answers, questions);
-  const licenseUpload = uploads.find((u) => u.type === "driver_license");
-
+  const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
+  const licenseBase64 = uploads.find((u) => u.type === "driver_license")?.base64Data ?? null;
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  page.setDefaultTimeout(8000);
 
   try {
     await page.goto(job.practiceQStartUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(1000);
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
-    await fillPracticeQQuestionPages(page, fillPlan, licenseUpload?.base64Data ?? null);
-
-    remoteSessions.set(job.id, {
-      jobId: job.id,
-      token: job.handoffToken,
-      browser,
-      page,
-      expiresAt: job.handoffExpiresAt,
+    await resolvePracticeQResumePrompt(page);
+    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, licenseBase64);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
+    const verifiedResult = await verifyPracticeQSavedSubmission(submitResult, {
+      patient,
+      answers,
+      questions,
+      startedAt: job.createdAt,
     });
-
-    return {
-      status: "awaiting_patient_signature",
-      handoffUrl: `${publicBaseUrl.replace(/\/$/, "")}/session/${encodeURIComponent(job.id)}?token=${encodeURIComponent(job.handoffToken)}`,
-    };
+    await browser.close().catch(() => {});
+    return verifiedResult;
   } catch (error) {
     await browser.close().catch(() => {});
     return { status: "failed", error: (error as Error).message };
@@ -173,76 +187,55 @@ export async function fillPracticeQQuestionPages(
   page: Page,
   fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
   licenseBase64: string | null = null,
-) {
-  let consentFilledOnce = false;
-
+): Promise<FillOutcome> {
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
+    await waitForPracticeQPageText(page);
     const bodyText = await page.locator("body").innerText().catch(() => "");
-    const url = page.url();
+    if (await resolvePracticeQResumePrompt(page, bodyText)) continue;
+    if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
-    // Consent page — fill text fields, then stop for patient signature
-    if (shouldStopForPatientConsent(bodyText) || url.includes("/consent/")) {
-      if (!consentFilledOnce) {
-        consentFilledOnce = true;
-        await fillConsentPageFields(page, fillPlan);
-      }
-      return; // stop — patient must sign manually via remote session
-    }
+    const filled = await withPracticeQTimeout(
+      fillVisibleFields(page, fillPlan),
+      12000,
+      "PracticeQ text field fill step timed out."
+    );
+    await withPracticeQTimeout(
+      clickMatchingChoices(page, fillPlan),
+      12000,
+      "PracticeQ choice selection step timed out."
+    );
+    await withPracticeQTimeout(
+      completeVisibleConsentDocument(page, fillPlan),
+      20000,
+      "PracticeQ consent signing step timed out."
+    );
 
-    const filled = await fillVisibleFields(page, fillPlan);
-    await clickMatchingChoices(page, fillPlan);
-
-    // Upload identity document if there is a file input on this page
+    // Upload identity document (question 10 file input) if available and not yet uploaded
     if (licenseBase64) {
-      await uploadIdentityDocument(page, licenseBase64);
+      await uploadIdentityDocument(page, licenseBase64).catch(() => {});
     }
+
+    await savePracticeQPage(page);
+    await waitForPracticeQSaved(page);
+    await assertVisiblePracticeQFieldsFilled(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
-    if (!moved && filled === 0) return;
+    if (moved) await waitForPracticeQPageText(page);
+    if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
+  return { stoppedForPatientConsent: false };
 }
-
-// ── Consent page — fill text/checkbox fields, leave signature for patient ──
-
-async function fillConsentPageFields(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
-  const patient = fillPlan.find((f) => f.prompt === "Full Name");
-  const dob     = fillPlan.find((f) => f.prompt === "Date of Birth");
-  const fullName = patient?.value ?? "";
-  const dobVal   = dob?.value ?? "";
-  const initials = fullName.split(" ").map((w) => w[0]?.toUpperCase() ?? "").join("");
-
-  // Patient Name field (#jvla)
-  await page.locator("#jvla").fill(fullName).catch(() => {});
-  // Date of Birth field (#1y3x)
-  await page.locator("#1y3x").fill(dobVal).catch(() => {});
-  // Telehealth consent checkbox
-  const cb = page.locator('input[name="check_jm9u"]');
-  if (await cb.isVisible({ timeout: 1500 }).catch(() => false) && !(await cb.isChecked())) {
-    await cb.check();
-  }
-  // Initials fields (two inputs with placeholder="Initials")
-  const initialInputs = page.locator('input[placeholder="Initials"]');
-  const initialCount = await initialInputs.count();
-  for (let i = 0; i < initialCount; i++) {
-    await initialInputs.nth(i).fill(initials).catch(() => {});
-  }
-  // Print name / signature text field (#name)
-  await page.locator("#name").fill(fullName).catch(() => {});
-
-  // Also run generic fill for any other text fields on the consent page
-  await fillVisibleFields(page, fillPlan);
-}
-
-// ── Identity document upload (question 10 file input) ────────────────────
 
 async function uploadIdentityDocument(page: Page, base64Data: string) {
   const fileInput = page.locator('input[type="file"]').first();
-  if (!(await fileInput.isVisible({ timeout: 1500 }).catch(() => false))) return;
+  if (!(await fileInput.isVisible({ timeout: 1000 }).catch(() => false))) return;
+  // Skip if already has a file
+  const currentValue = await fileInput.inputValue().catch(() => "");
+  if (currentValue) return;
 
   let tmpPath: string | null = null;
   try {
-    // Decode base64 → temp JPEG file
     const buffer = Buffer.from(
       base64Data.replace(/^data:image\/[a-z]+;base64,/, ""),
       "base64",
@@ -250,11 +243,84 @@ async function uploadIdentityDocument(page: Page, base64Data: string) {
     tmpPath = path.join(os.tmpdir(), `pq-id-${Date.now()}.jpg`);
     fs.writeFileSync(tmpPath, buffer);
     await fileInput.setInputFiles(tmpPath);
-  } catch {
-    // Non-fatal — leave upload for manual completion
   } finally {
     if (tmpPath) fs.unlink(tmpPath, () => {});
   }
+}
+
+async function withPracticeQTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+export async function submitPracticeQInBackground(
+  page: Page,
+  fillOutcome: FillOutcome,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan> = []
+): Promise<WorkerResult> {
+  await waitForPracticeQPageText(page);
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQResumePrompt(bodyText)) {
+    return {
+      status: "failed",
+      error: "PracticeQ is asking whether to resume an old partial intake or start a new intake. The worker could not get past that prompt.",
+    };
+  }
+  const hasUnhandledConsent = requiresUnhandledPatientConsent(bodyText, fillPlan);
+  if (fillOutcome.stoppedForPatientConsent || hasUnhandledConsent) {
+    return {
+      status: "failed",
+      error:
+        "PracticeQ form requires patient consent/signature. The background worker will not sign as the patient; remove the PracticeQ signature step or use Mission's signed consent/PDF as the consent source.",
+    };
+  }
+
+  if (looksSubmitted(bodyText)) {
+    return {
+      status: "completed",
+      handoffUrl: undefined,
+      intakeId: extractPracticeQIntakeId(page.url()),
+    };
+  }
+
+  const submitted = await clickFinalSubmit(page);
+  if (!submitted) {
+    return {
+      status: "failed",
+      error: `PracticeQ submit button was not found after filling the intake. Visible page text: ${bodyText.slice(0, 600)}`,
+    };
+  }
+
+  await page.waitForTimeout(1500);
+  const postSubmitText = await page.locator("body").innerText().catch(() => "");
+  if (looksSubmitted(postSubmitText)) {
+    return {
+      status: "completed",
+      handoffUrl: undefined,
+      intakeId: extractPracticeQIntakeId(page.url()),
+    };
+  }
+  if (/required|invalid|please complete|missing/i.test(postSubmitText)) {
+    return {
+      status: "failed",
+      error: `PracticeQ rejected the background submit: ${postSubmitText.slice(0, 500)}`,
+    };
+  }
+
+  return {
+    status: "completed",
+    handoffUrl: undefined,
+    intakeId: extractPracticeQIntakeId(page.url()),
+  };
 }
 
 async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<number> {
@@ -263,46 +329,820 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
   let filled = 0;
 
   for (let i = 0; i < count; i += 1) {
-    const field = fields.nth(i);
-    if (!(await field.isVisible().catch(() => false))) continue;
-    const current = await field.inputValue().catch(() => "");
-    if (current.trim()) continue;
-    const prompt = await field.evaluate((el) => {
-      const label = el.closest("label")?.textContent ?? "";
-      const parent = el.parentElement?.textContent ?? "";
-      const grand = el.parentElement?.parentElement?.textContent ?? "";
-      return [label, parent, grand, el.getAttribute("placeholder") ?? "", el.getAttribute("aria-label") ?? ""].join(" ");
-    });
-    const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
-    if (!answer) continue;
-    await field.fill(answer).catch(() => {});
-    filled += 1;
+    filled += await withPracticeQTimeout(
+      fillPracticeQField(fields.nth(i), fillPlan),
+      1800,
+      "PracticeQ skipped a slow field"
+    ).catch(() => 0);
   }
 
   return filled;
 }
 
-async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
-  const labels = page.locator("label");
-  const count = await labels.count();
+async function fillPracticeQField(
+  field: ReturnType<Page["locator"]>,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>
+): Promise<number> {
+  await field.scrollIntoViewIfNeeded({ timeout: 500 }).catch(() => {});
+  if (!(await field.isVisible({ timeout: 500 }).catch(() => false))) return 0;
+  if (!(await isPracticeQDataEntryField(field))) return 0;
+  const current = await field.inputValue({ timeout: 500 }).catch(() => "");
+  if (current.trim()) return 0;
+  const prompt = await getPracticeQFieldPrompt(field);
+  const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
+  if (!answer) return 0;
+  const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
+  await enterFieldValue(field, normalizedAnswer, prompt);
+  return 1;
+}
+
+async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  const fields = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const count = await fields.count();
+  const missing: string[] = [];
+
   for (let i = 0; i < count; i += 1) {
-    const label = labels.nth(i);
-    const text = (await label.innerText().catch(() => "")).trim();
-    if (!text || shouldStopForPatientConsent(text)) continue;
-    const answer = findPracticeQAnswerForPrompt(text, fillPlan);
-    if (!answer) continue;
-    if (answer.toLowerCase() === text.toLowerCase() || text.toLowerCase().includes(answer.toLowerCase())) {
-      await label.click().catch(() => {});
+    const field = fields.nth(i);
+    if (!(await field.isVisible().catch(() => false))) continue;
+    if (!(await isPracticeQDataEntryField(field))) continue;
+    const prompt = await getPracticeQFieldPrompt(field);
+    const expected = findPracticeQAnswerForPrompt(prompt, fillPlan);
+    if (!expected) continue;
+    const actual = await getPracticeQFieldValue(field);
+    if (!fieldValueMatches(actual, expected, prompt)) {
+      missing.push(`${shortenPracticeQPrompt(prompt)} expected "${expected}" but saw "${actual}"`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`PracticeQ did not keep the expected answer: ${missing.slice(0, 4).join("; ")}`);
+  }
+}
+
+async function isPracticeQDataEntryField(field: ReturnType<Page["locator"]>): Promise<boolean> {
+  return field.evaluate((el) => {
+    const ngModel = el.getAttribute("ng-model") ?? "";
+    if (/signature\.Typed|FurtherExplanation/i.test(ngModel)) return false;
+    if ((el as HTMLTextAreaElement).value?.includes("This is a form preview only")) return false;
+    const styleText = (el as HTMLTextAreaElement).value ?? "";
+    if (/body\s*\{\s*background|Intake Form Mission WLW/i.test(styleText)) return false;
+    const text = [
+      el.closest("label")?.textContent ?? "",
+      el.parentElement?.textContent ?? "",
+      el.parentElement?.parentElement?.textContent ?? "",
+    ].join(" ");
+    if (/draw instead|type instead|submit signature|signature captured/i.test(text)) return false;
+    return true;
+  }).catch(() => false);
+}
+
+async function getPracticeQFieldPrompt(field: ReturnType<Page["locator"]>): Promise<string> {
+  return field.evaluate((el) => {
+    let current: Element | null = el;
+    for (let depth = 0; current && depth < 5; depth += 1) {
+      const label = current.querySelector?.("label")?.textContent?.trim();
+      if (label) {
+        return [
+          label,
+          el.getAttribute("placeholder") ?? "",
+          el.getAttribute("aria-label") ?? "",
+        ].join(" ");
+      }
+      current = current.parentElement;
+    }
+    const label = el.closest("label")?.textContent ?? "";
+    const parent = el.parentElement?.textContent ?? "";
+    const grand = el.parentElement?.parentElement?.textContent ?? "";
+    const questionBlock = el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "";
+    return [
+      label,
+      parent,
+      grand,
+      questionBlock,
+      el.getAttribute("placeholder") ?? "",
+      el.getAttribute("aria-label") ?? "",
+    ].join(" ");
+  });
+}
+
+async function getPracticeQFieldValue(field: ReturnType<Page["locator"]>): Promise<string> {
+  const visibleValue = await field.inputValue().catch(() => "");
+  if (visibleValue.trim()) return visibleValue;
+  return field.evaluate((el) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const prompt = [
+      (() => {
+        let current: Element | null = el;
+        for (let depth = 0; current && depth < 5; depth += 1) {
+          const label = current.querySelector?.("label")?.textContent?.trim();
+          if (label) return label;
+          current = current.parentElement;
+        }
+        return "";
+      })(),
+      el.closest("label")?.textContent ?? "",
+      el.parentElement?.textContent ?? "",
+      el.parentElement?.parentElement?.textContent ?? "",
+      el.getAttribute("placeholder") ?? "",
+      el.getAttribute("aria-label") ?? "",
+    ].join(" ");
+    const normalizedPrompt = normalize(prompt);
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return "";
+    for (const question of questions) {
+      const questionText = normalize(question?.Text);
+      if (questionText && (normalizedPrompt.includes(questionText) || questionText.includes(normalizedPrompt))) {
+        const answer = String(question?.Answer ?? "").trim();
+        if (answer) return answer;
+      }
+      if (Array.isArray(question?.QuestionItems)) {
+        for (const item of question.QuestionItems) {
+          const itemText = normalize(item?.Text);
+          if (itemText && (normalizedPrompt.includes(itemText) || itemText.includes(normalizedPrompt))) {
+            const answer = String(item?.Answer ?? "").trim();
+            if (answer) return answer;
+          }
+        }
+      }
+    }
+    return "";
+  }).catch(() => "");
+}
+
+async function waitForPracticeQSaved(page: Page) {
+  await page.keyboard.press("Tab").catch(() => {});
+  await page.waitForTimeout(800);
+  await page
+    .waitForFunction(() => !/saving/i.test(document.body?.innerText ?? ""), null, { timeout: 8000 })
+    .catch(() => {});
+  const saved = page.getByText(/saved/i).first();
+  if (await saved.isVisible().catch(() => false)) await page.waitForTimeout(500);
+}
+
+async function savePracticeQPage(page: Page) {
+  const save = page
+    .getByRole("button", { name: /^save$/i })
+    .or(page.locator("button, input[type='button']").filter({ hasText: /^save$/i }))
+    .first();
+  if (await save.isVisible().catch(() => false)) {
+    const disabled = await save.isDisabled().catch(() => false);
+    const text = await save.innerText().catch(() => "");
+    if (!disabled && /^save$/i.test(text.trim())) {
+      await save.click({ timeout: 8000 }).catch(async () => {
+        await save.click({ force: true, timeout: 5000 }).catch(() => {});
+      });
     }
   }
 }
 
+async function resolvePracticeQResumePrompt(page: Page, bodyText?: string): Promise<boolean> {
+  const text = bodyText ?? await page.locator("body").innerText().catch(() => "");
+  if (!isPracticeQResumePrompt(text)) return false;
+
+  const clicked = await clickPracticeQControlByText(page, /start\s+new\s+intake\s+form/i);
+
+  if (!clicked) {
+    const startNew = page
+      .getByRole("button", { name: /start\s+new\s+intake\s+form/i })
+      .or(page.getByRole("link", { name: /start\s+new\s+intake\s+form/i }))
+      .or(page.locator("button, a, input[type='button'], input[type='submit'], .btn").filter({ hasText: /start\s+new\s+intake\s+form/i }))
+      .first();
+
+    if (!(await startNew.isVisible().catch(() => false))) {
+      throw new Error("PracticeQ resume prompt appeared, but the Start New Intake Form control was not visible.");
+    }
+
+    await startNew.scrollIntoViewIfNeeded().catch(() => {});
+    await startNew.click();
+  }
+
+  await page.waitForTimeout(2000);
+  const afterClickText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQResumePrompt(afterClickText)) {
+    throw new Error("PracticeQ resume prompt stayed open after clicking Start New Intake Form.");
+  }
+  return true;
+}
+
+function isPracticeQResumePrompt(text: string): boolean {
+  return /didn['’]?t submit your last form|resume existing form|start new intake form/i.test(text);
+}
+
+function fieldValueMatches(actual: string, expected: string, prompt: string): boolean {
+  const normalizedActual = normalizePracticeQText(actual);
+  const normalizedExpected = normalizePracticeQText(expected);
+  if (!normalizedExpected) return true;
+  if (normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected)) return true;
+
+  if (/phone/i.test(prompt)) {
+    return actual.replace(/\D/g, "") === expected.replace(/\D/g, "");
+  }
+  if (/date of birth|dob/i.test(prompt)) {
+    return normalizeDateLike(actual) === normalizeDateLike(expected);
+  }
+  return false;
+}
+
+function normalizePracticeQText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeDateLike(value: string) {
+  const parts = value.match(/(\d{1,2})\D+(\d{1,2})\D+(\d{4})/);
+  if (!parts) return normalizePracticeQText(value);
+  return `${Number(parts[1])}/${Number(parts[2])}/${parts[3]}`;
+}
+
+function shortenPracticeQPrompt(prompt: string) {
+  return prompt.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  const signedName = findPracticeQAnswerForPrompt("Print your name", fillPlan)
+    ?? findPracticeQAnswerForPrompt("Signature", fillPlan)
+    ?? findPracticeQAnswerForPrompt("Patient Name", fillPlan);
+  if (!signedName) return;
+
+  const readAndSign = page
+    .getByRole("button", { name: /read\s*&?\s*sign/i })
+    .or(page.getByRole("link", { name: /read\s*&?\s*sign/i }))
+    .or(page.getByText(/read\s*&?\s*sign/i))
+    .first();
+  if (await readAndSign.isVisible().catch(() => false)) {
+    await readAndSign.scrollIntoViewIfNeeded().catch(() => {});
+    await readAndSign.click({ timeout: 8000 }).catch(async () => {
+      await readAndSign.click({ force: true, timeout: 5000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /read\s*&?\s*sign/i);
+      });
+    });
+    await page.waitForTimeout(1000);
+  } else {
+    await clickPracticeQControlByText(page, /read\s*&?\s*sign/i);
+    await page.waitForTimeout(1000);
+  }
+
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (!/please read and sign|submit signature|consent for medical treatment/i.test(bodyText)) return;
+
+  await page.getByRole("link", { name: /type it/i }).first().click({ timeout: 3000 }).catch(async () => {
+    await clickPracticeQControlByText(page, /type\s+it/i);
+  });
+  await fillVisibleConsentFields(page, fillPlan, signedName);
+  await fillVisibleFields(page, fillPlan);
+
+  const uncheckedBoxes = page.locator("input[type='checkbox']:not(:checked)");
+  const checkboxCount = await uncheckedBoxes.count();
+  for (let i = 0; i < checkboxCount; i += 1) {
+    const checkbox = uncheckedBoxes.nth(i);
+    await checkbox.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+    await checkPracticeQCheckbox(checkbox);
+  }
+
+  const submitSignature = page.getByRole("button", { name: /submit signature|click to sign/i }).first();
+  if (await submitSignature.isVisible().catch(() => false)) {
+    await submitSignature.scrollIntoViewIfNeeded().catch(() => {});
+    const canvas = page.locator("canvas.pad, canvas").first();
+    if (await canvas.isVisible().catch(() => false)) {
+      const box = await canvas.boundingBox().catch(() => null);
+      if (box) {
+        await page.mouse.move(box.x + 30, box.y + 55);
+        await page.mouse.down();
+        await page.mouse.move(box.x + 105, box.y + 35);
+        await page.mouse.move(box.x + 180, box.y + 60);
+        await page.mouse.up();
+      }
+    }
+    await submitSignature.click({ timeout: 8000 }).catch(async () => {
+      await submitSignature.click({ force: true, timeout: 5000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /submit\s+signature|click\s+to\s+sign/i);
+      });
+    });
+    await page.waitForTimeout(2000);
+  } else {
+    await clickPracticeQControlByText(page, /submit\s+signature|click\s+to\s+sign/i);
+    await page.waitForTimeout(2000);
+  }
+
+  const back = page.getByText(/back to questionnaire/i).first();
+  if (await back.isVisible().catch(() => false)) {
+    await back.click({ timeout: 5000 }).catch(async () => {
+      await back.click({ force: true, timeout: 3000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /back\s+to\s+questionnaire/i);
+      });
+    });
+    await page.waitForTimeout(1000);
+  } else {
+    await clickPracticeQControlByText(page, /back\s+to\s+questionnaire/i);
+    await page.waitForTimeout(1000);
+  }
+}
+
+async function fillVisibleConsentFields(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
+  signedName: string
+) {
+  const dob = findPracticeQAnswerForPrompt("Date of Birth", fillPlan) ?? "";
+  const initials = findPracticeQAnswerForPrompt("Initials", fillPlan) ?? signedName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+  const inputs = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const count = await inputs.count();
+  for (let i = 0; i < count; i += 1) {
+    const input = inputs.nth(i);
+    if (!(await input.isVisible().catch(() => false))) continue;
+    const current = await input.inputValue().catch(() => "");
+    const prompt = await getPracticeQFieldPrompt(input);
+    const placeholder = await input.getAttribute("placeholder").catch(() => "");
+    if (/initials/i.test(`${prompt} ${placeholder}`) && !current.trim()) {
+      await enterFieldValue(input, initials, "Initials");
+      continue;
+    }
+    if (/date of birth|dob|m\/d\/yyyy/i.test(`${prompt} ${placeholder}`) && !current.trim()) {
+      await enterFieldValue(input, dob, "Date of Birth");
+      continue;
+    }
+    if (/patient name|print your name|signature/i.test(prompt) && !current.trim()) {
+      await enterFieldValue(input, signedName, "Print your name");
+    }
+  }
+}
+
+async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string, prompt = "") {
+  await field.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+  await field.fill(value, { timeout: 5000 }).catch(async () => {
+    await field.click({ timeout: 3000 }).catch(() => {});
+    await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A", { timeout: 3000 }).catch(() => {});
+    await field.type(value, { delay: 5, timeout: 5000 }).catch(() => {});
+  });
+  await field.press("Tab", { timeout: 2000 }).catch(() => {});
+}
+
+async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
+  await checkbox.evaluate((el) => {
+    const angular = (window as any).angular;
+    const scope = angular?.element(el).scope?.();
+    const model = scope?.field ?? scope?.i ?? scope?.option;
+    if (model && Object.prototype.hasOwnProperty.call(model, "Answer")) model.Answer = true;
+    if (model && Object.prototype.hasOwnProperty.call(model, "Checked")) model.Checked = true;
+    scope?.save?.();
+    scope?.changed?.();
+    scope?.$applyAsync?.();
+  }).catch(() => {});
+  await checkbox.check({ timeout: 5000 }).catch(async () => {
+    await checkbox.evaluate((el) => {
+      const target = el.parentElement?.querySelector("ins.iCheck-helper")
+        ?? el.parentElement
+        ?? el;
+      (target as HTMLElement).click();
+      const angular = (window as any).angular;
+      const scope = angular?.element(el).scope?.();
+      scope?.save?.();
+      scope?.changed?.();
+      scope?.$applyAsync?.();
+    }).catch(async () => {
+      await checkbox.click({ force: true, timeout: 3000 }).catch(() => {});
+    });
+  });
+}
+
+async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  for (const item of fillPlan) {
+    const values = item.value.split(",").map((value) => value.trim()).filter(Boolean);
+    for (const value of values) {
+      if (/^(none|none of the above|none apply to me)$/i.test(value)) continue;
+      const exactChoice = page.getByText(new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i")).first();
+      if (await exactChoice.isVisible().catch(() => false)) {
+        await exactChoice.click({ timeout: 2000 }).catch(async () => {
+          await exactChoice.click({ force: true, timeout: 1000 }).catch(() => {});
+        });
+      }
+    }
+  }
+
+  const labels = page.locator("label");
+  const count = await labels.count();
+  for (let i = 0; i < count; i += 1) {
+    const label = labels.nth(i);
+    await label.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+    if (!(await label.isVisible().catch(() => false))) continue;
+    const text = (await label.innerText().catch(() => "")).trim();
+    if (!text) continue;
+    const context = await label.evaluate((el) => {
+      const chunks: string[] = [];
+      let current: Element | null = el;
+      for (let depth = 0; current && depth < 6; depth += 1) {
+        chunks.push(current.textContent ?? "");
+        current = current.parentElement;
+      }
+      return chunks.join(" ");
+    }).catch(() => text);
+    if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
+      await setPracticeQAngularChoice(page, context, text);
+      const childInput = label.locator("input[type='checkbox'], input[type='radio']").first();
+      if (await childInput.isVisible().catch(() => false)) {
+        await clickPracticeQChoiceInput(childInput);
+        continue;
+      }
+      const followingInput = label.locator("xpath=following::input[@type='checkbox' or @type='radio'][1]").first();
+      if (await followingInput.isVisible().catch(() => false)) {
+        await clickPracticeQChoiceInput(followingInput);
+        continue;
+      }
+      await label.click().catch(() => {});
+    }
+  }
+
+  const inputs = page.locator("input[type='checkbox'], input[type='radio']");
+  const inputCount = await inputs.count();
+  for (let i = 0; i < inputCount; i += 1) {
+    const input = inputs.nth(i);
+    if (!(await input.isVisible().catch(() => false))) continue;
+    if (await input.isChecked().catch(() => false)) continue;
+    const choice = await input.evaluate((el) => {
+      const label = el.closest("label")?.textContent
+        ?? el.parentElement?.textContent
+        ?? "";
+      const context = [
+        el.closest("label")?.textContent ?? "",
+        el.parentElement?.textContent ?? "",
+        el.parentElement?.parentElement?.textContent ?? "",
+        el.closest("[ng-repeat], .question, .panel, fieldset")?.textContent ?? "",
+      ].join(" ");
+      return {
+        label: label.replace(/\s+/g, " ").trim(),
+        context: context.replace(/\s+/g, " ").trim(),
+      };
+    }).catch(() => ({ label: "", context: "" }));
+    if (!choice.label || !findPracticeQChoiceForLabel(choice.label, choice.context, fillPlan)) continue;
+    await setPracticeQAngularChoice(page, choice.context, choice.label);
+    await clickPracticeQChoiceInput(input);
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {
+  await input.evaluate((el) => {
+    const input = el as HTMLInputElement;
+    input.checked = true;
+    input.setAttribute("checked", "checked");
+    const angular = (window as any).angular;
+    const scope = angular?.element(el).scope?.();
+    if (scope?.question) {
+      scope.question.Answer = input.value || scope.question.Answer || true;
+      scope.changed?.(scope.question);
+      scope.textChanged?.();
+      scope.$applyAsync?.();
+    }
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }).catch(() => {});
+  await input.click({ timeout: 5000 }).catch(async () => {
+    await input.evaluate((el) => {
+      const target = el.parentElement?.querySelector("ins.iCheck-helper")
+        ?? el.parentElement
+        ?? el;
+      (target as HTMLElement).click();
+    }).catch(async () => {
+      await input.click({ force: true, timeout: 3000 }).catch(() => {});
+    });
+  });
+}
+
+async function setPracticeQAngularChoice(page: Page, questionContext: string, labelText: string) {
+  await page.evaluate(({ questionContext, labelText }) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+    const normalizedContext = normalize(questionContext);
+    const normalizedLabel = normalize(labelText);
+    let changed = false;
+    for (const question of questions) {
+      const questionText = normalize(question?.Text);
+      if (questionText && !(normalizedContext.includes(questionText) || questionText.includes(normalizedContext))) continue;
+      if (Array.isArray(question?.QuestionOptions)) {
+        for (const option of question.QuestionOptions) {
+          if (normalize(option?.Text) === normalizedLabel) {
+            option.Checked = true;
+            option.Answer = option.Text;
+            question.Answer = option.Text;
+            intakeScope?.onblur?.(question, question.Answer, option);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      intakeScope?.changed?.();
+      intakeScope?.textChanged?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, { questionContext, labelText }).catch(() => {});
+}
+
 async function clickContinue(page: Page): Promise<boolean> {
   const button = page
+    .getByRole("button", { name: /next\s+page/i })
+    .or(page.getByText(/next\s+page/i))
+    .or(page.locator("button, input[type='button'], input[type='submit'], a").filter({ hasText: /next\s+page/i }))
+    .or(page.locator("input[value*='Next Page'], input[value*='next page']"))
+    .or(page
     .getByRole("button", { name: /continue|next/i })
     .or(page.locator("button, input[type='button'], input[type='submit']").filter({ hasText: /continue|next/i }))
+    )
     .first();
-  if (!(await button.isVisible().catch(() => false))) return false;
-  await button.click();
+  if (!(await button.isVisible().catch(() => false))) {
+    return clickPracticeQControlByText(page, /next\s+page|continue|next/i);
+  }
+  await button.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+  await button.click({ timeout: 8000 }).catch(async () => {
+    await button.click({ force: true, timeout: 3000 }).catch(async () => {
+      await clickPracticeQControlByText(page, /next\s+page|continue|next/i);
+    });
+  });
   return true;
+}
+
+async function clickFinalSubmit(page: Page): Promise<boolean> {
+  await waitForPracticeQReady(page);
+  const direct = page
+    .getByRole("button", { name: /submit(?: form)?|finish|done|complete/i })
+    .or(page.locator("input[type='submit'], input[type='button'], button").filter({ hasText: /submit(?: form)?|finish|done|complete/i }))
+    .or(page.locator("input[value*='Submit'], input[value*='submit']"))
+    .first();
+  if (await direct.isVisible().catch(() => false)) {
+    await direct.scrollIntoViewIfNeeded().catch(() => {});
+    await direct.click({ timeout: 8000 }).catch(async () => {
+      await waitForPracticeQReady(page);
+      await direct.click({ force: true, timeout: 5000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
+      });
+    });
+    return true;
+  }
+
+  const candidates = page.locator("button, input[type='button'], input[type='submit'], a");
+  const count = await candidates.count();
+  for (let i = 0; i < count; i += 1) {
+    const candidate = candidates.nth(i);
+    if (!(await candidate.isVisible().catch(() => false))) continue;
+    const label = await candidate.evaluate((el) =>
+      [
+        el.textContent,
+        el.getAttribute("value"),
+        el.getAttribute("aria-label"),
+        el.getAttribute("title"),
+      ].filter(Boolean).join(" ")
+    ).catch(() => "");
+    if (!/submit|finish|done|complete/i.test(label)) continue;
+    await candidate.click();
+    return true;
+  }
+
+  const clicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
+  if (clicked) return true;
+
+  return false;
+}
+
+async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise<boolean> {
+  const clicked = await page.evaluate(({ source, flags }) => {
+    const matcher = new RegExp(source, flags.includes("i") ? flags : `${flags}i`);
+    const isVisible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const textFor = (el: Element) => [
+      el.textContent,
+      el.getAttribute("value"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const selector = [
+      "button",
+      "a",
+      "input[type='button']",
+      "input[type='submit']",
+      "[role='button']",
+      ".btn",
+      ".btn-primary",
+      "span",
+      "div",
+    ].join(",");
+    const candidates = Array.from(document.querySelectorAll(selector));
+    const match = candidates.find((el) => isVisible(el) && matcher.test(textFor(el)));
+    const target = match?.closest("button,a,input[type='button'],input[type='submit'],[role='button'],.btn,.btn-primary") ?? match;
+    if (!target) return false;
+    const node = target as HTMLElement;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    node.click();
+    return true;
+  }, { source: pattern.source, flags: pattern.flags }).catch(() => false);
+  if (clicked) await page.waitForTimeout(1000);
+  return clicked;
+}
+
+async function waitForPracticeQReady(page: Page) {
+  await page
+    .locator(".spinner.full-height-width, spinner .spinner")
+    .first()
+    .waitFor({ state: "hidden", timeout: 10000 })
+    .catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+async function waitForPracticeQPageText(page: Page) {
+  await page
+    .waitForFunction(() => (document.body?.innerText ?? "").trim().length > 20, null, { timeout: 12000 })
+    .catch(() => {});
+}
+
+async function verifyPracticeQSavedSubmission(
+  result: WorkerResult,
+  context: {
+    patient: { firstName: string; lastName: string; email: string };
+    answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>;
+    questions: Awaited<ReturnType<typeof dbServer.questionDb.getAll>>;
+    startedAt: string;
+  }
+): Promise<WorkerResult> {
+  if (result.status === "failed") return result;
+
+  const matchedIntake = await findRecentPracticeQIntake(context).catch(() => null);
+  if (!matchedIntake) {
+    return {
+      ...result,
+      status: "failed",
+      error: "PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.",
+    };
+  }
+
+  let intake = await getIntakeById(matchedIntake.id).catch(() => null);
+  if (!intake) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ intake ${matchedIntake.id} was found in summary but could not be loaded for verification.`,
+    };
+  }
+
+  const beforeStats = countPracticeQAnswers(intake);
+  if (beforeStats.answered < expectedPracticeQAnswerCount(context.answers)) {
+    intake = await populateAndUpdatePracticeQIntake(intake, {
+      patient: context.patient as any,
+      answers: context.answers,
+      questions: context.questions,
+    }).catch(() => intake);
+  }
+
+  const refreshed = await getIntakeById(matchedIntake.id).catch(() => intake);
+  const verifiedIntake = refreshed ?? intake;
+  const answerStats = countPracticeQAnswers(verifiedIntake);
+  const consentSigned = hasSignedConsent(verifiedIntake);
+  const status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
+
+  if (!/completed/i.test(status) || !consentSigned) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ intake ${matchedIntake.id} is ${status || "not completed"}; consent signed=${consentSigned}; answers saved=${answerStats.answered}/${answerStats.total}.`,
+    };
+  }
+
+  if (answerStats.answered < expectedPracticeQAnswerCount(context.answers)) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ completed intake ${matchedIntake.id}, but only ${answerStats.answered}/${answerStats.total} answers were saved.`,
+    };
+  }
+
+  return { ...result, status: "completed", intakeId: matchedIntake.id };
+}
+
+async function findRecentPracticeQIntake(context: {
+  patient: { firstName: string; lastName: string; email: string };
+  startedAt: string;
+}) {
+  const startDate = new Date(context.startedAt);
+  startDate.setUTCDate(startDate.getUTCDate() - 1);
+  const feed = await getIntakeSummaryFeed({
+    client: context.patient.email,
+    startDate: startDate.toISOString().slice(0, 10),
+  });
+  const patientName = normalizePracticeQLookup(`${context.patient.firstName} ${context.patient.lastName}`);
+  const patientEmail = context.patient.email.toLowerCase();
+  return feed.all.find((form) =>
+    normalizePracticeQLookup(form.clientName ?? "") === patientName ||
+    String(form.clientEmail ?? "").toLowerCase() === patientEmail
+  ) ?? null;
+}
+
+function countPracticeQAnswers(intake: any) {
+  const questions = Array.isArray(intake?.Questions) ? intake.Questions : [];
+  const answered = questions.filter((question: any) => {
+    const answer = question?.Answer ?? question?.Value ?? question?.AnswerText ?? question?.Response;
+    if (Array.isArray(answer)) return answer.length > 0;
+    if (String(answer ?? "").trim()) return true;
+    if (Array.isArray(question?.Rows)) {
+      return question.Rows.some((row: any) =>
+        Array.isArray(row?.Answers) && row.Answers.some((value: unknown) => String(value ?? "").trim())
+      );
+    }
+    return false;
+  }).length;
+  return { total: questions.length, answered };
+}
+
+function expectedPracticeQAnswerCount(answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>) {
+  const clinical = answers.filter((answer) =>
+    answer.answer.trim() &&
+    !/^(none|none of the above|none apply to me)$/i.test(answer.answer.trim())
+  ).length;
+  return Math.max(8, clinical + 6);
+}
+
+function hasSignedConsent(intake: any) {
+  const forms = Array.isArray(intake?.ConsentForms) ? intake.ConsentForms : [];
+  if (!forms.length) return true;
+  return forms.every((form: any) => form?.Signed === true || form?.DateSubmitted);
+}
+
+function normalizePracticeQLookup(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractPracticeQIntakeId(url: string): string | undefined {
+  const match = url.match(/\/(?:history|intake|forms?)\/([^/?#]+)/i) ?? url.match(/[?&](?:intakeId|id)=([^&#]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+function looksSubmitted(text: string): boolean {
+  return /thank you|submitted|received your form|form is complete|successfully submitted/i.test(text);
 }

@@ -5,9 +5,9 @@
  * Sends both to Claude vision to determine if they show the same person.
  *
  * Outcomes:
- *   verified      — clearly the same person
- *   needs_review  — uncertain, route to manual review
- *   rejected      — clearly different people or unusable images
+ *   verified      - clearly the same person
+ *   needs_review  - uncertain, route to manual review
+ *   rejected      - clearly different people or unusable images
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -77,12 +77,12 @@ Analyze:
 2. Skin tone, eye shape, nose, jawline consistency
 3. Any signs of tampering, mismatch, or image quality issues
 
-Respond ONLY with valid JSON — no other text:
+Respond ONLY with valid JSON - no other text:
 {
   "verdict": "verified" | "needs_review" | "rejected",
   "confidence": 0.0 to 1.0,
   "summary": "1-2 sentence explanation",
-  "flags": ["list any concerns — empty array if none"]
+  "flags": ["list any concerns - empty array if none"]
 }
 
 Rules:
@@ -90,7 +90,7 @@ Rules:
 - "needs_review": uncertain match, unclear images, or confidence < 0.80
 - "rejected": clearly different people
 
-Be conservative — if uncertain, use "needs_review" rather than "verified".`,
+Be conservative - if uncertain, use "needs_review" rather than "verified".`,
             },
             {
               type: "image",

@@ -1,6 +1,6 @@
 import * as practiceq from "@/services/practiceq";
 import * as db from "@/lib/db";
-import type { Order, Patient, Product } from "@/types";
+import type { Order, Patient, Product, Question, QuestionnaireAnswer } from "@/types";
 
 const makePatient = (): Patient => ({
   id: "p1",
@@ -50,9 +50,9 @@ describe("practiceq.submitIntakePacket", () => {
     db.orderDb.create(makeOrder());
   });
 
-  it("creates a PracticeQ packet for valid order", () => {
+  it("creates a PracticeQ packet for valid order", async () => {
     const order = db.orderDb.getById("o1")!;
-    const packet = practiceq.submitIntakePacket(order);
+    const packet = await practiceq.submitIntakePacket(order);
 
     expect(packet.orderId).toBe("o1");
     expect(packet.patientId).toBe("p1");
@@ -61,15 +61,15 @@ describe("practiceq.submitIntakePacket", () => {
     expect(packet.packetData.doseSelected).toBe("2.5mg Starter");
   });
 
-  it("saves packet to practiceqDb", () => {
+  it("saves packet to practiceqDb", async () => {
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     expect(db.practiceqDb.getByOrder("o1")).not.toBeNull();
   });
 
-  it("creates an integration log entry", () => {
+  it("creates an integration log entry", async () => {
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     const logs = db.integrationLogDb.getAll();
     const pqLog = logs.find((l) => l.integrationName === "practiceq");
     expect(pqLog).toBeDefined();
@@ -77,14 +77,14 @@ describe("practiceq.submitIntakePacket", () => {
     expect(pqLog?.orderId).toBe("o1");
   });
 
-  it("throws when patient not found", () => {
+  it("throws when patient not found", async () => {
     const badOrder = { ...makeOrder(), patientId: "nonexistent" };
-    expect(() => practiceq.submitIntakePacket(badOrder)).toThrow("Patient or product not found");
+    await expect(practiceq.submitIntakePacket(badOrder)).rejects.toThrow("Patient or product not found");
   });
 
-  it("throws when product not found", () => {
+  it("throws when product not found", async () => {
     const badOrder = { ...makeOrder(), productId: "nonexistent" };
-    expect(() => practiceq.submitIntakePacket(badOrder)).toThrow("Patient or product not found");
+    await expect(practiceq.submitIntakePacket(badOrder)).rejects.toThrow("Patient or product not found");
   });
 });
 
@@ -95,13 +95,90 @@ describe("practiceq.getPacketStatus", () => {
     expect(result.errors).toBeDefined();
   });
 
-  it("returns submitted status after packet creation", () => {
+  it("returns submitted status after packet creation", async () => {
     db.patientDb.create(makePatient());
     db.productDb.create(makeProduct());
     db.orderDb.create(makeOrder());
     const order = db.orderDb.getById("o1")!;
-    practiceq.submitIntakePacket(order);
+    await practiceq.submitIntakePacket(order);
     const result = practiceq.getPacketStatus("o1");
     expect(result.status).toBe("submitted");
+  });
+});
+
+describe("PracticeQ answer mapping contract", () => {
+  const patient = makePatient();
+  const questions: Question[] = [
+    {
+      id: "pq_height",
+      category: "medical",
+      text: "What is your height?",
+      type: "text",
+      required: true,
+      displayOrder: 1,
+    },
+    {
+      id: "local_weight",
+      category: "medical",
+      text: "What is your current body weight?",
+      type: "text",
+      required: true,
+      displayOrder: 2,
+    },
+  ];
+  const answers: QuestionnaireAnswer[] = [
+    {
+      id: "a_height",
+      orderId: "o1",
+      questionId: "pq_height",
+      answer: "5 ft 11 in",
+      createdAt: "2026-05-27T00:00:00.000Z",
+    },
+    {
+      id: "a_weight",
+      orderId: "o1",
+      questionId: "local_weight",
+      answer: "215",
+      createdAt: "2026-05-27T00:00:00.000Z",
+    },
+  ];
+
+  it("builds a structured answer packet with demographics and clinical answers", () => {
+    const rows = practiceq.buildMissionIntakeAnswerRows(patient, answers, questions);
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { question: "First Name", answer: "Bob" },
+        { question: "Last Name", answer: "Jones" },
+        { question: "Phone Number", answer: "5559876543" },
+        { question: "What is your height?", answer: "5 ft 11 in" },
+        { question: "What is your current body weight?", answer: "215" },
+      ])
+    );
+  });
+
+  it("fills PracticeQ intake questions by exact PracticeQ question id and by text fallback", () => {
+    const intakeQuestions = [
+      { Id: "pq_height", Text: "What is your height?", Answer: "" },
+      { Id: "practiceq_weight", Text: "What is your current body weight?", Answer: "" },
+      { Id: "practiceq_first", Text: "First Name", Answer: "" },
+      { Id: "practiceq_email", Text: "Email", Answer: "" },
+    ];
+
+    const changed = practiceq.applyMissionAnswersToPracticeQQuestions(intakeQuestions, {
+      patient,
+      answers,
+      questions,
+    });
+
+    expect(changed).toBe(true);
+    expect(intakeQuestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ Id: "pq_height", Answer: "5 ft 11 in" }),
+        expect.objectContaining({ Id: "practiceq_weight", Answer: "215" }),
+        expect.objectContaining({ Id: "practiceq_first", Answer: "Bob" }),
+        expect.objectContaining({ Id: "practiceq_email", Answer: "bob@example.com" }),
+      ])
+    );
   });
 });

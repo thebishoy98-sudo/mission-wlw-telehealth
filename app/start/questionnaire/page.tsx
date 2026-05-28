@@ -5,20 +5,79 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
+
+const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm bg-white appearance-none";
+const noneOptionLabels = new Set(["None apply to me", "None of the above"]);
+
+function isNoneOption(option: string) {
+  return noneOptionLabels.has(option);
+}
+
+function HeightPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parseFeet = (v: string) => { const m = v.match(/^(\d+)/); return m ? m[1] : "5"; };
+  const parseInches = (v: string) => { const m = v.match(/['\s](\d+)/); return m ? m[1] : "6"; };
+  const [feet, setFeet] = useState(() => parseFeet(value));
+  const [inches, setInches] = useState(() => parseInches(value));
+
+  useEffect(() => { onChange(`${feet}'${inches}"`); }, [feet, inches]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex-1">
+        <label className="block text-xs text-gray-500 mb-1.5">Feet</label>
+        <select value={feet} onChange={(e) => setFeet(e.target.value)} className={selectCls}>
+          {[3,4,5,6,7].map((f) => <option key={f} value={f}>{f} ft</option>)}
+        </select>
+      </div>
+      <div className="flex-1">
+        <label className="block text-xs text-gray-500 mb-1.5">Inches</label>
+        <select value={inches} onChange={(e) => setInches(e.target.value)} className={selectCls}>
+          {Array.from({ length: 12 }, (_, i) => i).map((i) => (
+            <option key={i} value={i}>{i} in</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function WeightInput({ value, onChange, placeholder = "e.g. 185" }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="relative max-w-xs">
+      <input
+        type="number"
+        inputMode="decimal"
+        min={50}
+        max={700}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 pr-14 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+      />
+      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium pointer-events-none">lbs</span>
+    </div>
+  );
+}
 
 export default function Questionnaire() {
   const router = useRouter();
   const [questions, setQuestions] = useState<Types.Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [ineligibleQuestion, setIneligibleQuestion] = useState<Types.Question | null>(null);
+  const [missingRequired, setMissingRequired] = useState<string[]>([]);
 
   useEffect(() => {
-    const all = db.questionDb.getAll();
-    setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
+    fetch("/api/questions", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        const all = (payload.questions ?? []) as Types.Question[];
+        setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
+      })
+      .catch(() => setQuestions([]));
     setAnswers(getIntakeState().questionnaireAnswers || {});
   }, []);
 
@@ -26,15 +85,48 @@ export default function Questionnaire() {
     setAnswers((prev) => ({ ...prev, [id]: val }));
     // Clear ineligibility if answer changes
     setIneligibleQuestion(null);
+    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
+  };
+
+  const toggleMultiAnswer = (id: string, option: string, checked: boolean) => {
+    setAnswers((prev) => {
+      const current = (prev[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
+      if (isNoneOption(option)) {
+        return { ...prev, [id]: checked ? option : "" };
+      }
+      const next = checked
+        ? Array.from(new Set([...current.filter((item) => !isNoneOption(item)), option]))
+        : current.filter((item) => item !== option);
+      return { ...prev, [id]: next.join(", ") };
+    });
+    setIneligibleQuestion(null);
+    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check eligibility: find any disqualifying answer
-    const disqualifier = questions.find(
-      (q) => q.disqualifying && answers[q.id] === q.disqualifying
-    );
+    const missing = questions
+      .filter((question) => question.required && !answers[question.id]?.trim())
+      .map((question) => question.id);
+
+    if (missing.length) {
+      setMissingRequired(missing);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const submittedAnswers = Object.entries(answers).map(([questionId, answer]) => ({
+      id: `answer_${questionId}`,
+      orderId: "pending",
+      questionId,
+      answer,
+      createdAt: new Date().toISOString(),
+    }));
+    const eligibility = checkEligibility(submittedAnswers, questions);
+    const disqualifier = eligibility.disqualifyingQuestion
+      ? questions.find((question) => question.text === eligibility.disqualifyingQuestion)
+      : null;
 
     if (disqualifier) {
       setIneligibleQuestion(disqualifier);
@@ -103,6 +195,11 @@ export default function Questionnaire() {
         <p className="text-gray-500 text-sm mb-8">
           Please answer honestly - this helps our providers determine if treatment is right for you.
         </p>
+        {missingRequired.length > 0 && (
+          <div className="mb-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Please answer every required question before continuing.
+          </div>
+        )}
 
         {questions.length === 0 ? (
           <div className="text-center py-10">
@@ -119,7 +216,13 @@ export default function Questionnaire() {
                   {question.required && <span className="text-red-400 ml-1">*</span>}
                 </label>
 
-                {question.type === "text" && (
+                {question.type === "text" && question.id === "pq_height" && (
+                  <HeightPicker value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
+                )}
+                {question.type === "text" && (question.id === "pq_current_weight" || question.id === "pq_ideal_weight") && (
+                  <WeightInput value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
+                )}
+                {question.type === "text" && question.id !== "pq_height" && question.id !== "pq_current_weight" && question.id !== "pq_ideal_weight" && (
                   <Input value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} />
                 )}
                 {question.type === "textarea" && (
@@ -147,15 +250,25 @@ export default function Questionnaire() {
                   </div>
                 )}
                 {question.type === "checkbox" && (
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all w-fit">
-                    <input
-                      type="checkbox"
-                      checked={answers[question.id] === "yes"}
-                      onChange={(e) => setAnswer(question.id, e.target.checked ? "yes" : "no")}
-                      className="accent-teal-600"
-                    />
-                    <span className="text-sm text-gray-700">Yes</span>
-                  </label>
+                  <div className="space-y-2">
+                    {(question.options?.length ? question.options : ["Yes"]).map((option) => {
+                      const selected = (answers[question.id] || "").split(",").map((item) => item.trim()).includes(option);
+                      return (
+                        <label key={option} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(e) => toggleMultiAnswer(question.id, option, e.target.checked)}
+                            className="accent-teal-600"
+                          />
+                          <span className="text-sm text-gray-700">{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {missingRequired.includes(question.id) && (
+                  <p className="mt-2 text-sm text-red-500">This question is required.</p>
                 )}
               </div>
             ))}

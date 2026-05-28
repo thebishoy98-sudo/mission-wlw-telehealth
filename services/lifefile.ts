@@ -56,12 +56,16 @@ function mapGender(gender: string): "m" | "f" | "u" {
 }
 
 function formatPhone(phone: string): string {
-  // Life File format: (987) 654-3210 — try to reformat if digits-only input
+  // Life File format: (987) 654-3210 - try to reformat if digits-only input
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-  return phone.slice(0, 16);
+  return clip(phone, 16);
+}
+
+function clip(value: unknown, max: number, fallback = ""): string {
+  return String(value ?? fallback).slice(0, max);
 }
 
 function requiredText(value: unknown, label: string): string {
@@ -96,7 +100,7 @@ function formatLifeFileDateOfBirth(value: unknown): string {
 function getLfProductId(product: Types.Product): number {
   const slug = product.slug?.toLowerCase() ?? "";
   if (LF_PRODUCT_MAP[slug]) return LF_PRODUCT_MAP[slug];
-  const name = product.name.toLowerCase();
+  const name = String(product.name ?? "").toLowerCase();
   for (const [key, id] of Object.entries(LF_PRODUCT_MAP)) {
     if (name.includes(key)) return id;
   }
@@ -124,11 +128,13 @@ function isTirzepatide(product: Types.Product): boolean {
 }
 
 function parseWeeklyDoseMg(dose: Types.DoseOption): number {
+  if (typeof dose.weeklyDoseMg === "number" && dose.weeklyDoseMg > 0) return dose.weeklyDoseMg;
   const match = `${dose.strength} ${dose.label}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
   return match ? Number(match[1]) : 0;
 }
 
 function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
+  if (typeof dose.quantity === "number" && dose.quantity > 0) return dose.quantity;
   const weeklyMg = parseWeeklyDoseMg(dose);
   if (!weeklyMg || Number.isNaN(weeklyMg)) return 1;
 
@@ -147,6 +153,8 @@ function buildPharmacyRxs(
   if (isTirzepatide(product)) {
     const weeklyMg = parseWeeklyDoseMg(dose);
     const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
+    const directions = dose.prescriptionLabel || `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`;
+    const daysSupply = (dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4) * 7;
     return [
       {
         rxType: "new",
@@ -156,10 +164,10 @@ function buildPharmacyRxs(
         lfProductID: lfProductId,
         quantity: String(calculateTirzepatideVialQuantity(dose)),
         quantityUnits: "each",
-        directions: `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`,
+        directions,
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "L",
       },
       {
@@ -172,7 +180,7 @@ function buildPharmacyRxs(
         directions: "Use as directed with injection",
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "O",
       },
       {
@@ -185,7 +193,7 @@ function buildPharmacyRxs(
         directions: "Use as directed with injection",
         refills: 0,
         dateWritten,
-        daysSupply: 28,
+        daysSupply,
         scheduleCode: "O",
       },
     ];
@@ -221,7 +229,7 @@ async function lfFetch(
   options: RequestInit = {}
 ): Promise<{ httpOk: boolean; httpStatus: number; body: LfResponse }> {
   const c = cfg();
-  const url = `${c.baseUrl}${path}`;
+  const url = path === "/order" && c.orderEndpoint ? c.orderEndpoint : `${c.baseUrl}${path}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: basicAuth(c.username, c.password),
@@ -292,44 +300,47 @@ export const createPharmacyOrder = async (
     },
     order: {
       general: {
-        memo: `${product.name} ${dose.label}`.slice(0, 120),
-        referenceId: order.id.slice(0, 200),
+        memo: clip(`${product.name ?? ""} ${dose.label ?? ""}`.trim() || product.id, 120),
+        referenceId: clip(order.id, 200),
       },
       prescriber: {
         npi: c.prescriberNpi || "1234567890",
         lastName: c.prescriberLastName || "Provider",
         firstName: c.prescriberFirstName || "Sample",
         phone: c.prescriberPhone || "(555) 000-0001",
+        ...(c.prescriberLicenseState ? { licenseState: c.prescriberLicenseState } : {}),
+        ...(c.prescriberLicenseNumber ? { licenseNumber: c.prescriberLicenseNumber } : {}),
+        ...(c.prescriberEmail ? { email: c.prescriberEmail } : {}),
       },
       practice: {
         id: parseInt(c.practiceId, 10),
       },
       patient: {
-        firstName: patientFirstName.slice(0, 30),
-        lastName: patientLastName.slice(0, 30),
+        firstName: clip(patientFirstName, 30),
+        lastName: clip(patientLastName, 30),
         gender: mapGender(patient.gender),
         dateOfBirth: patientDob,
-        address1: patientAddress.street1.slice(0, 60),
-        ...(patientAddress.street2 ? { address2: patientAddress.street2.slice(0, 60) } : {}),
-        city: patientAddress.city.slice(0, 30),
-        state: patientAddress.state.slice(0, 2),
-        zip: patientAddress.zipCode.slice(0, 10),
-        country: patientAddress.country.slice(0, 2),
+        address1: clip(patientAddress.street1, 60),
+        ...(patientAddress.street2 ? { address2: clip(patientAddress.street2, 60) } : {}),
+        city: clip(patientAddress.city, 30),
+        state: clip(patientAddress.state, 2),
+        zip: clip(patientAddress.zipCode, 10),
+        country: clip(patientAddress.country, 2, "US"),
         phoneMobile: formatPhone(patientPhone),
-        email: patientEmail.slice(0, 100),
+        email: clip(patientEmail, 100),
       },
       shipping: {
         recipientType: "patient" as const,
-        recipientLastName: patientLastName.slice(0, 30),
-        recipientFirstName: patientFirstName.slice(0, 30),
+        recipientLastName: clip(patientLastName, 30),
+        recipientFirstName: clip(patientFirstName, 30),
         recipientPhone: formatPhone(patientPhone),
-        recipientEmail: patientEmail.slice(0, 100),
-        addressLine1: ship.street1.slice(0, 60),
-        ...(ship.street2 ? { addressLine2: ship.street2.slice(0, 60) } : {}),
-        city: ship.city.slice(0, 100),
-        state: ship.state.slice(0, 2),
-        zipCode: ship.zipCode.slice(0, 10),
-        country: (ship.country ?? "US").slice(0, 2),
+        recipientEmail: clip(patientEmail, 100),
+        addressLine1: clip(ship.street1, 60),
+        ...(ship.street2 ? { addressLine2: clip(ship.street2, 60) } : {}),
+        city: clip(ship.city, 100),
+        state: clip(ship.state, 2),
+        zipCode: clip(ship.zipCode, 10),
+        country: clip(ship.country, 2, "US"),
         service: c.shippingServiceId || DEFAULT_SHIPPING_SERVICE_ID,
       },
       billing: {
@@ -554,16 +565,16 @@ export const updateShipping = async (
         body: JSON.stringify({
           shipping: {
             recipientType: "patient",
-            recipientLastName: patient.lastName.slice(0, 30),
-            recipientFirstName: patient.firstName.slice(0, 30),
+            recipientLastName: clip(patient.lastName, 30),
+            recipientFirstName: clip(patient.firstName, 30),
             recipientPhone: formatPhone(patient.phone),
-            recipientEmail: patient.email.slice(0, 100),
-            addressLine1: address.street1.slice(0, 60),
-            ...(address.street2 ? { addressLine2: address.street2.slice(0, 60) } : {}),
-            city: address.city.slice(0, 100),
-            state: address.state.slice(0, 2),
-            zipCode: address.zipCode.slice(0, 10),
-            country: (address.country ?? "US").slice(0, 2),
+            recipientEmail: clip(patient.email, 100),
+            addressLine1: clip(address.street1, 60),
+            ...(address.street2 ? { addressLine2: clip(address.street2, 60) } : {}),
+            city: clip(address.city, 100),
+            state: clip(address.state, 2),
+            zipCode: clip(address.zipCode, 10),
+            country: clip(address.country, 2, "US"),
             service: DEFAULT_SHIPPING_SERVICE_ID,
           },
         }),

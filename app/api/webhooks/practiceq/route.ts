@@ -1,93 +1,63 @@
 /**
- * PracticeQ / IntakeQ Webhook Handler
+ * PracticeQ Webhook Handler
  *
- * IntakeQ fires webhooks using a "Type" field (not "event").
- * We normalise both so legacy internal callers still work.
+ * PracticeQ posts updates when provider reviews change status.
  *
- * Events handled:
- *   IntakeSubmitted      — patient completed the form (e.g. marketing-site embed)
- *   intake.reviewed      — provider viewed the chart
- *   intake.approved      — provider approved → trigger pharmacy
- *   intake.rejected      — provider rejected
+ * Supported events:
+ *   IntakeQ submission webhook payloads:
+ *     { IntakeId, Type: "Intake Submitted", ClientId, ExternalClientId }
+ *   Internal/provider payloads:
+ *     intake.reviewed, intake.approved, intake.rejected
+ *
+ * Setup:
+ *   Add webhook URL in PracticeQ Settings → Integrations → Webhooks:
+ *   https://<your-domain>/api/webhooks/practiceq
+ *   Use a secret query string because IntakeQ form webhooks only configure a URL:
+ *   https://<your-domain>/api/webhooks/practiceq?key=<PRACTICEQ_WEBHOOK_KEY>
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import * as lifefile from "@/services/lifefile";
+import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
+import { validateSharedSecret } from "@/lib/webhook-auth";
 
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get("x-practiceq-key") ?? req.headers.get("x-intakeq-signature");
-  if (process.env.PRACTICEQ_WEBHOOK_KEY && apiKey !== process.env.PRACTICEQ_WEBHOOK_KEY) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Verify API key header
+  const apiKey = req.headers.get("x-practiceq-key") ?? req.nextUrl.searchParams.get("key");
+  const auth = validateSharedSecret({
+    configuredSecret: process.env.PRACTICEQ_WEBHOOK_KEY,
+    providedSecret: apiKey,
+    serviceName: "PracticeQ",
+    envName: "PRACTICEQ_WEBHOOK_KEY",
+  });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const payload = await req.json() as Record<string, unknown>;
-
-  // IntakeQ uses "Type"; our internal events use "event" — accept both.
-  const eventType = (
-    (payload.Type as string) ??
-    (payload.type as string) ??
-    (payload.event as string) ??
-    ""
-  ).toLowerCase();
-
-  // ── IntakeSubmitted: patient completed the form (marketing-site embed or direct link) ──
-  if (eventType === "intakesubmitted" || eventType === "intake.submitted" || eventType === "intakesend") {
-    const intakeId = String(payload.Id ?? payload.id ?? "");
-    const externalClientId = String(payload.ExternalClientId ?? payload.externalClientId ?? "");
-    const clientId = String(payload.ClientId ?? payload.clientId ?? "");
-    const clientEmail = String(payload.ClientEmail ?? payload.clientEmail ?? "");
-
-    // Find our packet: by ExternalClientId (= our orderId) first, then by clientId.
-    const packets = db.practiceqDb.getAll();
-    const packet =
-      (externalClientId ? packets.find((p) => p.orderId === externalClientId) : undefined) ??
-      (clientId ? packets.find((p) => p.id === intakeId) : undefined);
-
-    if (packet) {
-      db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
-      const order = db.orderDb.getById(packet.orderId);
-      if (order) {
-        db.orderDb.update(order.id, { practiceQStatus: "completed" });
-        await dbServer.orderDb.update(order.id, { practiceQStatus: "completed" }).catch(() => {});
-        // Trigger pharmacy if identity is already cleared.
-        if (getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(order.id) === null) {
-          try { await lifefile.createPharmacyOrder(order); } catch {}
-        }
-      }
-      const logEntry = {
-        id: generateId(), timestamp: new Date().toISOString(),
-        integrationName: "practiceq" as const, action: "PracticeQ: patient submitted intake",
-        orderId: packet.orderId, patientId: packet.patientId,
-        status: "success" as const, details: { eventType, intakeId, clientId },
-      };
-      db.integrationLogDb.create(logEntry);
-      dbServer.integrationLogDb.create(logEntry).catch(() => {});
-    } else if (clientEmail) {
-      // Intake submitted but we don't have a matching packet yet (patient hasn't paid).
-      // Store the mapping so submitIntakePacket can find it when they do pay.
-      console.log("PracticeQ IntakeSubmitted: no packet found, intake received early", {
-        intakeId, clientEmail, externalClientId,
-      });
-    }
-
-    return NextResponse.json({ received: true });
+  let payload: any;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  const incomingEvent = payload.event ?? payload.Type;
+  const incomingPacketId = payload.packetId ?? payload.IntakeId;
+  const incomingOrderRef = payload.orderId ?? payload.ExternalClientId;
+  const { notes, rejectionReason } = payload;
 
-  // ── Provider-action events — require an existing packet ──────────────────────
-  const packetId = String(payload.packetId ?? payload.PacketId ?? "");
-  const pqOrderRef = String(payload.orderId ?? payload.OrderId ?? "");
-  const notes = payload.notes as string | undefined;
-  const rejectionReason = payload.rejectionReason as string | undefined;
-
+  // Find the order by PracticeQ packet reference
+  const serverPacket =
+    (incomingPacketId ? await dbServer.practiceqPacketDb.getById(incomingPacketId).catch(() => null) : null) ??
+    (incomingOrderRef ? await dbServer.practiceqPacketDb.getByOrder(incomingOrderRef).catch(() => null) : null);
   const packets = db.practiceqDb.getAll();
-  const packet = packets.find((p) => p.id === packetId || p.orderId === pqOrderRef);
+  const packet = serverPacket ?? packets.find((p) => p.id === incomingPacketId || p.orderId === incomingOrderRef);
   if (!packet) {
-    console.warn("PracticeQ webhook: packet not found", { packetId, pqOrderRef, eventType });
+    console.warn("PracticeQ webhook: packet not found", incomingPacketId);
     return NextResponse.json({ error: "Packet not found" }, { status: 404 });
   }
 
@@ -97,21 +67,35 @@ export async function POST(req: NextRequest) {
     const entry = {
       id: generateId(), timestamp: new Date().toISOString(),
       integrationName: "practiceq" as const, action, orderId, patientId,
-      status: logStatus, details: { eventType, packetId, notes },
+      status: logStatus, details: { event: incomingEvent, packetId: incomingPacketId, notes },
     };
     db.integrationLogDb.create(entry);
     dbServer.integrationLogDb.create(entry).catch(() => {});
   };
 
-  switch (eventType) {
+  const orderForResolver = (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+  const getPatient = async () => resolvePatient({ patientId, practiceqClientId: orderForResolver?.practiceqClientId });
+
+  switch (incomingEvent) {
+    case "Intake Submitted": {
+      db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
+      db.orderDb.update(orderId, { practiceQStatus: "completed" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "completed" }).catch(() => {});
+      log("PracticeQ: intake submitted by patient");
+      break;
+    }
+
     case "intake.reviewed": {
       db.practiceqDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
       log("PracticeQ: provider viewed intake");
       break;
     }
 
     case "intake.approved": {
       db.practiceqDb.update(packet.id, { status: "completed" });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
       const approvalUpdate = {
         status: "sent_to_pharmacy" as const,
         practiceQStatus: "completed" as const,
@@ -129,20 +113,38 @@ export async function POST(req: NextRequest) {
           status: "approved", reviewedAt: new Date().toISOString(),
           reviewedBy: "provider-via-practiceq", notes,
         });
+        await dbServer.providerReviewDb.update(review.id, {
+          status: "approved", reviewedAt: new Date().toISOString(),
+          reviewedBy: "provider-via-practiceq",
+        }).catch(() => {});
       }
 
-      const order = db.orderDb.getById(orderId);
-      if (order && getIdentityGate(order).canDispatch && db.pharmacyOrderDb.getByOrder(orderId) === null) {
-        try { await lifefile.createPharmacyOrder(order); } catch {}
+      // Trigger pharmacy order if not already sent
+      const order =
+        (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+      if (order && getIdentityGate(order).canDispatch) {
+        const existingPharmacyOrder =
+          (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
+          db.pharmacyOrderDb.getByOrder(orderId);
+        if (!existingPharmacyOrder) {
+          try {
+            const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+            await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
+          } catch {}
+        }
       }
 
-      try { spruce.sendMessage(patientId, "approved", { orderId }); } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "approved", { orderId }).catch(() => {});
+      }
       log("PracticeQ: order approved by provider");
       break;
     }
 
     case "intake.rejected": {
       db.practiceqDb.update(packet.id, { status: "error" });
+      await dbServer.practiceqPacketDb.update(packet.id, { status: "error", lastError: rejectionReason, lastSyncAt: new Date().toISOString() }).catch(() => null);
       db.orderDb.update(orderId, { status: "rejected", practiceQStatus: "error", rejectionReason });
       await dbServer.orderDb.update(orderId, { status: "rejected", rejectionReason }).catch(() => {});
 
@@ -152,15 +154,22 @@ export async function POST(req: NextRequest) {
           status: "rejected", reviewedAt: new Date().toISOString(),
           reviewedBy: "provider-via-practiceq", rejectionReason, notes,
         });
+        await dbServer.providerReviewDb.update(review.id, {
+          status: "rejected", reviewedAt: new Date().toISOString(),
+          reviewedBy: "provider-via-practiceq", rejectionReason,
+        }).catch(() => {});
       }
 
-      try { spruce.sendMessage(patientId, "rejected", { orderId }); } catch {}
+      const patient = await getPatient();
+      if (patient) {
+        spruceServer.sendMessage(patient, "rejected", { orderId }).catch(() => {});
+      }
       log("PracticeQ: order rejected by provider", "error");
       break;
     }
 
     default:
-      console.warn("PracticeQ webhook: unhandled event", eventType);
+      console.warn("PracticeQ webhook: unknown event", incomingEvent);
   }
 
   return NextResponse.json({ received: true });

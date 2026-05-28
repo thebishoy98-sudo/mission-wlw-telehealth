@@ -97,7 +97,7 @@ export function middleware(req: NextRequest) {
   // ── Admin dashboard protection ─────────────────────────────────────────────
   if (path.startsWith("/admin") && !checkAdminAuth(req)) {
     // Redirect to a simple login page (or return 401 for API calls)
-    const loginUrl = new URL("/admin/login", req.url);
+    const loginUrl = new URL("/login/admin", req.url);
     loginUrl.searchParams.set("redirect", path);
     return NextResponse.redirect(loginUrl);
   }

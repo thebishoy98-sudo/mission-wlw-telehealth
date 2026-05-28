@@ -16,13 +16,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@vercel/postgres";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as spruce from "@/services/spruce";
+import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
-  // Intuit sends the verifier token as a header for validation
   const intuitToken = req.headers.get("intuit-webhook-signature") ??
     req.headers.get("intuit-verifier-token") ?? "";
 
@@ -35,14 +35,11 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = await req.json();
-
-  // Intuit sends an array of notification objects
   const notifications: any[] = payload.eventNotifications ?? [payload];
 
   for (const notification of notifications) {
     const { realmId, dataChangeEvent } = notification;
     const entities: any[] = dataChangeEvent?.entities ?? [];
-
     for (const entity of entities) {
       await handleEntity(entity, realmId ?? "");
     }
@@ -51,8 +48,24 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
+async function getPaymentByTransactionId(transactionId: string) {
+  if (process.env.POSTGRES_URL) {
+    const { rows } = await sql`SELECT * FROM payments WHERE transaction_id = ${transactionId} LIMIT 1`.catch(() => ({ rows: [] }));
+    if (rows[0]) return { orderId: rows[0].order_id, patientId: rows[0].patient_id, transactionId };
+  }
+  return null;
+}
+
+async function getQbRecordByInvoiceId(invoiceId: string) {
+  if (process.env.POSTGRES_URL) {
+    const { rows } = await sql`SELECT * FROM quickbooks_records WHERE invoice_id = ${invoiceId} LIMIT 1`.catch(() => ({ rows: [] }));
+    if (rows[0]) return { id: rows[0].id, orderId: rows[0].order_id };
+  }
+  return null;
+}
+
 async function handleEntity(entity: any, realmId: string) {
-  const { name, id, operation, lastUpdated } = entity;
+  const { name, id, operation } = entity;
 
   const log = (action: string, status: "success" | "error" = "success", details: any = {}) => {
     const entry = {
@@ -68,83 +81,55 @@ async function handleEntity(entity: any, realmId: string) {
   };
 
   switch (name) {
-    // ── QB Payments — Charge events ───────────────────────────────────────────
     case "Payment": {
-      if (operation === "Create" || operation === "Update") {
-        // A payment was created or updated in QB
-        // Find our order by QB transaction reference
-        const payments = db.paymentDb.getAll ? db.paymentDb.getAll() : [];
-        const payment = payments.find((p: any) => p.transactionId === id);
+      const payment = await getPaymentByTransactionId(id);
+      if (!payment) break;
 
-        if (payment) {
-          db.orderDb.update(payment.orderId, { paymentStatus: "completed", quickbooksStatus: "invoiced" });
-          await dbServer.orderDb.update(payment.orderId, { paymentStatus: "completed" }).catch(() => {});
-          log("QB payment confirmed", "success", { orderId: payment.orderId });
-        }
+      if (operation === "Create" || operation === "Update") {
+        await dbServer.orderDb.update(payment.orderId, { paymentStatus: "completed", quickbooksStatus: "invoiced" }).catch(() => {});
+        log("QB payment confirmed", "success", { orderId: payment.orderId });
       }
 
       if (operation === "Delete") {
-        // Payment was voided/deleted — mark as refunded
-        const payments = db.paymentDb.getAll ? db.paymentDb.getAll() : [];
-        const payment = payments.find((p: any) => p.transactionId === id);
-
-        if (payment) {
-          db.orderDb.update(payment.orderId, { paymentStatus: "refunded", status: "cancelled" });
-          await dbServer.orderDb.update(payment.orderId, { paymentStatus: "refunded", status: "cancelled" }).catch(() => {});
-          log("QB payment voided/refunded", "success", { orderId: payment.orderId });
-        }
+        await dbServer.orderDb.update(payment.orderId, { paymentStatus: "refunded", status: "cancelled" }).catch(() => {});
+        log("QB payment voided/refunded", "success", { orderId: payment.orderId });
       }
       break;
     }
 
-    // ── QB Accounting — Invoice events ────────────────────────────────────────
     case "Invoice": {
       if (operation === "Update") {
-        // Invoice was updated — could be paid via QB's hosted payment link
-        const qbRecords = db.quickbooksDb.getAll ? db.quickbooksDb.getAll() : [];
-        const record = qbRecords.find((r: any) => r.invoiceId === id);
+        const qbRecord = await getQbRecordByInvoiceId(id);
+        if (!qbRecord) break;
 
-        if (record) {
-          db.quickbooksDb.update(record.id, { status: "paid", syncedAt: new Date().toISOString() });
-          db.orderDb.update(record.orderId, { quickbooksStatus: "invoiced", paymentStatus: "completed" });
-          await dbServer.orderDb.update(record.orderId, { quickbooksStatus: "invoiced", paymentStatus: "completed" }).catch(() => {});
+        await dbServer.orderDb.update(qbRecord.orderId, { quickbooksStatus: "invoiced", paymentStatus: "completed" }).catch(() => {});
 
-          // Get order to look up patient for SMS
-          const order = db.orderDb.getById(record.orderId);
-          if (order) {
-            try {
-              spruce.sendMessage(order.patientId, "payment_received", { orderId: record.orderId });
-            } catch {}
+        const order = await dbServer.orderDb.getById(qbRecord.orderId).catch(() => null);
+        if (order) {
+          const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+          if (patient) {
+            spruceServer.sendMessage(patient, "payment_received", { orderId: qbRecord.orderId }).catch(() => {});
           }
-
-          log("QB invoice paid", "success", { orderId: record.orderId, invoiceId: id });
         }
+
+        log("QB invoice paid", "success", { orderId: qbRecord.orderId, invoiceId: id });
       }
       break;
     }
 
-    // ── QB Accounting — CreditMemo (refund) ───────────────────────────────────
     case "CreditMemo": {
       if (operation === "Create") {
         log("QB credit memo (refund) created", "success");
-        // Find associated order and update status
-        const qbRecords = db.quickbooksDb.getAll ? db.quickbooksDb.getAll() : [];
-        const record = qbRecords.find((r: any) => r.orderId);
-        if (record) {
-          db.orderDb.update(record.orderId, { paymentStatus: "refunded" });
-          await dbServer.orderDb.update(record.orderId, { paymentStatus: "refunded" }).catch(() => {});
-        }
       }
       break;
     }
 
     default:
-      // Log but don't fail on unknown entity types
       log(`QB entity event: ${name} ${operation}`, "success");
   }
 }
 
-// QB webhook verification endpoint (GET) — Intuit sends a challenge to verify
+// QB webhook verification endpoint (GET) - Intuit sends a challenge to verify
 export async function GET(req: NextRequest) {
   const challenge = req.nextUrl.searchParams.get("challenge");
   if (challenge) {
