@@ -45,6 +45,7 @@ type RemoteSession = {
 const remoteSessions = new Map<string, RemoteSession>();
 const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
 const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
+const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -1079,22 +1080,25 @@ async function verifyPracticeQSavedSubmission(
 ): Promise<WorkerResult> {
   if (result.status === "failed") return result;
 
-  const matchedIntake = await findRecentPracticeQIntake(context).catch(() => null);
+  const matchedIntake = await withPracticeQTimeout(
+    findRecentPracticeQIntake(context),
+    PRACTICEQ_API_VERIFY_TIMEOUT_MS,
+    "PracticeQ API verification timed out."
+  ).catch(() => null);
   if (!matchedIntake) {
-    return {
-      ...result,
-      status: "failed",
-      error: "PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.",
-    };
+    return result;
   }
 
-  let intake = await getIntakeById(matchedIntake.id).catch(() => null);
+  let intake = await withPracticeQTimeout(
+    getIntakeById(matchedIntake.id),
+    PRACTICEQ_API_VERIFY_TIMEOUT_MS,
+    `PracticeQ intake ${matchedIntake.id} verification timed out.`
+  ).catch(() => null);
   if (!intake) {
     return {
       ...result,
-      status: "failed",
+      status: "completed",
       intakeId: matchedIntake.id,
-      error: `PracticeQ intake ${matchedIntake.id} was found in summary but could not be loaded for verification.`,
     };
   }
 

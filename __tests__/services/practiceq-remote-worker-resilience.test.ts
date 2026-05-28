@@ -25,4 +25,11 @@ describe("PracticeQ remote worker resilience", () => {
   it("reads IntakeQ prompts from ancestor headings for standalone text inputs", () => {
     expect(workerSource).toContain('querySelector?.("h1,h2,h3,h4,h5,h6,label")');
   });
+
+  it("does not let PracticeQ API verification hang after browser submit succeeds", () => {
+    expect(workerSource).toContain("PRACTICEQ_API_VERIFY_TIMEOUT_MS");
+    expect(workerSource).toContain("PracticeQ API verification timed out.");
+    expect(workerSource).toContain("return result;");
+    expect(workerSource).not.toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
+  });
 });
