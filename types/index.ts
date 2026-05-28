@@ -286,6 +286,23 @@ export interface PracticeQFormFeed {
   all: PracticeQFormSummary[];
 }
 
+export interface PracticeQAutomationJob {
+  id: string;
+  orderId: string;
+  patientId: string;
+  status: "queued" | "running" | "awaiting_patient_signature" | "completed" | "failed";
+  attempts: number;
+  practiceQStartUrl: string;
+  handoffToken: string;
+  handoffExpiresAt: string;
+  handoffUrl?: string;
+  intakeId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+  lockedAt?: string;
+}
+
 export interface PharmacyOrder {
   id: string;
   orderId: string;

@@ -1,94 +1,106 @@
 import { NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import type { Patient, PracticeQMirror } from "@/types";
+import { resolvePatient } from "@/lib/patient-resolver";
 import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGE_SIZE = 100;
-
 type ProviderOrder = Awaited<ReturnType<typeof dbServer.orderDb.getAll>>[number];
-type ProviderPatient = NonNullable<Awaited<ReturnType<typeof dbServer.patientDb.getById>>>;
 
-function getPagination(req: Request) {
-  const url = new URL(req.url);
-  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
-  const requestedPageSize = Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE;
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, requestedPageSize));
-  const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
-  return { page, pageSize, q };
+function patientCompleteness(patient: Patient | null | undefined): number {
+  if (!patient) return 0;
+  return [
+    patient.firstName,
+    patient.lastName,
+    patient.email,
+    patient.phone,
+    patient.dateOfBirth,
+    patient.address?.street1,
+    patient.address?.city,
+    patient.address?.state,
+    patient.address?.zipCode,
+  ].filter((value) => String(value ?? "").trim()).length;
 }
 
-function matchesSearch(order: ProviderOrder, patient: ProviderPatient | null, q: string) {
-  if (!q) return true;
-  const values = [
-    order.id,
-    order.status,
-    order.paymentStatus,
-    order.pharmacyStatus,
-    patient?.firstName,
-    patient?.lastName,
-    patient?.email,
-    patient?.phone,
-    patient ? `${patient.firstName} ${patient.lastName}` : "",
-  ];
-  return values.some((value) => String(value ?? "").toLowerCase().includes(q));
+function mergePatientMap(patients: Array<Patient | null>) {
+  const map = new Map<string, Patient>();
+  for (const patient of patients) {
+    if (!patient) continue;
+    const existing = map.get(patient.id);
+    if (!existing || patientCompleteness(patient) >= patientCompleteness(existing)) {
+      map.set(patient.id, patient);
+    }
+  }
+  return map;
 }
 
-export async function GET(req: Request) {
+function answerValue(practiceq: PracticeQMirror | null | undefined, pattern: RegExp): string {
+  const answer = practiceq?.answers.find((item) => pattern.test(item.question.toLowerCase()))?.answer?.trim() ?? "";
+  return answer.toLowerCase() === "no answer" ? "" : answer;
+}
+
+async function resolveProviderPatient(order: ProviderOrder): Promise<Patient | null> {
+  const patient =
+    (await resolvePatient(order).catch(() => null)) ??
+    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+    db.patientDb.getById(order.patientId);
+
+  if (!patient || (patient.firstName && patient.lastName)) return patient;
+
+  const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
+  const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
+  if (!practiceq?.available) return patient;
+
+  const hydrated = hydratePatientFromPracticeQ(patient, practiceq);
+  const firstName = hydrated.firstName || answerValue(practiceq, /^first name\b/);
+  const lastName = hydrated.lastName || answerValue(practiceq, /^last name\b/);
+  const phone = hydrated.phone || answerValue(practiceq, /^phone/);
+  const dateOfBirth = hydrated.dateOfBirth || answerValue(practiceq, /date of birth|dob/);
+  const street1 = hydrated.address?.street1 || answerValue(practiceq, /address/);
+  const city = hydrated.address?.city || answerValue(practiceq, /^city\b/);
+  const state = hydrated.address?.state || answerValue(practiceq, /^state\b/);
+  const zipCode = hydrated.address?.zipCode || answerValue(practiceq, /zip/);
+
+  return {
+    ...hydrated,
+    firstName,
+    lastName,
+    phone,
+    dateOfBirth,
+    address: {
+      ...hydrated.address,
+      street1,
+      city,
+      state,
+      zipCode,
+      country: hydrated.address?.country || "US",
+    },
+    shippingAddress: {
+      ...hydrated.shippingAddress,
+      street1: hydrated.shippingAddress?.street1 || street1,
+      city: hydrated.shippingAddress?.city || city,
+      state: hydrated.shippingAddress?.state || state,
+      zipCode: hydrated.shippingAddress?.zipCode || zipCode,
+      country: hydrated.shippingAddress?.country || "US",
+    },
+  };
+}
+
+export async function GET() {
   try {
-    const { page, pageSize, q } = getPagination(req);
     const orders = await dbServer.orderDb.getAll().catch(() => db.orderDb.getAll());
     const reviews = await dbServer.providerReviewDb.getAll().catch(() => db.providerReviewDb.getAll());
     const products = await dbServer.productDb.getAll().catch(() => db.productDb.getAll());
-    const allPatients = await Promise.all(
-      Array.from(new Set(orders.map((order) => order.patientId))).map(async (patientId) =>
-        (await dbServer.patientDb.getById(patientId).catch(() => null)) ?? db.patientDb.getById(patientId)
-      )
-    );
-    const patientMap = new Map(
-      allPatients.filter(Boolean).map((patient) => [patient!.id, patient!])
-    );
-    const filteredOrders = orders.filter((order) =>
-      matchesSearch(order, patientMap.get(order.patientId) ?? null, q)
-    );
-    const sortedOrders = [...filteredOrders].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    const total = sortedOrders.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, totalPages);
-    const pagedOrders = sortedOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
-    const hydratedPatientMap = new Map(patientMap);
-
-    await Promise.all(
-      pagedOrders.map(async (order) => {
-        const patient = hydratedPatientMap.get(order.patientId);
-        if (!patient) return;
-        const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => db.practiceqDb.getByOrder(order.id));
-        const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
-        if (practiceq?.available) {
-          hydratedPatientMap.set(order.patientId, hydratePatientFromPracticeQ(patient, practiceq));
-        }
-      })
-    );
+    const patients = mergePatientMap(await Promise.all(orders.map(resolveProviderPatient)));
 
     return NextResponse.json({
-      orders: pagedOrders,
-      patients: Array.from(
-        new Map(pagedOrders.map((order) => hydratedPatientMap.get(order.patientId)).filter(Boolean).map((patient) => [patient!.id, patient!])).values()
-      ),
+      orders,
+      patients: Array.from(patients.values()),
       products,
       reviews,
-      pagination: {
-        page: safePage,
-        pageSize,
-        total,
-        totalPages,
-        q,
-      },
     });
   } catch (error) {
     console.error("Provider dashboard load error:", error);

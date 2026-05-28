@@ -16,6 +16,12 @@ const usableShippingAddress = (state: ReturnType<typeof getIntakeState>) => {
   return state.shippingAddress?.street1 ? state.shippingAddress : state.address;
 };
 
+const configuredChargeOverride = Number(process.env.NEXT_PUBLIC_PAYMENT_CHARGE_AMOUNT_OVERRIDE);
+const chargeAmountOverride =
+  Number.isFinite(configuredChargeOverride) && configuredChargeOverride > 0
+    ? configuredChargeOverride
+    : null;
+
 export default function Payment() {
   const router = useRouter();
   const [intakeState] = useState(getIntakeState());
@@ -27,6 +33,8 @@ export default function Payment() {
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const productTotal = dose?.price || product?.startingPrice || 0;
+  const total = chargeAmountOverride ?? productTotal;
 
   useEffect(() => {
     if (intakeState.productId) {
@@ -63,8 +71,6 @@ export default function Payment() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-
-    const amount = dose?.price || product?.startingPrice || 0;
 
     // Create order as draft - the charge API transitions it through statuses
     const order = db.orderDb.create({
@@ -225,8 +231,6 @@ export default function Payment() {
     router.push("/start/confirmation");
   };
 
-  const total = dose?.price || product?.startingPrice || 0;
-
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Order Summary */}
@@ -235,11 +239,17 @@ export default function Payment() {
         <div className="space-y-3">
           <div className="flex justify-between items-center text-sm">
             <span className="text-gray-600">{product?.name || "Treatment"}</span>
-            <span className="font-semibold text-gray-900">{formatCurrency(total)}</span>
+            <span className="font-semibold text-gray-900">{formatCurrency(productTotal)}</span>
           </div>
           {dose && (
             <div className="flex justify-between items-center text-xs text-gray-400">
               <span>{dose.label}</span>
+            </div>
+          )}
+          {chargeAmountOverride !== null && productTotal !== total && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-600">Testing charge override</span>
+              <span className="font-semibold text-teal-700">{formatCurrency(total)}</span>
             </div>
           )}
           <div className="border-t border-gray-100 pt-3 flex justify-between items-center">

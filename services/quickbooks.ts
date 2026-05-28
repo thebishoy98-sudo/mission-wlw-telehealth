@@ -64,6 +64,16 @@ async function findCustomerByDisplayName(displayName: string): Promise<string | 
   return customer?.Id ? String(customer.Id) : null;
 }
 
+function isDuplicateNameError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Duplicate Name Exists Error") || message.includes('"code":"6240"');
+}
+
+function uniqueDisplayName(patient: Patient): string {
+  const baseName = `${patient.firstName} ${patient.lastName}`.trim() || patient.email || patient.id;
+  return `${baseName} - ${patient.id.slice(-8)}-${generateId().slice(-6)}`;
+}
+
 function getSalesItemRef() {
   return {
     value: process.env.QB_SERVICE_ITEM_ID ?? "1",
@@ -107,8 +117,8 @@ export async function createCustomerRecord(patient: Patient): Promise<string> {
       return existingCustomerId;
     }
 
-    const result = await qboPost("/customer", {
-      DisplayName: displayName,
+    const customerPayload = (name: string) => ({
+      DisplayName: name,
       PrimaryEmailAddr: { Address: patient.email },
       PrimaryPhone: { FreeFormNumber: patient.phone },
       BillAddr: {
@@ -119,6 +129,14 @@ export async function createCustomerRecord(patient: Patient): Promise<string> {
         Country: "US",
       },
     });
+
+    let result: any;
+    try {
+      result = await qboPost("/customer", customerPayload(displayName));
+    } catch (error) {
+      if (!isDuplicateNameError(error)) throw error;
+      result = await qboPost("/customer", customerPayload(uniqueDisplayName(patient)));
+    }
     const qbCustomerId = String(result.Customer?.Id ?? result.Id ?? generateId());
     await logIntegration(
       "QB customer created",

@@ -1,12 +1,12 @@
-export function parseChargeOverride(value: string | undefined) {
-  if (!value) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.round(parsed * 100) / 100;
-}
+export function getChargeAmount(submittedAmount: unknown, overrideValue = process.env.PAYMENT_CHARGE_AMOUNT_OVERRIDE) {
+  const requestedAmount = Number(submittedAmount);
+  const overrideAmount = Number(overrideValue);
+  const chargeAmount =
+    Number.isFinite(overrideAmount) && overrideAmount > 0
+      ? overrideAmount
+      : requestedAmount;
 
-export function resolveChargeAmount(requestedAmount: number, overrideValue?: string) {
-  const override = parseChargeOverride(overrideValue);
-  if (override) return override;
-  return requestedAmount;
+  return Number.isFinite(chargeAmount) && chargeAmount > 0
+    ? Number(chargeAmount.toFixed(2))
+    : null;
 }

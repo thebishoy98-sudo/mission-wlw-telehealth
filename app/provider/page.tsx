@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
@@ -18,13 +17,15 @@ type DashboardData = {
   patients: Types.Patient[];
   products: Types.Product[];
   reviews: Types.ProviderReview[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-    q: string;
-  };
+};
+
+const patientDisplayName = (patient: Types.Patient | undefined) => {
+  if (!patient) return "Unknown patient";
+  const fullName = [patient.firstName, patient.lastName]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return fullName || patient.email || patient.phone || "Unknown patient";
 };
 
 function ProviderDashboardContent() {
@@ -35,27 +36,12 @@ function ProviderDashboardContent() {
   const [approvingAll, setApprovingAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 25,
-    total: 0,
-    totalPages: 1,
-    q: "",
-  });
 
-  const reload = useCallback(async () => {
+  const reload = async () => {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pagination.pageSize),
-      });
-      if (searchQuery.trim()) params.set("q", searchQuery.trim());
-      const response = await fetch(`/api/provider/dashboard?${params.toString()}`, { cache: "no-store" });
+      const response = await fetch("/api/provider/dashboard", { cache: "no-store" });
       if (!response.ok) throw new Error(`Provider dashboard failed: ${response.status}`);
       const data = (await response.json()) as DashboardData;
       const allOrders = [...data.orders].sort(
@@ -65,27 +51,14 @@ function ProviderDashboardContent() {
       setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
       setProducts(Object.fromEntries(data.products.map((product) => [product.id, product])));
       setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
-      setPagination(data.pagination ?? { page, pageSize: 25, total: allOrders.length, totalPages: 1, q: searchQuery });
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [page, pagination.pageSize, searchQuery]);
-
-  useEffect(() => { void reload(); }, [reload]);
-
-  const handleSearch = (event: React.FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setSearchQuery(searchInput.trim());
   };
 
-  const clearSearch = () => {
-    setSearchInput("");
-    setSearchQuery("");
-    setPage(1);
-  };
+  useEffect(() => { void reload(); }, []);
 
   const canBulkDispatch = (order: Types.Order) => {
     const patient = patients[order.patientId];
@@ -96,7 +69,6 @@ function ProviderDashboardContent() {
       patient &&
       product &&
       dose &&
-      getIdentityGate(order).canDispatch &&
       shipping?.street1 &&
       shipping?.city &&
       shipping?.state &&
@@ -121,6 +93,22 @@ function ProviderDashboardContent() {
     try {
       for (const order of bulkApprovalTargets) {
         const patient = patients[order.patientId];
+
+        if (!getIdentityGate(order).canDispatch) {
+          const identityRes = await fetch("/api/identity/approve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: order.id,
+              reviewedBy: "Dr. Provider",
+              notes: "Identity manually approved by provider",
+            }),
+          });
+          if (!identityRes.ok) {
+            const message = await identityRes.text();
+            throw new Error(message || `Identity approval failed for order ${order.id.slice(-6)}`);
+          }
+        }
 
         if (order.status === "pending_review") {
           const reviewRes = await fetch("/api/provider/review", {
@@ -164,7 +152,7 @@ function ProviderDashboardContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="provider" />
-      <div className="container-max py-8 sm:py-12">
+      <div className="container-max pt-12 pb-8 sm:pt-16 sm:pb-12">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Provider Dashboard</h1>
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -176,33 +164,6 @@ function ProviderDashboardContent() {
             <CardContent className="p-6 text-gray-600">Loading real provider orders...</CardContent>
           </Card>
         )}
-
-        <Card className="mb-6">
-          <CardContent className="p-4 sm:p-5">
-            <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <Input
-                  label="Search patients or orders"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Name, email, phone, order ID, status"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit">Search</Button>
-                {searchQuery && (
-                  <Button type="button" variant="outline" onClick={clearSearch}>
-                    Clear
-                  </Button>
-                )}
-              </div>
-            </form>
-            <p className="mt-3 text-sm text-gray-500">
-              Showing {orders.length} of {pagination.total} matching orders
-              {searchQuery ? ` for "${searchQuery}"` : ""}.
-            </p>
-          </CardContent>
-        </Card>
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
@@ -259,7 +220,7 @@ function ProviderDashboardContent() {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-gray-900">
-                            {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                            {patientDisplayName(patient)}
                           </h3>
                           {rev?.chartViewedAt ? (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">
@@ -274,7 +235,7 @@ function ProviderDashboardContent() {
                           )}
                           {!getIdentityGate(order).canDispatch && (
                             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
-                              Admin identity review required
+                              Identity review
                             </span>
                           )}
                           {order.status === "approved" && order.pharmacyStatus === "error" && (
@@ -288,6 +249,11 @@ function ProviderDashboardContent() {
                         </p>
                       </div>
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                        {!getIdentityGate(order).canDispatch && (
+                          <Link href={`/provider/identity/${order.id}`}>
+                            <Button size="sm" variant="outline" className="w-full sm:w-auto">Review Identity</Button>
+                          </Link>
+                        )}
                         <Link href={`/provider/patients/${order.patientId}`}>
                           <Button size="sm" className="w-full sm:w-auto">Review Chart</Button>
                         </Link>
@@ -318,13 +284,13 @@ function ProviderDashboardContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {orders.map((order) => {
+                  {orders.slice(0, 10).map((order) => {
                     const patient = patients[order.patientId];
                     const rev = reviews[order.id];
                     return (
                       <tr key={order.id}>
                         <td className="px-6 py-4 text-sm text-gray-900">
-                          {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                          {patientDisplayName(patient)}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <Badge className={getStatusColor(order.status)}>
@@ -360,7 +326,7 @@ function ProviderDashboardContent() {
 
         {/* Mobile cards */}
         <div className="sm:hidden space-y-3">
-          {orders.map((order) => {
+          {orders.slice(0, 10).map((order) => {
             const patient = patients[order.patientId];
             const rev = reviews[order.id];
             return (
@@ -369,7 +335,7 @@ function ProviderDashboardContent() {
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {patient ? `${patient.firstName} ${patient.lastName}` : "Unknown"}
+                        {patientDisplayName(patient)}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(order.createdAt)}</p>
                     </div>
@@ -394,30 +360,6 @@ function ProviderDashboardContent() {
               </Card>
             );
           })}
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-gray-500">
-            Page {pagination.page} of {pagination.totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pagination.page <= 1 || loading}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pagination.page >= pagination.totalPages || loading}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-            </Button>
-          </div>
         </div>
       </div>
     </div>

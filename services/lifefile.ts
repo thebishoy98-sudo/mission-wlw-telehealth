@@ -7,9 +7,9 @@
  * Headers : X-Vendor-ID, X-Location-ID, X-API-Network-ID (all int32)
  *
  * Endpoints used:
- *   POST /order                          - create order
- *   PUT  /order/{orderId}/status         - update status
- *   PUT  /order/{orderId}/shipping       - update shipping address/service
+ *   POST /order                          — create order
+ *   PUT  /order/{orderId}/status         — update status
+ *   PUT  /order/{orderId}/shipping       — update shipping address/service
  *
  * Set USE_REAL_LIFEFILE=true in env to switch from mock to live calls.
  */
@@ -21,7 +21,7 @@ import { generateId } from "@/lib/utils";
 
 // ── Sandbox product ID map (slug / partial name → LF lfProductID) ─────────────
 const LF_PRODUCT_MAP: Record<string, number> = {
-  tirzepatide: 305492221,     // Acetaminophen 500mg - closest sandbox match
+  tirzepatide: 305492221,     // Acetaminophen 500mg — closest sandbox match
   semaglutide: 305492220,     // Acarbose 50mg
   "benzocaine-lidocaine-tetracaine": 305157968,
   "baclofen-dexamethasone-flurbiprofen": 305492218,
@@ -45,12 +45,6 @@ function cfg() {
   return serviceConfig.lifefile;
 }
 
-function lfUrl(path: string) {
-  const c = cfg();
-  if (path === "/order" && c.orderEndpoint) return c.orderEndpoint;
-  return `${c.baseUrl}${path}`;
-}
-
 function basicAuth(username: string, password: string) {
   return "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 }
@@ -67,7 +61,11 @@ function formatPhone(phone: string): string {
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-  return phone.slice(0, 16);
+  return clip(phone, 16);
+}
+
+function clip(value: unknown, max: number, fallback = ""): string {
+  return String(value ?? fallback).slice(0, max);
 }
 
 function requiredText(value: unknown, label: string): string {
@@ -102,7 +100,7 @@ function formatLifeFileDateOfBirth(value: unknown): string {
 function getLfProductId(product: Types.Product): number {
   const slug = product.slug?.toLowerCase() ?? "";
   if (LF_PRODUCT_MAP[slug]) return LF_PRODUCT_MAP[slug];
-  const name = product.name.toLowerCase();
+  const name = String(product.name ?? "").toLowerCase();
   for (const [key, id] of Object.entries(LF_PRODUCT_MAP)) {
     if (name.includes(key)) return id;
   }
@@ -130,16 +128,20 @@ function isTirzepatide(product: Types.Product): boolean {
 }
 
 function parseWeeklyDoseMg(dose: Types.DoseOption): number {
-  if (dose.weeklyDoseMg) return dose.weeklyDoseMg;
+  if (typeof dose.weeklyDoseMg === "number" && dose.weeklyDoseMg > 0) return dose.weeklyDoseMg;
   const match = `${dose.strength} ${dose.label}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
   return match ? Number(match[1]) : 0;
 }
 
-function getTirzepatideDirections(dose: Types.DoseOption): string {
-  if (dose.prescriptionLabel) return dose.prescriptionLabel;
+function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
+  if (typeof dose.quantity === "number" && dose.quantity > 0) return dose.quantity;
   const weeklyMg = parseWeeklyDoseMg(dose);
-  const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
-  return `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`;
+  if (!weeklyMg || Number.isNaN(weeklyMg)) return 1;
+
+  const monthlyMg = weeklyMg * 4;
+  const mgPerMl = 20;
+  const vialMl = 2;
+  return Math.max(1, Math.ceil(monthlyMg / (mgPerMl * vialMl)));
 }
 
 function buildPharmacyRxs(
@@ -149,7 +151,10 @@ function buildPharmacyRxs(
   dateWritten: string
 ): LfRxPayload[] {
   if (isTirzepatide(product)) {
-    const daysSupply = (dose.durationWeeks ?? 8) * 7;
+    const weeklyMg = parseWeeklyDoseMg(dose);
+    const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
+    const directions = dose.prescriptionLabel || `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`;
+    const daysSupply = (dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4) * 7;
     return [
       {
         rxType: "new",
@@ -157,9 +162,9 @@ function buildPharmacyRxs(
         drugStrength: "20MG/25MG/ML (2 ML)",
         drugForm: "INJECTABLE",
         lfProductID: lfProductId,
-        quantity: String(dose.quantity),
+        quantity: String(calculateTirzepatideVialQuantity(dose)),
         quantityUnits: "each",
-        directions: getTirzepatideDirections(dose),
+        directions,
         refills: 0,
         dateWritten,
         daysSupply,
@@ -224,7 +229,7 @@ async function lfFetch(
   options: RequestInit = {}
 ): Promise<{ httpOk: boolean; httpStatus: number; body: LfResponse }> {
   const c = cfg();
-  const url = lfUrl(path);
+  const url = path === "/order" && c.orderEndpoint ? c.orderEndpoint : `${c.baseUrl}${path}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: basicAuth(c.username, c.password),
@@ -258,7 +263,7 @@ export const createPharmacyOrder = async (
   const dose = product?.doses.find((d) => d.id === order.doseId);
 
   if (!patient || !product || !dose) {
-    throw new Error("Invalid order data - missing patient, product or dose");
+    throw new Error("Invalid order data — missing patient, product or dose");
   }
 
   const c = cfg();
@@ -295,47 +300,47 @@ export const createPharmacyOrder = async (
     },
     order: {
       general: {
-        memo: `${product.name} ${dose.label}`.slice(0, 120),
-        referenceId: order.id.slice(0, 200),
+        memo: clip(`${product.name ?? ""} ${dose.label ?? ""}`.trim() || product.id, 120),
+        referenceId: clip(order.id, 200),
       },
       prescriber: {
         npi: c.prescriberNpi || "1234567890",
-        licenseState: c.prescriberLicenseState || undefined,
-        licenseNumber: c.prescriberLicenseNumber || undefined,
         lastName: c.prescriberLastName || "Provider",
         firstName: c.prescriberFirstName || "Sample",
         phone: c.prescriberPhone || "(555) 000-0001",
-        email: c.prescriberEmail || undefined,
+        ...(c.prescriberLicenseState ? { licenseState: c.prescriberLicenseState } : {}),
+        ...(c.prescriberLicenseNumber ? { licenseNumber: c.prescriberLicenseNumber } : {}),
+        ...(c.prescriberEmail ? { email: c.prescriberEmail } : {}),
       },
       practice: {
         id: parseInt(c.practiceId, 10),
       },
       patient: {
-        firstName: patientFirstName.slice(0, 30),
-        lastName: patientLastName.slice(0, 30),
+        firstName: clip(patientFirstName, 30),
+        lastName: clip(patientLastName, 30),
         gender: mapGender(patient.gender),
         dateOfBirth: patientDob,
-        address1: patientAddress.street1.slice(0, 60),
-        ...(patientAddress.street2 ? { address2: patientAddress.street2.slice(0, 60) } : {}),
-        city: patientAddress.city.slice(0, 30),
-        state: patientAddress.state.slice(0, 2),
-        zip: patientAddress.zipCode.slice(0, 10),
-        country: patientAddress.country.slice(0, 2),
+        address1: clip(patientAddress.street1, 60),
+        ...(patientAddress.street2 ? { address2: clip(patientAddress.street2, 60) } : {}),
+        city: clip(patientAddress.city, 30),
+        state: clip(patientAddress.state, 2),
+        zip: clip(patientAddress.zipCode, 10),
+        country: clip(patientAddress.country, 2, "US"),
         phoneMobile: formatPhone(patientPhone),
-        email: patientEmail.slice(0, 100),
+        email: clip(patientEmail, 100),
       },
       shipping: {
         recipientType: "patient" as const,
-        recipientLastName: patientLastName.slice(0, 30),
-        recipientFirstName: patientFirstName.slice(0, 30),
+        recipientLastName: clip(patientLastName, 30),
+        recipientFirstName: clip(patientFirstName, 30),
         recipientPhone: formatPhone(patientPhone),
-        recipientEmail: patientEmail.slice(0, 100),
-        addressLine1: ship.street1.slice(0, 60),
-        ...(ship.street2 ? { addressLine2: ship.street2.slice(0, 60) } : {}),
-        city: ship.city.slice(0, 100),
-        state: ship.state.slice(0, 2),
-        zipCode: ship.zipCode.slice(0, 10),
-        country: (ship.country ?? "US").slice(0, 2),
+        recipientEmail: clip(patientEmail, 100),
+        addressLine1: clip(ship.street1, 60),
+        ...(ship.street2 ? { addressLine2: clip(ship.street2, 60) } : {}),
+        city: clip(ship.city, 100),
+        state: clip(ship.state, 2),
+        zipCode: clip(ship.zipCode, 10),
+        country: clip(ship.country, 2, "US"),
         service: c.shippingServiceId || DEFAULT_SHIPPING_SERVICE_ID,
       },
       billing: {
@@ -464,7 +469,7 @@ export const createPharmacyOrder = async (
 
 // ── updateOrderStatus ─────────────────────────────────────────────────────────
 // Called inbound (e.g. from webhook) or by admin to push a status update.
-// PUT /order/{orderId}/status  - body: { status: string }
+// PUT /order/{orderId}/status  — body: { status: string }
 
 export const updateOrderStatus = async (
   orderId: string,
@@ -484,7 +489,7 @@ export const updateOrderStatus = async (
         body: JSON.stringify({ status }),
       });
       if (body.type === "error") {
-        // Log but don't fail - status update is best-effort from our side
+        // Log but don't fail — status update is best-effort from our side
       }
     } catch { /* log silently */ }
   }
@@ -508,7 +513,7 @@ export const updateOrderStatus = async (
 
 // ── addTrackingNumber ─────────────────────────────────────────────────────────
 // Called from the inbound Life File webhook when a shipment is created.
-// Tracking is pushed TO us - we don't send it to Life File.
+// Tracking is pushed TO us — we don't send it to Life File.
 
 export const addTrackingNumber = async (
   orderId: string,
@@ -540,7 +545,7 @@ export const addTrackingNumber = async (
 };
 
 // ── updateShipping ────────────────────────────────────────────────────────────
-// PUT /order/{orderId}/shipping - update recipient/address after order is placed.
+// PUT /order/{orderId}/shipping — update recipient/address after order is placed.
 
 export const updateShipping = async (
   orderId: string,
@@ -560,16 +565,16 @@ export const updateShipping = async (
         body: JSON.stringify({
           shipping: {
             recipientType: "patient",
-            recipientLastName: patient.lastName.slice(0, 30),
-            recipientFirstName: patient.firstName.slice(0, 30),
+            recipientLastName: clip(patient.lastName, 30),
+            recipientFirstName: clip(patient.firstName, 30),
             recipientPhone: formatPhone(patient.phone),
-            recipientEmail: patient.email.slice(0, 100),
-            addressLine1: address.street1.slice(0, 60),
-            ...(address.street2 ? { addressLine2: address.street2.slice(0, 60) } : {}),
-            city: address.city.slice(0, 100),
-            state: address.state.slice(0, 2),
-            zipCode: address.zipCode.slice(0, 10),
-            country: (address.country ?? "US").slice(0, 2),
+            recipientEmail: clip(patient.email, 100),
+            addressLine1: clip(address.street1, 60),
+            ...(address.street2 ? { addressLine2: clip(address.street2, 60) } : {}),
+            city: clip(address.city, 100),
+            state: clip(address.state, 2),
+            zipCode: clip(address.zipCode, 10),
+            country: clip(address.country, 2, "US"),
             service: DEFAULT_SHIPPING_SERVICE_ID,
           },
         }),
@@ -580,7 +585,7 @@ export const updateShipping = async (
     }
   }
 
-  return true; // mock - always succeeds
+  return true; // mock — always succeeds
 };
 
 // ── getOrderStatus ────────────────────────────────────────────────────────────

@@ -72,10 +72,6 @@ type PracticeQFileSummary = {
   raw: Record<string, unknown>;
 };
 
-const normalizeEndpoint = () => {
-  if (serviceConfig.practiceq.intakeEndpoint) return serviceConfig.practiceq.intakeEndpoint;
-  return `${serviceConfig.practiceq.baseUrl.replace(/\/$/, "")}/intakes/send`;
-};
 
 export const submitIntakePacket = async (
   order: Types.Order,
@@ -111,49 +107,83 @@ export const submitIntakePacket = async (
     throw new Error("PRACTICEQ_API_KEY is required when USE_REAL_PRACTICEQ=true");
   }
 
-  const endpoint = normalizeEndpoint();
   try {
     const client = await savePracticeQClient(patient, order);
-    if (!serviceConfig.practiceq.questionnaireId) {
-      throw new Error("PRACTICEQ_QUESTIONNAIRE_ID is required to send an intake package in live PracticeQ mode");
-    }
+    const clientId = client.ClientId as string | number;
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "X-Auth-Key": serviceConfig.practiceq.apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    // 1. Look for an intake the patient already completed (e.g. via the marketing site embed).
+    //    Never send a second questionnaire email — the patient consented in IntakeQ already.
+    const feed = await getIntakeSummaryFeed({ client: String(clientId) }).catch(() => null);
+    const existingIntake =
+      feed?.all.find((f) => f.externalClientId === order.id) ??
+      feed?.completed[0] ??
+      feed?.all[0] ??
+      null;
+
+    let resolvedIntakeId: string | undefined;
+    let resolvedStatus: "submitted" | "completed" = "submitted";
+
+    if (existingIntake) {
+      // Patient already has an intake — link it; don't create another one.
+      resolvedIntakeId = existingIntake.id;
+      resolvedStatus = existingIntake.status?.toLowerCase() === "completed" ? "completed" : "submitted";
+    } else if (serviceConfig.practiceq.questionnaireId) {
+      // No existing intake: submit answers directly (POST /intakes) — no email to patient.
+      const directPayload: Record<string, unknown> = {
         QuestionnaireId: serviceConfig.practiceq.questionnaireId,
-        ClientId: client.ClientId,
+        ClientId: clientId,
         ClientName: `${patient.firstName} ${patient.lastName}`,
         ClientEmail: patient.email,
         ClientPhone: patient.phone,
         ExternalClientId: order.id,
-      }),
-    });
+        Status: "Completed",
+      };
 
-    const result = await parsePracticeQResponse(response);
-    if (!response.ok) {
-      const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
-      throw new Error(`PracticeQ API error: ${message}`);
+      // Map our answers onto the questionnaire questions.
+      const pqQuestions = await getPracticeQQuestionnaire().catch(() => null);
+      if (pqQuestions && answers.length) {
+        const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
+        const answerByText = new Map(
+          answers
+            .map((a) => {
+              const q = questions.find((q) => q.id === a.questionId);
+              return q ? [normalizeQuestionText(q.text), a.answer] as const : null;
+            })
+            .filter((entry): entry is [string, string] => entry !== null && Boolean(entry[1]))
+        );
+        const profileAnswers = buildPracticeQProfileAnswers(patient);
+        directPayload.Questions = pqQuestions.map((q) => ({
+          Id: q.id,
+          Text: q.text,
+          Answer:
+            answerById.get(q.id) ??
+            findPracticeQAnswer(q.text, answerByText, profileAnswers) ??
+            "",
+        }));
+      }
+
+      const directRes = await fetch(`${pqBase()}/intakes`, {
+        method: "POST",
+        headers: pqHeaders(),
+        body: JSON.stringify(directPayload),
+      });
+      const directResult = await parsePracticeQResponse(directRes) as PracticeQIntake | null;
+      if (!directRes.ok) {
+        const message = directResult ? JSON.stringify(directResult) : `HTTP ${directRes.status}`;
+        throw new Error(`PracticeQ direct intake submit failed: ${message}`);
+      }
+      resolvedIntakeId = directResult?.Id ?? directResult?.id ?? directResult?.packetId;
+      resolvedStatus = "completed";
     }
 
-    const intakeWithAnswers = await populateAndUpdatePracticeQIntake(result as PracticeQIntake | null, {
-      patient,
-      answers,
-      questions,
-    });
-    const finalIntake = intakeWithAnswers ?? result;
     const practiceQFiles = answers.length
-      ? await uploadMissionIntakeFiles(client.ClientId as string | number, order, patient, answers, questions, consent)
+      ? await uploadMissionIntakeFiles(clientId, order, patient, answers, questions, consent)
       : null;
 
     const saved = persistPacket({
       ...packet,
-      id: finalIntake?.Id ?? finalIntake?.packetId ?? finalIntake?.id ?? packet.id,
-      status: finalIntake?.Status === "Completed" || finalIntake?.status === "completed" ? "completed" : "submitted",
+      id: resolvedIntakeId ?? packet.id,
+      status: resolvedStatus,
       lastSyncAt: new Date().toISOString(),
       packetData: {
         ...packet.packetData,
@@ -163,9 +193,9 @@ export const submitIntakePacket = async (
     });
     logPacketEvent("Intake packet submitted", saved, patient, product, {
       mode: "live",
-      endpoint,
-      clientId: client.ClientId,
-      requestId: result?.requestId,
+      clientId,
+      existingIntakeLinked: Boolean(existingIntake),
+      intakeId: resolvedIntakeId,
       answersSubmitted: answers.length,
       answerFileId: practiceQFiles?.answerFile.fileId,
       pdfFileId: practiceQFiles?.pdfFile.fileId,
@@ -176,7 +206,6 @@ export const submitIntakePacket = async (
     const failed = persistPacket({ ...packet, status: "error", lastError: message });
     logPacketEvent("PracticeQ intake submission failed", failed, patient, product, {
       mode: "live",
-      endpoint,
     }, "error", message);
     throw error;
   }
@@ -878,7 +907,7 @@ function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function buildMissionIntakeAnswerRows(
+export function buildMissionIntakeAnswerRows(
   patient: Types.Patient,
   answers: Types.QuestionnaireAnswer[],
   questions: Types.Question[]
@@ -930,6 +959,31 @@ async function populateAndUpdatePracticeQIntake(
   const intakeQuestions = fullIntake?.Questions ?? fullIntake?.questions;
   if (!fullIntake || !Array.isArray(intakeQuestions)) return null;
 
+  const changed = applyMissionAnswersToPracticeQQuestions(intakeQuestions, context);
+
+  if (!changed) return null;
+
+  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(fullIntake.Id!)}`, {
+    method: "PUT",
+    headers: pqHeaders(),
+    body: JSON.stringify(fullIntake),
+  });
+  const result = await parsePracticeQResponse(response);
+  if (!response.ok) {
+    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
+    throw new Error(`PracticeQ intake answer update failed: ${message}`);
+  }
+  return (result as PracticeQIntake | null) ?? fullIntake;
+}
+
+export function applyMissionAnswersToPracticeQQuestions(
+  intakeQuestions: unknown[],
+  context: {
+    patient: Types.Patient;
+    answers: Types.QuestionnaireAnswer[];
+    questions: Types.Question[];
+  }
+): boolean {
   // Build both an ID map and a text map so we can try exact-ID matching first.
   // When questions were sourced from PracticeQ (Option B), questionId == PracticeQ question Id
   // so we get a guaranteed 1:1 match with no fuzzy logic needed.
@@ -964,20 +1018,7 @@ async function populateAndUpdatePracticeQIntake(
     entry.Answer = answer;
     changed = true;
   }
-
-  if (!changed) return null;
-
-  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(fullIntake.Id!)}`, {
-    method: "PUT",
-    headers: pqHeaders(),
-    body: JSON.stringify(fullIntake),
-  });
-  const result = await parsePracticeQResponse(response);
-  if (!response.ok) {
-    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
-    throw new Error(`PracticeQ intake answer update failed: ${message}`);
-  }
-  return (result as PracticeQIntake | null) ?? fullIntake;
+  return changed;
 }
 
 function buildPracticeQProfileAnswers(patient: Types.Patient) {

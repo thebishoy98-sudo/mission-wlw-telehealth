@@ -9,6 +9,7 @@ import { preferCompletePatientForIntegrations, resolvePatient } from "@/lib/pati
 import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
 import { generateId } from "@/lib/utils";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import { normalizeOrderForPharmacyDispatch, practiceQReadyForPharmacy } from "@/lib/pharmacy-dispatch";
 import type { Patient } from "@/types";
 
 function answerValue(practiceq: Awaited<ReturnType<typeof getPracticeQMirrorForOrder>> | null | undefined, pattern: RegExp): string {
@@ -93,6 +94,15 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+    if (!practiceQReadyForPharmacy(order)) {
+      return NextResponse.json(
+        {
+          error: "PracticeQ consent must be completed before pharmacy dispatch",
+          practiceQStatus: order.practiceQStatus,
+        },
+        { status: 409 }
+      );
+    }
 
     const submittedPatient =
       patientData ??
@@ -104,10 +114,26 @@ export async function POST(req: NextRequest) {
       submittedPatient
     ));
     const product = productData ?? await dbServer.productDb.getById(order.productId).catch(() => null);
+    const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
+    const packetDose = typeof packet?.packetData?.doseSelected === "string" ? packet.packetData.doseSelected : "";
+    const normalized = normalizeOrderForPharmacyDispatch(order, product, [packetDose]);
+    if (!normalized.normalizedOrder) {
+      return NextResponse.json(
+        {
+          error: "Order dispatch failed",
+          detail: `Invalid order data - ${normalized.reason ?? "missing product or dose"}`,
+        },
+        { status: 422 }
+      );
+    }
+    if (normalized.repaired) {
+      await dbServer.orderDb.update(orderId, { doseId: normalized.normalizedOrder.doseId }).catch(() => {});
+      db.orderDb.update(orderId, { doseId: normalized.normalizedOrder.doseId });
+    }
     const auditCtx = actorFromHeaders(req.headers);
     let pharmacyOrder;
     try {
-      pharmacyOrder = await lifefile.createPharmacyOrder(order, { patient, product });
+      pharmacyOrder = await lifefile.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
       await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
       const update = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
       db.orderDb.update(orderId, update);

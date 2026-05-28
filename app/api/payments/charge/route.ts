@@ -6,7 +6,7 @@
  *   2. We re-check eligibility server-side
  *   3. Charge via QB Payments API
  *   4. Create QB invoice + customer record (accounting)
- *   5. Run integration chain: PracticeQ → Life File → Spruce SMS
+ *   5. Queue PracticeQ browser automation. Pharmacy waits for PracticeQ completion.
  *
  * Client-side tokenization (add to your payment page):
  *   <script src="https://js.intuit.com/v2/ui/payments.js"></script>
@@ -22,23 +22,26 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
-import * as practiceq from "@/services/practiceq";
 import * as lifefile from "@/services/lifefile";
 import * as spruceServer from "@/services/spruce.server";
+import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 import { checkEligibility } from "@/lib/eligibility";
 import { seedQuestions } from "@/data/seed-data";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
 import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { verifyIdentityUploads } from "@/services/identity-verification";
+import { getChargeAmount } from "@/lib/payment-amount";
+import { resolvePersistedDose } from "@/lib/product-dose";
 import type { Payment, Upload } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
+    const chargeAmount = getChargeAmount(amount);
 
-    if (!orderId || !amount) {
+    if (!orderId || chargeAmount === null) {
       return NextResponse.json(
         { error: "Missing required fields: orderId, amount" },
         { status: 400 }
@@ -63,10 +66,7 @@ export async function POST(req: NextRequest) {
           (await dbServer.productDb.getById(productData.id).catch(() => null));
       }
     }
-    const requestedDose = productData?.doses?.find((dose: any) => dose.id === orderData?.doseId);
-    const persistedDose = requestedDose && persistedProduct
-      ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
-      : null;
+    const persistedDose = resolvePersistedDose(persistedProduct, productData ?? null, orderData?.doseId);
 
     // Patient must exist before the order because orders.patient_id has an FK. Repeated
     // checkout retries may reuse the same email with a new browser-generated patient id.
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
     // 5. Charge via QuickBooks Payments
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
     try {
-      chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
+      chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
         token,
         cardNumber,
         expMonth,
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
       id: generateId(),
       orderId,
       patientId: patient.id,
-      amount,
+      amount: chargeAmount,
       currency: "USD",
       status: "completed",
       paymentMethod: "credit_card",
@@ -296,6 +296,7 @@ export async function POST(req: NextRequest) {
     const updatedOrder = { ...order, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
+    let practiceQAutomationStatus: "queued" | "error" = "queued";
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     try {
@@ -326,24 +327,36 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    // 9. PracticeQ — intake packet for provider chart
+    // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment,
+    // and do not dispatch pharmacy until PracticeQ is completed/signed.
     try {
-      await practiceq.submitIntakePacket(updatedOrder, {
-        patient,
-        product: productData ?? null,
-        answers: fallbackAnswers,
-        questions: fallbackQuestions,
-      });
-      db.orderDb.update(orderId, { practiceQStatus: "submitted" });
-      await dbServer.orderDb.update(orderId, { practiceQStatus: "submitted" }).catch(() => {});
-      logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor);
+      const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
+      await dbServer.practiceqAutomationJobDb.create(automationJob);
+      db.practiceqAutomationJobDb.create(automationJob);
+      db.orderDb.update(orderId, { practiceQStatus: "pending" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
     } catch (e) {
-      errors.push(`PracticeQ: ${(e as Error).message}`);
-      logPhiDisclosure(patient.id, orderId, "practiceq", auditCtx.actor, "error", (e as Error).message);
+      const errorMessage = (e as Error).message;
+      practiceQAutomationStatus = "error";
+      errors.push(`PracticeQ automation: ${errorMessage}`);
+      db.orderDb.update(orderId, { practiceQStatus: "error" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "error" }).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "practiceq",
+        action: "PracticeQ automation queue failed",
+        orderId,
+        patientId: patient.id,
+        status: "error",
+        details: { source: "payment_charge" },
+        error: errorMessage,
+      }).catch(() => {});
     }
 
     // 10. Life File — pharmacy prescription order
-    if (dispatchGate.canDispatch) {
+    const practiceQReadyForPharmacy = false;
+    if (dispatchGate.canDispatch && practiceQReadyForPharmacy) {
       try {
         const pharmacyOrder = await lifefile.createPharmacyOrder(updatedOrder, { patient, product: productData ?? null });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
@@ -419,6 +432,7 @@ export async function POST(req: NextRequest) {
       success: true,
       orderId,
       chargeId: chargeResult.chargeId,
+      chargedAmount: chargeAmount,
       identityStatus,
       orderStatus: dispatchGate.canDispatch && !errors.some((error) => error.startsWith("Life File:"))
         ? "sent_to_pharmacy"
@@ -429,6 +443,7 @@ export async function POST(req: NextRequest) {
           ? "error"
           : "draft",
       identityUploadUrl: dispatchGate.canDispatch ? undefined : identityUploadUrl,
+      practiceQAutomationStatus,
       warnings: errors.length ? errors : undefined,
     });
   } catch (err: any) {

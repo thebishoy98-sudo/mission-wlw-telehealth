@@ -70,6 +70,7 @@ export function hydratePatientFromPracticeQ(patient: Patient, practiceq: Practic
   const email = patient.email || practiceq.clientEmail || answerValue(practiceq, /^email\b/);
   const phone = patient.phone || answerValue(practiceq, /^phone/);
   const dateOfBirth = patient.dateOfBirth || answerValue(practiceq, /date of birth|dob/);
+  const gender = patient.gender || answerValue(practiceq, /^gender\b/).toLowerCase() as Patient["gender"];
   const street1 = patient.address?.street1 || answerValue(practiceq, /address/);
   const city = patient.address?.city || answerValue(practiceq, /^city\b/);
   const state = patient.address?.state || answerValue(practiceq, /^state\b/);
@@ -80,6 +81,7 @@ export function hydratePatientFromPracticeQ(patient: Patient, practiceq: Practic
     firstName,
     lastName,
     dateOfBirth,
+    gender,
     phone,
     email,
     address: {
@@ -112,13 +114,14 @@ export async function loadProviderPatientChart(
   const selectedOrder = orders[0];
   if (!selectedOrder) return null;
 
-  const [product, questionnaire, answers, consent, uploads, pharmacyOrder, review, practiceqPacket] =
+  const [product, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review, practiceqPacket] =
     await Promise.all([
       stores.products.getById(selectedOrder.productId),
       stores.questions.getAll(),
       stores.answers.getByOrder(selectedOrder.id),
       stores.consents.getByOrder(selectedOrder.id),
       stores.uploads.getByOrder(selectedOrder.id),
+      stores.payments.getByOrder(selectedOrder.id),
       stores.pharmacyOrders?.getByOrder(selectedOrder.id) ?? null,
       stores.reviews.getByOrder(selectedOrder.id),
       stores.practiceqPackets?.getByOrder(selectedOrder.id) ?? null,
@@ -137,7 +140,7 @@ export async function loadProviderPatientChart(
     answers,
     consent,
     uploads,
-    payment: null,
+    payment,
     pharmacyOrder,
     review,
     practiceq,

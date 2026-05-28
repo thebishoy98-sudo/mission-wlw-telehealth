@@ -16,6 +16,7 @@ import type {
   Patient, Order, Payment, Product, Question, QuestionnaireAnswer,
   ConsentRecord, Upload, ProviderReview, PharmacyOrder, PracticeQPacket,
   QuickBooksRecord, SpruceMessage, MessageTemplate, IntegrationLog,
+  PracticeQAutomationJob,
 } from "@/types";
 
 // ── Products ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,36 @@ export const productDb = {
         ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
       ON CONFLICT (slug) DO NOTHING
     `;
+  },
+
+  async update(id: string, data: Partial<Product>): Promise<Product | null> {
+    if (!isDbAvailable()) return null;
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const updated: Product = { ...existing, ...data, id: existing.id };
+    await sql`
+      UPDATE products SET
+        name = ${updated.name},
+        slug = ${updated.slug},
+        description = ${updated.description},
+        long_description = ${updated.longDescription ?? null},
+        starting_price = ${updated.startingPrice},
+        image = ${updated.image},
+        doses = ${JSON.stringify(updated.doses)}::jsonb,
+        eligibility_note = ${updated.eligibilityNote},
+        is_active = ${updated.isActive},
+        faqs = ${JSON.stringify(updated.faqs ?? [])}::jsonb
+      WHERE id = ${id}
+    `;
+    return updated;
+  },
+
+  async archive(id: string): Promise<boolean> {
+    if (!isDbAvailable()) return false;
+    const { rowCount } = await sql`
+      UPDATE products SET is_active = false WHERE id = ${id}
+    `;
+    return (rowCount ?? 0) > 0;
   },
 };
 
@@ -154,11 +185,11 @@ export const orderDb = {
   async create(o: Order): Promise<Order> {
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
-        pharmacy_status, practice_q_status, quickbooks_status, identity_status,
+        pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
         identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
         identity_upload_token, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
-        ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus},
+        ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus}, ${o.practiceqClientId ?? null},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
         ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
         ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
@@ -175,6 +206,7 @@ export const orderDb = {
         pharmacy_status    = COALESCE(${data.pharmacyStatus ?? null}, pharmacy_status),
         practice_q_status  = COALESCE(${data.practiceQStatus ?? null}, practice_q_status),
         quickbooks_status  = COALESCE(${data.quickbooksStatus ?? null}, quickbooks_status),
+        practiceq_client_id = COALESCE(${data.practiceqClientId ?? null}, practiceq_client_id),
         submitted_at       = COALESCE(${data.submittedAt ?? null}, submitted_at),
         approved_at        = COALESCE(${data.approvedAt ?? null}, approved_at),
         provider_notes     = COALESCE(${data.providerNotes ?? null}, provider_notes),
@@ -512,6 +544,105 @@ export const aiConversationDb = {
   },
 };
 
+// ── PracticeQ Packets ─────────────────────────────────────────────────────────
+
+export const practiceqPacketDb = {
+  async getByOrder(orderId: string): Promise<PracticeQPacket | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM practiceq_packets WHERE order_id = ${orderId} ORDER BY submitted_at DESC LIMIT 1`;
+    return rows[0] ? rowToPracticeQPacket(rows[0]) : null;
+  },
+
+  async create(packet: PracticeQPacket): Promise<PracticeQPacket> {
+    if (!isDbAvailable()) return packet;
+    await sql`
+      INSERT INTO practiceq_packets (id, order_id, patient_id, status, packet_data, last_error, last_sync_at, submitted_at)
+      VALUES (${packet.id}, ${packet.orderId}, ${packet.patientId}, ${packet.status},
+        ${JSON.stringify(packet.packetData)}::jsonb, ${packet.lastError ?? null},
+        ${packet.lastSyncAt ?? null}, ${packet.submittedAt})
+      ON CONFLICT (id) DO UPDATE SET
+        status = EXCLUDED.status,
+        packet_data = EXCLUDED.packet_data,
+        last_error = EXCLUDED.last_error,
+        last_sync_at = EXCLUDED.last_sync_at,
+        submitted_at = EXCLUDED.submitted_at
+    `;
+    return packet;
+  },
+
+  async update(id: string, data: Partial<PracticeQPacket>): Promise<PracticeQPacket | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...data };
+    await this.create(updated);
+    return updated;
+  },
+
+  async getById(id: string): Promise<PracticeQPacket | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM practiceq_packets WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToPracticeQPacket(rows[0]) : null;
+  },
+};
+
+export const practiceqAutomationJobDb = {
+  async create(job: PracticeQAutomationJob): Promise<PracticeQAutomationJob> {
+    if (!isDbAvailable()) return job;
+    await sql`
+      INSERT INTO practiceq_automation_jobs (
+        id, order_id, patient_id, status, attempts, practiceq_start_url,
+        handoff_token, handoff_expires_at, handoff_url, intake_id, last_error, created_at, updated_at, locked_at
+      ) VALUES (
+        ${job.id}, ${job.orderId}, ${job.patientId}, ${job.status}, ${job.attempts},
+        ${job.practiceQStartUrl}, ${job.handoffToken}, ${job.handoffExpiresAt},
+        ${job.handoffUrl ?? null}, ${job.intakeId ?? null},
+        ${job.lastError ?? null}, ${job.createdAt}, ${job.updatedAt}, ${job.lockedAt ?? null}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        status = EXCLUDED.status,
+        attempts = EXCLUDED.attempts,
+        practiceq_start_url = EXCLUDED.practiceq_start_url,
+        handoff_token = EXCLUDED.handoff_token,
+        handoff_expires_at = EXCLUDED.handoff_expires_at,
+        handoff_url = EXCLUDED.handoff_url,
+        intake_id = EXCLUDED.intake_id,
+        last_error = EXCLUDED.last_error,
+        updated_at = EXCLUDED.updated_at,
+        locked_at = EXCLUDED.locked_at
+    `;
+    return job;
+  },
+
+  async getByOrder(orderId: string): Promise<PracticeQAutomationJob | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs WHERE order_id = ${orderId} ORDER BY created_at DESC LIMIT 1
+    `;
+    return rows[0] ? rowToPracticeQAutomationJob(rows[0]) : null;
+  },
+
+  async getQueued(limit = 10): Promise<PracticeQAutomationJob[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs
+      WHERE status = 'queued'
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    `;
+    return rows.map(rowToPracticeQAutomationJob);
+  },
+
+  async update(id: string, data: Partial<PracticeQAutomationJob>): Promise<PracticeQAutomationJob | null> {
+    if (!isDbAvailable()) return null;
+    const existingRows = await sql`SELECT * FROM practiceq_automation_jobs WHERE id = ${id} LIMIT 1`;
+    if (!existingRows.rows[0]) return null;
+    const existing = rowToPracticeQAutomationJob(existingRows.rows[0]);
+    const updated = { ...existing, ...data, updatedAt: new Date().toISOString() };
+    await this.create(updated);
+    return updated;
+  },
+};
+
 // ── Row mappers ───────────────────────────────────────────────────────────────
 
 function rowToProduct(r: any): Product {
@@ -555,6 +686,7 @@ function rowToOrder(r: any): Order {
     identityReviewedBy: r.identity_reviewed_by ?? undefined,
     identityAiResult: r.identity_ai_result ?? undefined,
     identityUploadToken: r.identity_upload_token ?? undefined,
+    practiceqClientId: r.practiceq_client_id === undefined || r.practiceq_client_id === null ? undefined : String(r.practiceq_client_id),
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
@@ -619,6 +751,38 @@ function rowToPharmacyOrder(r: any): PharmacyOrder {
     trackingNumber: r.tracking_number ?? undefined,
     shippedAt: r.shipped_at ?? undefined, deliveredAt: r.delivered_at ?? undefined,
     submittedAt: r.submitted_at ?? undefined, lastError: r.last_error ?? undefined,
+  };
+}
+
+function rowToPracticeQPacket(r: any): PracticeQPacket {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    patientId: r.patient_id,
+    submittedAt: r.submitted_at,
+    packetData: r.packet_data ?? {},
+    status: r.status,
+    lastSyncAt: r.last_sync_at ?? undefined,
+    lastError: r.last_error ?? undefined,
+  };
+}
+
+function rowToPracticeQAutomationJob(r: any): PracticeQAutomationJob {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    patientId: r.patient_id,
+    status: r.status,
+    attempts: Number(r.attempts ?? 0),
+    practiceQStartUrl: r.practiceq_start_url,
+    handoffToken: r.handoff_token,
+    handoffExpiresAt: r.handoff_expires_at,
+    handoffUrl: r.handoff_url ?? undefined,
+    intakeId: r.intake_id ?? undefined,
+    lastError: r.last_error ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    lockedAt: r.locked_at ?? undefined,
   };
 }
 

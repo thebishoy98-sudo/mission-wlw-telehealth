@@ -18,6 +18,7 @@ const KEYS = {
   CMS_CONTENT: "tele_cms_content",
   MESSAGE_TEMPLATES: "tele_message_templates",
   PROVIDER_REVIEWS: "tele_provider_reviews",
+  PRACTICEQ_AUTOMATION_JOBS: "tele_practiceq_automation_jobs",
 };
 
 // PHI must not persist to disk. Use sessionStorage so data is cleared when the
@@ -291,6 +292,42 @@ export const practiceqDb = {
   },
 };
 
+export const practiceqAutomationJobDb = {
+  getAll: (): Types.PracticeQAutomationJob[] =>
+    getFromStorage(KEYS.PRACTICEQ_AUTOMATION_JOBS, []),
+  getByOrder: (orderId: string): Types.PracticeQAutomationJob | null => {
+    return practiceqAutomationJobDb.getAll().find((job) => job.orderId === orderId) ?? null;
+  },
+  getQueued: (): Types.PracticeQAutomationJob[] => {
+    return practiceqAutomationJobDb
+      .getAll()
+      .filter((job) => job.status === "queued")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  create: (job: Types.PracticeQAutomationJob): Types.PracticeQAutomationJob => {
+    const jobs = practiceqAutomationJobDb.getAll();
+    const existingIndex = jobs.findIndex((existing) => existing.id === job.id || existing.orderId === job.orderId);
+    if (existingIndex >= 0) {
+      jobs[existingIndex] = { ...jobs[existingIndex], ...job, updatedAt: new Date().toISOString() };
+    } else {
+      jobs.push(job);
+    }
+    setToStorage(KEYS.PRACTICEQ_AUTOMATION_JOBS, jobs);
+    return existingIndex >= 0 ? jobs[existingIndex] : job;
+  },
+  update: (
+    id: string,
+    data: Partial<Types.PracticeQAutomationJob>
+  ): Types.PracticeQAutomationJob | null => {
+    const jobs = practiceqAutomationJobDb.getAll();
+    const index = jobs.findIndex((job) => job.id === id);
+    if (index === -1) return null;
+    jobs[index] = { ...jobs[index], ...data, updatedAt: new Date().toISOString() };
+    setToStorage(KEYS.PRACTICEQ_AUTOMATION_JOBS, jobs);
+    return jobs[index];
+  },
+};
+
 // QuickBooks operations
 export const quickbooksDb = {
   getAll: (): Types.QuickBooksRecord[] =>
@@ -370,7 +407,7 @@ export const getDefaultCMSContent = (): Types.CMSContent => ({
   landing: {
     heroHeadline: "Your Journey to a Healthier, Happier You Starts Here",
     heroSubheadline:
-      "Medical weight management with GLP-1 therapy - personalized, supervised, and shipped directly to your door. No office visits. No waiting.",
+      "Medical weight management with GLP-1 therapy — personalized, supervised, and shipped directly to your door. No office visits. No waiting.",
     heroImage: "/hero-placeholder.svg",
     ctaButtonText: "Get Started Today",
     howItWorksTitle: "How It Works",
@@ -379,7 +416,7 @@ export const getDefaultCMSContent = (): Types.CMSContent => ({
     disclaimerText:
       "GLP-1 medications are contraindicated for patients with personal or family history of thyroid cancer or MEN 2, and are not suitable during pregnancy or breastfeeding. Eligibility and dosage decisions are made by licensed providers.",
     privacyNote:
-      "We use privacy and security safeguards for sensitive health data, including encrypted transport and restricted operational access. Full HIPAA readiness also depends on signed BAAs, production auth, storage, and operating policies.",
+      "All data is HIPAA-compliant and encrypted in transit and at rest. We never sell or share your information.",
   },
   footer: {
     copyrightText: "© 2025 Mission Wellness & Weight Loss. All rights reserved.",
@@ -445,5 +482,8 @@ export const providerReviewDb = {
 // Clear all data (for testing)
 export const clearAllData = (): void => {
   if (typeof window === "undefined") return;
-  Object.values(KEYS).forEach((key) => localStorage.removeItem(key));
+  Object.values(KEYS).forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
 };

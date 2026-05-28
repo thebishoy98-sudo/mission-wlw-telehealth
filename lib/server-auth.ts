@@ -1,51 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 
-type AuthRequest = Pick<Request, "headers"> & {
-  cookies?: {
-    get(name: string): { value?: string } | undefined;
-  };
-};
-
-function cookieValue(req: AuthRequest, name: string) {
-  const nextCookie = req.cookies?.get(name)?.value;
-  if (nextCookie) return nextCookie;
-
-  const header = req.headers.get("cookie") ?? "";
-  return header
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${name}=`))
-    ?.slice(name.length + 1);
-}
-
-export function isAdminRequest(req: AuthRequest) {
-  const secret = process.env.ADMIN_SECRET;
+function hasSecret(req: NextRequest, cookieName: string, envName = "ADMIN_SECRET") {
+  const secret = process.env[envName] ?? process.env.ADMIN_SECRET;
   if (!secret) return process.env.VERCEL_ENV !== "production";
 
   const provided =
-    req.headers.get("x-admin-secret") ??
-    cookieValue(req, "admin_secret");
+    req.headers.get(envName === "PROVIDER_SECRET" ? "x-provider-secret" : "x-admin-secret") ??
+    req.cookies.get(cookieName)?.value ??
+    req.cookies.get("admin_secret")?.value;
 
   return provided === secret;
 }
 
-export function isProviderRequest(req: AuthRequest) {
-  const secret = process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET;
-  if (!secret) return process.env.VERCEL_ENV !== "production";
-
-  const provided =
-    req.headers.get("x-provider-secret") ??
-    cookieValue(req, "provider_secret");
-
-  return provided === secret;
+export function isAdminRequest(req: NextRequest) {
+  return hasSecret(req, "admin_secret");
 }
 
-export function requireAdmin(req: NextRequest) {
-  if (isAdminRequest(req)) return null;
-  return NextResponse.json({ error: "Admin authorization required" }, { status: 401 });
+export function isProviderRequest(req: NextRequest) {
+  return hasSecret(req, "provider_secret", "PROVIDER_SECRET");
 }
 
-export function requireProviderOrAdmin(req: AuthRequest) {
-  if (isProviderRequest(req) || isAdminRequest(req)) return null;
-  return NextResponse.json({ error: "Provider authorization required" }, { status: 401 });
+function toNextRequest(req: NextRequest | Request): NextRequest {
+  return req instanceof NextRequest ? req : new NextRequest(req);
+}
+
+export function requireAdmin(req: NextRequest | Request) {
+  const nextReq = toNextRequest(req);
+  if (isAdminRequest(nextReq)) return null;
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+export function requireProvider(req: NextRequest | Request) {
+  const nextReq = toNextRequest(req);
+  if (isProviderRequest(nextReq) || isAdminRequest(nextReq)) return null;
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+export function requireProviderOrAdmin(req: NextRequest | Request) {
+  return requireProvider(req);
 }

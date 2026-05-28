@@ -19,6 +19,11 @@ type AdminDashboardData = {
   pharmacyOrders: Types.PharmacyOrder[];
 };
 
+const paymentAmount = (payment: Types.Payment) => {
+  const amount = Number(payment.amount);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
 function AdminDashboardContent() {
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -57,7 +62,7 @@ function AdminDashboardContent() {
 
       const totalRevenue = allPayments
         .filter((p) => p.status === "completed")
-        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        .reduce((sum, p) => sum + paymentAmount(p), 0);
 
       const paidOrders = allPayments.filter((p) => p.status === "completed").length;
       const fulfilled = allOrders.filter(
@@ -71,7 +76,7 @@ function AdminDashboardContent() {
         paidOrders,
         pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
         fulfilled,
-          averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
+        averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
       });
 
       setOrders(allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
@@ -88,7 +93,7 @@ function AdminDashboardContent() {
               p.status === "completed" &&
               new Date(p.createdAt).toDateString() === date.toDateString()
           )
-          .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          .reduce((sum, p) => sum + paymentAmount(p), 0);
 
         last7Days.push({
           date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -195,6 +200,33 @@ function AdminDashboardContent() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mb-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Management</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+            <Link href="/admin/products">
+              <Button fullWidth variant="outline">
+                Manage Products
+              </Button>
+            </Link>
+            <Link href="/admin/cms">
+              <Button fullWidth variant="outline">
+                Edit Content
+              </Button>
+            </Link>
+            <Link href="/admin/questionnaire">
+              <Button fullWidth variant="outline">
+                Edit Questions
+              </Button>
+            </Link>
+            <Link href="/admin/integrations">
+              <Button fullWidth variant="outline">
+                Integration Logs
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Recent Orders */}
