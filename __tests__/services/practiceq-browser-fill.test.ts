@@ -90,6 +90,7 @@ describe("PracticeQ browser fill plan", () => {
     expect(answerMatchesPracticeQChoice("None apply to me", "History of Diabetes")).toBe(false);
     expect(answerMatchesPracticeQChoice("None", "No")).toBe(true);
     expect(answerMatchesPracticeQChoice("No known drug allergies", "No")).toBe(true);
+    expect(answerMatchesPracticeQChoice("Weight loss", "Tirzepatide")).toBe(true);
   });
 
   it("only blocks consent pages when Mission does not have a signed consent to use", () => {

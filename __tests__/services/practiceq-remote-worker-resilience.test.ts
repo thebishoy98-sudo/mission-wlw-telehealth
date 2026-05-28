@@ -19,6 +19,7 @@ describe("PracticeQ remote worker resilience", () => {
   it("uploads the patient identity video to IntakeQ hidden file inputs", () => {
     expect(workerSource).toContain('u.type === "selfie_video"');
     expect(workerSource).toContain("uploadPracticeQFile");
+    expect(workerSource).toContain("10000");
     expect(workerSource).not.toContain("fileInput.isVisible");
   });
 
@@ -29,6 +30,7 @@ describe("PracticeQ remote worker resilience", () => {
   it("does not let PracticeQ API verification hang after browser submit succeeds", () => {
     expect(workerSource).toContain("PRACTICEQ_API_VERIFY_TIMEOUT_MS");
     expect(workerSource).toContain("PracticeQ API verification timed out.");
+    expect(workerSource).toContain("answer backfill timed out.");
     expect(workerSource).toContain("return result;");
     expect(workerSource).not.toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
   });

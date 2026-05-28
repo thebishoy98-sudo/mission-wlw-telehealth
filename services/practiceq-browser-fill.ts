@@ -131,6 +131,7 @@ export function answerMatchesPracticeQChoice(answer: string, labelText: string):
   }
 
   if ((normalizedAnswer.includes("pregnant") || normalizedAnswer.includes("pregnancy")) && normalizedLabel.includes("pregnant")) return true;
+  if (normalizedAnswer.includes("weight loss") && normalizedLabel.includes("tirzepatide")) return true;
   if (normalizedAnswer.includes("breastfeeding") && normalizedLabel.includes("breastfeeding")) return true;
   if (normalizedAnswer.includes("diabetes") && normalizedLabel.includes("diabetes")) return true;
   if (normalizedAnswer.includes("tirzepatide") && normalizedLabel.includes("tirzepatide")) return true;

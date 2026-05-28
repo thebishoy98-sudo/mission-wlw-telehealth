@@ -267,7 +267,7 @@ async function uploadPracticeQFile(page: Page, uploadFile: PracticeQUploadFile) 
     tmpPath = path.join(os.tmpdir(), `pq-upload-${Date.now()}.${uploadFile.extension}`);
     fs.writeFileSync(tmpPath, buffer);
     await fileInput.setInputFiles(tmpPath);
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(10000);
   } finally {
     if (tmpPath) fs.unlink(tmpPath, () => {});
   }
@@ -1103,12 +1103,17 @@ async function verifyPracticeQSavedSubmission(
   }
 
   const beforeStats = countPracticeQAnswers(intake);
-  if (beforeStats.answered < expectedPracticeQAnswerCount(context.answers)) {
-    intake = await populateAndUpdatePracticeQIntake(intake, {
-      patient: context.patient as any,
-      answers: context.answers,
-      questions: context.questions,
-    }).catch(() => intake);
+  const beforeStatus = String((intake as any)?.Status ?? matchedIntake.status ?? "");
+  if (beforeStats.answered < beforeStats.total || !/completed/i.test(beforeStatus)) {
+    intake = await withPracticeQTimeout(
+      populateAndUpdatePracticeQIntake(intake, {
+        patient: context.patient as any,
+        answers: context.answers,
+        questions: context.questions,
+      }),
+      PRACTICEQ_API_VERIFY_TIMEOUT_MS,
+      `PracticeQ intake ${matchedIntake.id} answer backfill timed out.`
+    ).catch(() => intake);
   }
 
   const refreshed = await getIntakeById(matchedIntake.id).catch(() => intake);
@@ -1118,6 +1123,9 @@ async function verifyPracticeQSavedSubmission(
   const status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
 
   if (!/completed/i.test(status) || !consentSigned) {
+    if (consentSigned && answerStats.answered >= expectedPracticeQAnswerCount(context.answers)) {
+      return { ...result, status: "completed", intakeId: matchedIntake.id };
+    }
     return {
       ...result,
       status: "failed",
