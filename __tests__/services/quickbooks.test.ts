@@ -122,7 +122,7 @@ describe("quickbooks.createCustomerRecord", () => {
     expect(customerId).toBe("123");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const retryBody = JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body));
-    expect(retryBody.DisplayName).toMatch(/^Dan Brown - p1$/);
+    expect(retryBody.DisplayName).toMatch(/^Dan Brown - p1-[a-z0-9]{6}$/);
   });
 });
 

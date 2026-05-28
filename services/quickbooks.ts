@@ -71,7 +71,7 @@ function isDuplicateNameError(error: unknown): boolean {
 
 function uniqueDisplayName(patient: Patient): string {
   const baseName = `${patient.firstName} ${patient.lastName}`.trim() || patient.email || patient.id;
-  return `${baseName} - ${patient.id.slice(-8)}`;
+  return `${baseName} - ${patient.id.slice(-8)}-${generateId().slice(-6)}`;
 }
 
 function getSalesItemRef() {
