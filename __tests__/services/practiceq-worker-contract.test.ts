@@ -30,4 +30,9 @@ describe("PracticeQ worker background submission contract", () => {
     expect(source).toContain("assertVisiblePracticeQFieldsFilled");
     expect(source).toContain("PracticeQ did not keep the expected answer");
   });
+
+  it("bounds each PracticeQ field inspection so one custom input cannot hang the worker", () => {
+    expect(source).toContain("withPracticeQTimeout(");
+    expect(source).toContain("PracticeQ skipped a slow field");
+  });
 });

@@ -291,21 +291,31 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
   let filled = 0;
 
   for (let i = 0; i < count; i += 1) {
-    const field = fields.nth(i);
-    await field.scrollIntoViewIfNeeded().catch(() => {});
-    if (!(await field.isVisible().catch(() => false))) continue;
-    if (!(await isPracticeQDataEntryField(field))) continue;
-    const current = await field.inputValue().catch(() => "");
-    if (current.trim()) continue;
-    const prompt = await getPracticeQFieldPrompt(field);
-    const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
-    if (!answer) continue;
-    const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
-    await enterFieldValue(field, normalizedAnswer, prompt);
-    filled += 1;
+    filled += await withPracticeQTimeout(
+      fillPracticeQField(fields.nth(i), fillPlan),
+      1800,
+      "PracticeQ skipped a slow field"
+    ).catch(() => 0);
   }
 
   return filled;
+}
+
+async function fillPracticeQField(
+  field: ReturnType<Page["locator"]>,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>
+): Promise<number> {
+  await field.scrollIntoViewIfNeeded({ timeout: 500 }).catch(() => {});
+  if (!(await field.isVisible({ timeout: 500 }).catch(() => false))) return 0;
+  if (!(await isPracticeQDataEntryField(field))) return 0;
+  const current = await field.inputValue({ timeout: 500 }).catch(() => "");
+  if (current.trim()) return 0;
+  const prompt = await getPracticeQFieldPrompt(field);
+  const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
+  if (!answer) return 0;
+  const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
+  await enterFieldValue(field, normalizedAnswer, prompt);
+  return 1;
 }
 
 async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
