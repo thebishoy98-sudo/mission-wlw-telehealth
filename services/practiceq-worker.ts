@@ -232,6 +232,7 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
 
   for (let i = 0; i < count; i += 1) {
     const field = fields.nth(i);
+    await field.scrollIntoViewIfNeeded().catch(() => {});
     if (!(await field.isVisible().catch(() => false))) continue;
     const current = await field.inputValue().catch(() => "");
     if (current.trim()) continue;
@@ -244,7 +245,6 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
     const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!answer) continue;
     const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
-    await field.scrollIntoViewIfNeeded().catch(() => {});
     await field.fill(normalizedAnswer).catch(() => {});
     await field.evaluate((el) => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -262,6 +262,8 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
   const count = await labels.count();
   for (let i = 0; i < count; i += 1) {
     const label = labels.nth(i);
+    await label.scrollIntoViewIfNeeded().catch(() => {});
+    if (!(await label.isVisible().catch(() => false))) continue;
     const text = (await label.innerText().catch(() => "")).trim();
     if (!text) continue;
     const context = await label.evaluate((el) => {
@@ -274,6 +276,16 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
       return chunks.join(" ");
     }).catch(() => text);
     if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
+      const childInput = label.locator("input[type='checkbox'], input[type='radio']").first();
+      if (await childInput.isVisible().catch(() => false)) {
+        await childInput.click().catch(() => {});
+        continue;
+      }
+      const followingInput = label.locator("xpath=following::input[@type='checkbox' or @type='radio'][1]").first();
+      if (await followingInput.isVisible().catch(() => false)) {
+        await followingInput.click().catch(() => {});
+        continue;
+      }
       await label.click().catch(() => {});
     }
   }
