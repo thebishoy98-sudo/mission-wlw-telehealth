@@ -3,6 +3,7 @@ import path from "path";
 
 describe("payment to PracticeQ automation contract", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+  const legacyIntakeSource = fs.readFileSync(path.join(process.cwd(), "app/api/intake/submit/route.ts"), "utf8");
 
   it("queues browser automation after payment instead of directly submitting PracticeQ from checkout", () => {
     expect(source).toContain("createPracticeQAutomationJob");
@@ -13,5 +14,10 @@ describe("payment to PracticeQ automation contract", () => {
   it("does not swallow failed server PracticeQ job inserts as a pending state", () => {
     expect(source).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
     expect(source).toContain("PracticeQ automation queue failed");
+  });
+
+  it("does not submit the legacy intake route to PracticeQ before payment", () => {
+    expect(legacyIntakeSource).not.toContain("submitIntakePacket");
+    expect(legacyIntakeSource).toContain("/api/payments/charge");
   });
 });
