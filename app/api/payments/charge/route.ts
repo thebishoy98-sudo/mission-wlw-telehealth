@@ -33,6 +33,7 @@ import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audi
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { resolvePersistedDose } from "@/lib/product-dose";
+import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import type { Payment, Upload } from "@/types";
 
 export async function POST(req: NextRequest) {
@@ -149,6 +150,16 @@ export async function POST(req: NextRequest) {
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
     const fallbackQuestions = questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions);
+    const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
+    if (!questionnaire.complete) {
+      return NextResponse.json(
+        {
+          error: "Questionnaire answers are required before payment",
+          missingQuestions: questionnaire.missingQuestions,
+        },
+        { status: 422 }
+      );
+    }
 
     const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
     if (!eligibility.eligible) {
