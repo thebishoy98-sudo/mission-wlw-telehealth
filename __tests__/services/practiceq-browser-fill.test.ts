@@ -40,7 +40,7 @@ describe("PracticeQ browser fill plan", () => {
       expect.arrayContaining([
         { prompt: "First Name", value: "Bishoy" },
         { prompt: "Last Name", value: "Kamel" },
-        { prompt: "Date of Birth", value: "4/14/1998" },
+        { prompt: "Date of Birth", value: "04/14/1998" },
         { prompt: "Email", value: "thebishoy98@gmail.com" },
         { prompt: "What is your height?", value: "5 ft 11 in" },
         { prompt: "What is your current body weight?", value: "215" },
@@ -59,9 +59,9 @@ describe("PracticeQ browser fill plan", () => {
     expect(findPracticeQAnswerForPrompt("Unknown prompt", plan)).toBeNull();
   });
 
-  it("formats browser date input values for PracticeQ's M/D/YYYY field", () => {
-    expect(formatPracticeQDate("1998-04-14")).toBe("4/14/1998");
-    expect(formatPracticeQDate("4/14/1998")).toBe("4/14/1998");
+  it("formats browser date input values for PracticeQ's MM/DD/YYYY field", () => {
+    expect(formatPracticeQDate("1998-04-14")).toBe("04/14/1998");
+    expect(formatPracticeQDate("4/14/1998")).toBe("04/14/1998");
   });
 
   it("matches radio and checkbox labels against the answer for their containing PracticeQ question", () => {

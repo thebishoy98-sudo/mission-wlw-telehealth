@@ -111,7 +111,7 @@ export interface Order {
   paymentStatus: PaymentStatus;
   pharmacyStatus: PharmacyStatus;
   practiceQStatus: "pending" | "submitted" | "completed" | "error";
-  quickbooksStatus: "pending" | "created" | "invoiced" | "error";
+  quickbooksStatus: "pending" | "created" | "invoiced" | "error" | "skipped";
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;

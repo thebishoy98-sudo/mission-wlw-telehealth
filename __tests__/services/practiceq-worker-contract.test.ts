@@ -15,6 +15,13 @@ describe("PracticeQ worker background submission contract", () => {
     expect(source).toContain("submit signature|click to sign");
   });
 
+  it("uses a DOM-level click fallback for PracticeQ custom controls", () => {
+    expect(source).toContain("clickPracticeQControlByText");
+    expect(source).toContain("dispatchEvent(new MouseEvent(\"mousedown\"");
+    expect(source).toContain("start\\s+new\\s+intake\\s+form");
+    expect(source).toContain("back\\s+to\\s+questionnaire");
+  });
+
   it("reads PracticeQ question text from the Angular repeat block around answer fields", () => {
     expect(source).toContain('el.closest("[ng-repeat], .question, .panel, fieldset")');
   });

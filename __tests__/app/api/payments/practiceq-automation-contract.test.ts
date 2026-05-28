@@ -21,6 +21,13 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
   });
 
+  it("temporarily bypasses live QuickBooks payment and accounting while the intake automation is tested", () => {
+    expect(source).toContain("shouldBypassQuickBooksPayment");
+    expect(source).toContain("Payment bypassed for integration testing");
+    expect(source).toContain("QuickBooks accounting sync skipped");
+    expect(source).toContain('quickbooksStatus: "skipped"');
+  });
+
   it("uses the persisted server product for QuickBooks invoices", () => {
     expect(source).toContain("product: persistedProduct ?? productData ?? null");
     expect(source).not.toContain("product: productData ?? null,\n        qbCustomerId");

@@ -52,6 +52,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
   const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
   const browser = await chromium.launch({ headless: process.env.PRACTICEQ_WORKER_HEADLESS !== "false" });
   const page = await browser.newPage();
+  page.setDefaultTimeout(8000);
 
   try {
     await page.goto(job.practiceQStartUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -128,6 +129,7 @@ export async function startPracticeQRemoteSession(
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  page.setDefaultTimeout(8000);
 
   try {
     await page.goto(job.practiceQStartUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -182,7 +184,11 @@ export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnTyp
     if (await resolvePracticeQResumePrompt(page, bodyText)) continue;
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
-    const filled = await fillVisibleFields(page, fillPlan);
+    const filled = await withPracticeQTimeout(
+      fillVisibleFields(page, fillPlan),
+      12000,
+      "PracticeQ text field fill step timed out."
+    );
     await withPracticeQTimeout(
       clickMatchingChoices(page, fillPlan),
       12000,
@@ -470,17 +476,7 @@ async function resolvePracticeQResumePrompt(page: Page, bodyText?: string): Prom
   const text = bodyText ?? await page.locator("body").innerText().catch(() => "");
   if (!isPracticeQResumePrompt(text)) return false;
 
-  const clicked = await page.evaluate(() => {
-    const candidates = Array.from(document.querySelectorAll("button, a, input[type='button'], input[type='submit'], .btn"));
-    const target = candidates.find((el) => /start\s+new\s+intake\s+form/i.test([
-      el.textContent,
-      el.getAttribute("value"),
-      el.getAttribute("aria-label"),
-      el.getAttribute("title"),
-    ].filter(Boolean).join(" "))) as HTMLElement | undefined;
-    target?.click();
-    return Boolean(target);
-  }).catch(() => false);
+  const clicked = await clickPracticeQControlByText(page, /start\s+new\s+intake\s+form/i);
 
   if (!clicked) {
     const startNew = page
@@ -552,15 +548,22 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   if (await readAndSign.isVisible().catch(() => false)) {
     await readAndSign.scrollIntoViewIfNeeded().catch(() => {});
     await readAndSign.click({ timeout: 8000 }).catch(async () => {
-      await readAndSign.click({ force: true, timeout: 5000 }).catch(() => {});
+      await readAndSign.click({ force: true, timeout: 5000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /read\s*&?\s*sign/i);
+      });
     });
+    await page.waitForTimeout(1000);
+  } else {
+    await clickPracticeQControlByText(page, /read\s*&?\s*sign/i);
     await page.waitForTimeout(1000);
   }
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
   if (!/please read and sign|submit signature|consent for medical treatment/i.test(bodyText)) return;
 
-  await page.getByRole("link", { name: /type it/i }).first().click({ timeout: 3000 }).catch(() => {});
+  await page.getByRole("link", { name: /type it/i }).first().click({ timeout: 3000 }).catch(async () => {
+    await clickPracticeQControlByText(page, /type\s+it/i);
+  });
   await fillVisibleConsentFields(page, fillPlan, signedName);
   await fillVisibleFields(page, fillPlan);
 
@@ -587,16 +590,26 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
       }
     }
     await submitSignature.click({ timeout: 8000 }).catch(async () => {
-      await submitSignature.click({ force: true, timeout: 5000 }).catch(() => {});
+      await submitSignature.click({ force: true, timeout: 5000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /submit\s+signature|click\s+to\s+sign/i);
+      });
     });
+    await page.waitForTimeout(2000);
+  } else {
+    await clickPracticeQControlByText(page, /submit\s+signature|click\s+to\s+sign/i);
     await page.waitForTimeout(2000);
   }
 
   const back = page.getByText(/back to questionnaire/i).first();
   if (await back.isVisible().catch(() => false)) {
     await back.click({ timeout: 5000 }).catch(async () => {
-      await back.click({ force: true, timeout: 3000 }).catch(() => {});
+      await back.click({ force: true, timeout: 3000 }).catch(async () => {
+        await clickPracticeQControlByText(page, /back\s+to\s+questionnaire/i);
+      });
     });
+    await page.waitForTimeout(1000);
+  } else {
+    await clickPracticeQControlByText(page, /back\s+to\s+questionnaire/i);
     await page.waitForTimeout(1000);
   }
 }
@@ -848,20 +861,13 @@ async function clickContinue(page: Page): Promise<boolean> {
     .or(page.locator("button, input[type='button'], input[type='submit']").filter({ hasText: /continue|next/i }))
     )
     .first();
-  if (!(await button.isVisible().catch(() => false))) return false;
+  if (!(await button.isVisible().catch(() => false))) {
+    return clickPracticeQControlByText(page, /next\s+page|continue|next/i);
+  }
   await button.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
   await button.click({ timeout: 8000 }).catch(async () => {
     await button.click({ force: true, timeout: 3000 }).catch(async () => {
-      await page.evaluate(() => {
-        const candidates = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"));
-        const target = candidates.find((el) => /continue|next/i.test([
-          el.textContent,
-          el.getAttribute("value"),
-          el.getAttribute("aria-label"),
-          el.getAttribute("title"),
-        ].filter(Boolean).join(" "))) as HTMLElement | undefined;
-        target?.click();
-      }).catch(() => {});
+      await clickPracticeQControlByText(page, /next\s+page|continue|next/i);
     });
   });
   return true;
@@ -879,10 +885,7 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     await direct.click({ timeout: 8000 }).catch(async () => {
       await waitForPracticeQReady(page);
       await direct.click({ force: true, timeout: 5000 }).catch(async () => {
-        await page.evaluate(() => {
-          const button = document.querySelector("#btnSubmit") as HTMLElement | null;
-          button?.click();
-        }).catch(() => {});
+        await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
       });
     });
     return true;
@@ -906,20 +909,52 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     return true;
   }
 
-  const clicked = await page.evaluate(() => {
-    const candidates = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"));
-    const target = candidates.find((el) => /submit\s*form|submit|finish|done|complete/i.test([
+  const clicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
+  if (clicked) return true;
+
+  return false;
+}
+
+async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise<boolean> {
+  const clicked = await page.evaluate(({ source, flags }) => {
+    const matcher = new RegExp(source, flags.includes("i") ? flags : `${flags}i`);
+    const isVisible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const textFor = (el: Element) => [
       el.textContent,
       el.getAttribute("value"),
       el.getAttribute("aria-label"),
       el.getAttribute("title"),
-    ].filter(Boolean).join(" "))) as HTMLElement | undefined;
-    target?.click();
-    return Boolean(target);
-  }).catch(() => false);
-  if (clicked) return true;
-
-  return false;
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const selector = [
+      "button",
+      "a",
+      "input[type='button']",
+      "input[type='submit']",
+      "[role='button']",
+      ".btn",
+      ".btn-primary",
+      "span",
+      "div",
+    ].join(",");
+    const candidates = Array.from(document.querySelectorAll(selector));
+    const match = candidates.find((el) => isVisible(el) && matcher.test(textFor(el)));
+    const target = match?.closest("button,a,input[type='button'],input[type='submit'],[role='button'],.btn,.btn-primary") ?? match;
+    if (!target) return false;
+    const node = target as HTMLElement;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    node.click();
+    return true;
+  }, { source: pattern.source, flags: pattern.flags }).catch(() => false);
+  if (clicked) await page.waitForTimeout(1000);
+  return clicked;
 }
 
 async function waitForPracticeQReady(page: Page) {

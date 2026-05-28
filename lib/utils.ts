@@ -54,6 +54,7 @@ export const getStatusColor = (status: string): string => {
     completed: "bg-green-100 text-green-800",
     error: "bg-red-100 text-red-800",
     created: "bg-blue-100 text-blue-800",
+    skipped: "bg-gray-100 text-gray-800",
     paid: "bg-green-100 text-green-800",
   };
   return statusMap[status] || "bg-gray-100 text-gray-800";
@@ -75,6 +76,7 @@ export const getStatusLabel = (status: string): string => {
     completed: "Completed",
     error: "Error",
     created: "Created",
+    skipped: "Skipped",
     paid: "Paid",
   };
   return labels[status] || status;

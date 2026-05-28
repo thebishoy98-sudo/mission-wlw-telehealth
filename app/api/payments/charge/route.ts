@@ -52,11 +52,16 @@ async function wakePracticeQRemoteWorker() {
   }
 }
 
+function shouldBypassQuickBooksPayment() {
+  return process.env.BYPASS_QB_PAYMENTS !== "false";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
-    const chargeAmount = getChargeAmount(amount);
+    const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
+    const chargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
 
     if (!orderId || chargeAmount === null) {
       return NextResponse.json(
@@ -211,25 +216,44 @@ export async function POST(req: NextRequest) {
       outcome: "success",
     });
 
-    // 5. Charge via QuickBooks Payments
+    // 5. Charge via QuickBooks Payments, or bypass it while end-to-end intake automation is being tested.
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
-    try {
-      chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
-        token,
-        cardNumber,
-        expMonth,
-        expYear,
-        cvc,
-        cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
-        cardLast4,
-        cardBrand,
-        billingAddress: patient.address,
-      });
-    } catch (err: any) {
-      return NextResponse.json(
-        { error: err.message ?? "Payment failed" },
-        { status: 402 }
-      );
+    if (bypassQuickBooksPayment) {
+      chargeResult = {
+        chargeId: `test_bypass_${generateId()}`,
+        status: "CAPTURED",
+        cardLast4: cardLast4 ?? (String(cardNumber ?? "").replace(/\D/g, "").slice(-4) || "0000"),
+        cardBrand: cardBrand ?? "test",
+      };
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "quickbooks",
+        action: "Payment bypassed for integration testing",
+        orderId,
+        patientId: patient.id,
+        status: "success",
+        details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
+      }).catch(() => {});
+    } else {
+      try {
+        chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
+          token,
+          cardNumber,
+          expMonth,
+          expYear,
+          cvc,
+          cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
+          cardLast4,
+          cardBrand,
+          billingAddress: patient.address,
+        });
+      } catch (err: any) {
+        return NextResponse.json(
+          { error: err.message ?? "Payment failed" },
+          { status: 402 }
+        );
+      }
     }
 
     // 6. Record payment locally
@@ -331,32 +355,47 @@ export async function POST(req: NextRequest) {
     let practiceQAutomationStatus: "queued" | "error" = "queued";
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
-    try {
-      const qbCustomerId = await quickbooks.createCustomerRecord(patient);
-      const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
-        patient,
-        product: persistedProduct ?? productData ?? null,
-        qbCustomerId,
-      });
-      await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
-      db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
-      await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
-    } catch (e) {
-      const errorMessage = (e as Error).message;
-      errors.push(`QuickBooks accounting: ${errorMessage}`);
-      db.orderDb.update(orderId, { quickbooksStatus: "error" });
-      await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
+    if (bypassQuickBooksPayment) {
+      db.orderDb.update(orderId, { quickbooksStatus: "skipped" });
+      await dbServer.orderDb.update(orderId, { quickbooksStatus: "skipped" }).catch(() => {});
       await dbServer.integrationLogDb.create({
         id: generateId(),
         timestamp: new Date().toISOString(),
         integrationName: "quickbooks",
-        action: "QuickBooks accounting sync failed",
+        action: "QuickBooks accounting sync skipped",
         orderId,
         patientId: patient.id,
-        status: "error",
-        details: { amount: payment.amount, transactionId: payment.transactionId },
-        error: errorMessage,
+        status: "success",
+        details: { amount: payment.amount, transactionId: payment.transactionId, mode: "bypass" },
       }).catch(() => {});
+    } else {
+      try {
+        const qbCustomerId = await quickbooks.createCustomerRecord(patient);
+        const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
+          patient,
+          product: persistedProduct ?? productData ?? null,
+          qbCustomerId,
+        });
+        await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
+        db.orderDb.update(orderId, { quickbooksStatus: "invoiced" });
+        await dbServer.orderDb.update(orderId, { quickbooksStatus: "invoiced" }).catch(() => {});
+      } catch (e) {
+        const errorMessage = (e as Error).message;
+        errors.push(`QuickBooks accounting: ${errorMessage}`);
+        db.orderDb.update(orderId, { quickbooksStatus: "error" });
+        await dbServer.orderDb.update(orderId, { quickbooksStatus: "error" }).catch(() => {});
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "quickbooks",
+          action: "QuickBooks accounting sync failed",
+          orderId,
+          patientId: patient.id,
+          status: "error",
+          details: { amount: payment.amount, transactionId: payment.transactionId },
+          error: errorMessage,
+        }).catch(() => {});
+      }
     }
 
     // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment,

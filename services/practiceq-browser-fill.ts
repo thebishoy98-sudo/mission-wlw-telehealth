@@ -140,7 +140,10 @@ export function answerMatchesPracticeQChoice(answer: string, labelText: string):
 export function formatPracticeQDate(value: string): string {
   const trimmed = value.trim();
   const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return `${Number(iso[2])}/${Number(iso[3])}/${iso[1]}`;
+  const pad = (part: string | number) => String(Number(part)).padStart(2, "0");
+  if (iso) return `${pad(iso[2])}/${pad(iso[3])}/${iso[1]}`;
+  const slashDate = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDate) return `${pad(slashDate[1])}/${pad(slashDate[2])}/${slashDate[3]}`;
   return trimmed;
 }
 

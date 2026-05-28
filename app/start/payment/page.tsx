@@ -20,7 +20,7 @@ const configuredChargeOverride = Number(process.env.NEXT_PUBLIC_PAYMENT_CHARGE_A
 const chargeAmountOverride =
   Number.isFinite(configuredChargeOverride) && configuredChargeOverride > 0
     ? configuredChargeOverride
-    : null;
+    : 0.01;
 
 export default function Payment() {
   const router = useRouter();
@@ -146,8 +146,8 @@ export default function Payment() {
       });
     }
 
-    // Call API route -> QB Payments charge -> integration chain
-    setProcessingStep("Charging card via QuickBooks Payments...");
+    // Call API route -> testing payment bypass -> integration chain
+    setProcessingStep("Confirming test payment...");
 
     const res = await fetch("/api/payments/charge", {
       method: "POST",
@@ -268,7 +268,7 @@ export default function Payment() {
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-            <span>Secured by QuickBooks Payments</span>
+            <span>Test payment mode</span>
           </div>
         </div>
 
