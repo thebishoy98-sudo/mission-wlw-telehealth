@@ -373,9 +373,7 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
   for (let i = 0; i < checkboxCount; i += 1) {
     const checkbox = uncheckedBoxes.nth(i);
     await checkbox.scrollIntoViewIfNeeded().catch(() => {});
-    if (await checkbox.isVisible().catch(() => false)) {
-      await checkPracticeQCheckbox(checkbox);
-    }
+    await checkPracticeQCheckbox(checkbox);
   }
 
   const submitSignature = page.getByRole("button", { name: /submit signature|click to sign/i }).first();
@@ -509,12 +507,27 @@ async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string
 }
 
 async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
+  await checkbox.evaluate((el) => {
+    const angular = (window as any).angular;
+    const scope = angular?.element(el).scope?.();
+    const model = scope?.field ?? scope?.i ?? scope?.option;
+    if (model && Object.prototype.hasOwnProperty.call(model, "Answer")) model.Answer = true;
+    if (model && Object.prototype.hasOwnProperty.call(model, "Checked")) model.Checked = true;
+    scope?.save?.();
+    scope?.changed?.();
+    scope?.$applyAsync?.();
+  }).catch(() => {});
   await checkbox.check().catch(async () => {
     await checkbox.evaluate((el) => {
       const target = el.parentElement?.querySelector("ins.iCheck-helper")
         ?? el.parentElement
         ?? el;
       (target as HTMLElement).click();
+      const angular = (window as any).angular;
+      const scope = angular?.element(el).scope?.();
+      scope?.save?.();
+      scope?.changed?.();
+      scope?.$applyAsync?.();
     }).catch(async () => {
       await checkbox.click({ force: true }).catch(() => {});
     });
