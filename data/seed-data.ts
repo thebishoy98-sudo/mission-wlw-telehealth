@@ -304,6 +304,7 @@ export const seedQuestions: Types.Question[] = [
       "History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2)",
       "Allergic to Vitamin B6",
       "History of Medullary Thyroid Cancer",
+      "None apply to me",
     ],
     required: true,
     displayOrder: 4,

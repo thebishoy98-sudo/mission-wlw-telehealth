@@ -87,6 +87,7 @@ describe("PracticeQ browser fill plan", () => {
     expect(answerMatchesPracticeQChoice("Personal or family history of medullary thyroid cancer or MEN 2", "History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2)")).toBe(true);
     expect(answerMatchesPracticeQChoice("History of Diabetes", "I'm Pregnant")).toBe(false);
     expect(answerMatchesPracticeQChoice("None of the above", "History of Diabetes")).toBe(false);
+    expect(answerMatchesPracticeQChoice("None apply to me", "History of Diabetes")).toBe(false);
   });
 
   it("only blocks consent pages when Mission does not have a signed consent to use", () => {

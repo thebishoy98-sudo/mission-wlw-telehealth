@@ -107,7 +107,7 @@ export function answerMatchesPracticeQChoice(answer: string, labelText: string):
   const normalizedAnswer = normalizePrompt(answer);
   const normalizedLabel = normalizePrompt(labelText);
   if (!normalizedAnswer || !normalizedLabel) return false;
-  if (normalizedAnswer === "none of the above" || normalizedAnswer === "none") return false;
+  if (normalizedAnswer === "none of the above" || normalizedAnswer === "none apply to me" || normalizedAnswer === "none") return false;
   if (normalizedAnswer === normalizedLabel) return true;
 
   const selectedValues = normalizedAnswer.split(/\s*,\s*/).map(normalizePrompt).filter(Boolean);

@@ -11,6 +11,11 @@ import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
 
 const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm bg-white appearance-none";
+const noneOptionLabels = new Set(["None apply to me", "None of the above"]);
+
+function isNoneOption(option: string) {
+  return noneOptionLabels.has(option);
+}
 
 function HeightPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const parseFeet = (v: string) => { const m = v.match(/^(\d+)/); return m ? m[1] : "5"; };
@@ -86,11 +91,13 @@ export default function Questionnaire() {
   const toggleMultiAnswer = (id: string, option: string, checked: boolean) => {
     setAnswers((prev) => {
       const current = (prev[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
+      if (isNoneOption(option)) {
+        return { ...prev, [id]: checked ? option : "" };
+      }
       const next = checked
-        ? Array.from(new Set([...current.filter((item) => item !== "None of the above"), option]))
+        ? Array.from(new Set([...current.filter((item) => !isNoneOption(item)), option]))
         : current.filter((item) => item !== option);
-      const normalized = option === "None of the above" && checked ? ["None of the above"] : next;
-      return { ...prev, [id]: normalized.join(", ") };
+      return { ...prev, [id]: next.join(", ") };
     });
     setIneligibleQuestion(null);
     setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
