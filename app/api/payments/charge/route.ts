@@ -32,6 +32,7 @@ import { generateId } from "@/lib/utils";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
+import { resolvePersistedDose } from "@/lib/product-dose";
 import type { Payment, Upload } from "@/types";
 
 export async function POST(req: NextRequest) {
@@ -65,10 +66,7 @@ export async function POST(req: NextRequest) {
           (await dbServer.productDb.getById(productData.id).catch(() => null));
       }
     }
-    const requestedDose = productData?.doses?.find((dose: any) => dose.id === orderData?.doseId);
-    const persistedDose = requestedDose && persistedProduct
-      ? persistedProduct.doses.find((dose) => dose.label === requestedDose.label || dose.strength === requestedDose.strength)
-      : null;
+    const persistedDose = resolvePersistedDose(persistedProduct, productData ?? null, orderData?.doseId);
 
     // Patient must exist before the order because orders.patient_id has an FK. Repeated
     // checkout retries may reuse the same email with a new browser-generated patient id.
