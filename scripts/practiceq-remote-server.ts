@@ -2,6 +2,7 @@ import { loadEnvConfig } from "@next/env";
 import http from "http";
 import { URL } from "url";
 import * as dbServer from "@/lib/db.server";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import {
   closePracticeQRemoteSession,
   getPracticeQRemoteSession,
@@ -55,7 +56,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
     if (action === "done" && req.method === "POST") {
-      await dbServer.practiceqAutomationJobDb.update(jobId, { status: "completed" }).catch(() => null);
+      await completePracticeQSession(jobId);
       await closePracticeQRemoteSession(jobId);
       return sendJson(res, 200, { ok: true });
     }
