@@ -4,6 +4,7 @@ import { getIdentityGate } from "@/lib/identity";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { logPhiDisclosure } from "@/lib/phi-audit";
 import * as lifefile from "@/services/lifefile";
+import * as practiceq from "@/services/practiceq";
 import * as spruceServer from "@/services/spruce.server";
 
 type CompletionResult =
@@ -19,6 +20,26 @@ function canTryPharmacyDispatch(order: Order): boolean {
   return getIdentityGate(order).canDispatch && (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error");
 }
 
+async function linkLatestPracticeQIntake(jobId: string, order: Order) {
+  const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+  if (!patient?.email) return null;
+
+  const feed = await practiceq.getIntakeSummaryFeed({ client: patient.email }).catch(() => null);
+  const match = feed?.all.find((form) =>
+    form.clientEmail?.toLowerCase() === patient.email.toLowerCase() ||
+    form.clientName?.toLowerCase() === `${patient.firstName} ${patient.lastName}`.trim().toLowerCase()
+  );
+  if (!match) return null;
+
+  await dbServer.practiceqAutomationJobDb.update(jobId, { intakeId: match.id }).catch(() => null);
+  await dbServer.orderDb.update(order.id, {
+    practiceqClientId: match.clientId,
+    practiceQStatus: "completed",
+  }).catch(() => null);
+
+  return match;
+}
+
 export async function completePracticeQSession(jobId: string): Promise<CompletionResult> {
   const job = await dbServer.practiceqAutomationJobDb.update(jobId, { status: "completed" }).catch(() => null);
   if (!job) return { status: "missing_job" };
@@ -30,6 +51,7 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
     .update(order.id, { practiceQStatus: "completed" })
     .catch(() => null);
   const dispatchOrder = completedOrder ?? { ...order, practiceQStatus: "completed" as const };
+  await linkLatestPracticeQIntake(jobId, dispatchOrder).catch(() => null);
 
   if (!canTryPharmacyDispatch(dispatchOrder)) return { status: "waiting_for_identity" };
 

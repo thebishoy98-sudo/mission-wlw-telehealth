@@ -3,6 +3,7 @@ import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import * as dbServer from "@/lib/db.server";
 import * as lifefile from "@/services/lifefile";
 import * as spruceServer from "@/services/spruce.server";
+import * as practiceq from "@/services/practiceq";
 
 jest.mock("@/lib/db.server", () => ({
   practiceqAutomationJobDb: { update: jest.fn() },
@@ -19,6 +20,10 @@ jest.mock("@/services/lifefile", () => ({
 
 jest.mock("@/services/spruce.server", () => ({
   sendMessage: jest.fn(),
+}));
+
+jest.mock("@/services/practiceq", () => ({
+  getIntakeSummaryFeed: jest.fn(),
 }));
 
 jest.mock("@/lib/phi-audit", () => ({
@@ -100,6 +105,12 @@ describe("completePracticeQSession", () => {
     (dbServer.pharmacyOrderDb.getByOrder as jest.Mock).mockResolvedValue(null);
     (dbServer.pharmacyOrderDb.create as jest.Mock).mockResolvedValue(null);
     (spruceServer.sendMessage as jest.Mock).mockResolvedValue({ id: "sms_1" });
+    (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
+      available: true,
+      completed: [],
+      pending: [],
+      all: [],
+    });
     (lifefile.createPharmacyOrder as jest.Mock).mockResolvedValue({
       id: "pharmacy_1",
       orderId: order.id,
@@ -107,6 +118,34 @@ describe("completePracticeQSession", () => {
       status: "submitted",
       payload: {},
       submittedAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("links the completed hosted PracticeQ intake back to the Mission order", async () => {
+    (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
+      available: true,
+      completed: [],
+      pending: [],
+      all: [
+        {
+          id: "intake_1",
+          clientId: "client_81",
+          clientEmail: patient.email,
+          clientName: "Bishoy Kamel",
+          status: "Completed",
+          submittedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await completePracticeQSession("job_1");
+
+    expect(dbServer.practiceqAutomationJobDb.update).toHaveBeenCalledWith("job_1", {
+      intakeId: "intake_1",
+    });
+    expect(dbServer.orderDb.update).toHaveBeenCalledWith(order.id, {
+      practiceqClientId: "client_81",
+      practiceQStatus: "completed",
     });
   });
 
