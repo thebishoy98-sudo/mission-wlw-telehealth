@@ -3,8 +3,10 @@ import * as dbServer from "@/lib/db.server";
 import type { PracticeQAutomationJob } from "@/types";
 import {
   buildPracticeQFillPlan,
+  formatPracticeQDate,
   findPracticeQAnswerForPrompt,
-  shouldStopForPatientConsent,
+  findPracticeQChoiceForLabel,
+  requiresUnhandledPatientConsent,
 } from "@/services/practiceq-browser-fill";
 
 type WorkerResult = {
@@ -34,14 +36,15 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     return { status: "failed", error: "Order is missing or payment is not complete" };
   }
 
-  const [patient, answers, questions] = await Promise.all([
+  const [patient, answers, questions, consent] = await Promise.all([
     dbServer.patientDb.getById(job.patientId),
     dbServer.answerDb.getByOrder(job.orderId),
     dbServer.questionDb.getAll(),
+    dbServer.consentDb.getByOrder(job.orderId).catch(() => null),
   ]);
   if (!patient) return { status: "failed", error: "Patient not found" };
 
-  const fillPlan = buildPracticeQFillPlan(patient, answers, questions);
+  const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
   const browser = await chromium.launch({ headless: process.env.PRACTICEQ_WORKER_HEADLESS !== "false" });
   const page = await browser.newPage();
 
@@ -51,7 +54,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
-    const submitResult = await submitPracticeQInBackground(page, fillOutcome);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
 
     return submitResult;
   } catch (error) {
@@ -100,14 +103,15 @@ export async function startPracticeQRemoteSession(
     return { status: "failed", error: "Order is missing or payment is not complete" };
   }
 
-  const [patient, answers, questions] = await Promise.all([
+  const [patient, answers, questions, consent] = await Promise.all([
     dbServer.patientDb.getById(job.patientId),
     dbServer.answerDb.getByOrder(job.orderId),
     dbServer.questionDb.getAll(),
+    dbServer.consentDb.getByOrder(job.orderId).catch(() => null),
   ]);
   if (!patient) return { status: "failed", error: "Patient not found" };
 
-  const fillPlan = buildPracticeQFillPlan(patient, answers, questions);
+  const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
@@ -120,7 +124,7 @@ export async function startPracticeQRemoteSession(
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan);
-    const submitResult = await submitPracticeQInBackground(page, fillOutcome);
+    const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
     await browser.close().catch(() => {});
     return submitResult;
   } catch (error) {
@@ -156,7 +160,7 @@ export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnTyp
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
     const bodyText = await page.locator("body").innerText().catch(() => "");
-    if (shouldStopForPatientConsent(bodyText)) return { stoppedForPatientConsent: true };
+    if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
     const filled = await fillVisibleFields(page, fillPlan);
     await clickMatchingChoices(page, fillPlan);
@@ -167,9 +171,14 @@ export async function fillPracticeQQuestionPages(page: Page, fillPlan: ReturnTyp
   return { stoppedForPatientConsent: false };
 }
 
-export async function submitPracticeQInBackground(page: Page, fillOutcome: FillOutcome): Promise<WorkerResult> {
+export async function submitPracticeQInBackground(
+  page: Page,
+  fillOutcome: FillOutcome,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan> = []
+): Promise<WorkerResult> {
   const bodyText = await page.locator("body").innerText().catch(() => "");
-  if (fillOutcome.stoppedForPatientConsent || shouldStopForPatientConsent(bodyText)) {
+  const hasUnhandledConsent = requiresUnhandledPatientConsent(bodyText, fillPlan);
+  if (fillOutcome.stoppedForPatientConsent || hasUnhandledConsent) {
     return {
       status: "failed",
       error:
@@ -234,7 +243,14 @@ async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPr
     });
     const answer = findPracticeQAnswerForPrompt(prompt, fillPlan);
     if (!answer) continue;
-    await field.fill(answer).catch(() => {});
+    const normalizedAnswer = /date of birth|dob/i.test(prompt) ? formatPracticeQDate(answer) : answer;
+    await field.scrollIntoViewIfNeeded().catch(() => {});
+    await field.fill(normalizedAnswer).catch(() => {});
+    await field.evaluate((el) => {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+    }).catch(() => {});
     filled += 1;
   }
 
@@ -247,10 +263,17 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
   for (let i = 0; i < count; i += 1) {
     const label = labels.nth(i);
     const text = (await label.innerText().catch(() => "")).trim();
-    if (!text || shouldStopForPatientConsent(text)) continue;
-    const answer = findPracticeQAnswerForPrompt(text, fillPlan);
-    if (!answer) continue;
-    if (answer.toLowerCase() === text.toLowerCase() || text.toLowerCase().includes(answer.toLowerCase())) {
+    if (!text) continue;
+    const context = await label.evaluate((el) => {
+      const chunks: string[] = [];
+      let current: Element | null = el;
+      for (let depth = 0; current && depth < 6; depth += 1) {
+        chunks.push(current.textContent ?? "");
+        current = current.parentElement;
+      }
+      return chunks.join(" ");
+    }).catch(() => text);
+    if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
       await label.click().catch(() => {});
     }
   }

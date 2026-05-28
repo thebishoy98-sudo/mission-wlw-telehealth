@@ -114,6 +114,22 @@ describe("checkEligibility", () => {
 
     expect(result.eligible).toBe(false);
   });
+
+  it("detects any configured disqualifying option from a comma-separated disqualifying list", () => {
+    const multiQuestions: Question[] = [
+      makeQuestion(
+        "q_conditions",
+        "Select any that apply to you?",
+        true,
+        "I'm Pregnant, I'm Breastfeeding, History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2), History of Medullary Thyroid Cancer"
+      ),
+    ];
+    const answers = [makeAnswer("q_conditions", "History of Diabetes, I'm Breastfeeding")];
+
+    const result = checkEligibility(answers, multiQuestions);
+
+    expect(result.eligible).toBe(false);
+  });
 });
 
 describe("validateCompleteness", () => {
