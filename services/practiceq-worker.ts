@@ -47,6 +47,7 @@ const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
 const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
 const PRACTICEQ_CONSENT_TIMEOUT_MS = 60000;
 const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
+const PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS = 60000;
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -1132,10 +1133,22 @@ async function verifyPracticeQSavedSubmission(
   const verifiedIntake = refreshed ?? intake;
   const answerStats = countPracticeQAnswers(verifiedIntake);
   const consentSigned = hasSignedConsent(verifiedIntake);
-  const status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
+  let status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
 
   if (!/completed/i.test(status) || !consentSigned) {
     if (consentSigned && answerStats.answered >= expectedPracticeQAnswerCount(context.answers)) {
+      const markedCompleted = await withPracticeQTimeout(
+        setPracticeQIntakeCompletedInAdmin(matchedIntake.id),
+        PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS,
+        `PracticeQ admin Set as Completed timed out for ${matchedIntake.id}.`
+      ).catch(() => false);
+      if (markedCompleted) {
+        const completedIntake = await getIntakeById(matchedIntake.id).catch(() => null);
+        status = String((completedIntake as any)?.Status ?? "Completed");
+        if (/completed/i.test(status)) {
+          return { ...result, status: "completed", intakeId: matchedIntake.id };
+        }
+      }
       return { ...result, status: "completed", intakeId: matchedIntake.id };
     }
     return {
@@ -1217,4 +1230,90 @@ function extractPracticeQIntakeId(url: string): string | undefined {
 
 function looksSubmitted(text: string): boolean {
   return /thank you|submitted|received your form|form is complete|successfully submitted/i.test(text);
+}
+
+async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boolean> {
+  if (process.env.PRACTICEQ_ADMIN_SET_COMPLETED !== "true") return false;
+
+  const storageState = getPracticeQAdminStorageState();
+  const browser = await chromium.launch({
+    headless: process.env.PRACTICEQ_ADMIN_HEADLESS !== "false",
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  });
+  const context = await browser.newContext(storageState ? { storageState } : undefined);
+  const page = await context.newPage();
+  page.setDefaultTimeout(12000);
+
+  try {
+    await page.goto(`https://intakeq.com/#/history/${encodeURIComponent(intakeId)}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
+    });
+    await completePracticeQAdminLoginIfNeeded(page);
+    await page.waitForTimeout(3000);
+
+    const more = page
+      .getByRole("button", { name: /more/i })
+      .or(page.getByRole("link", { name: /more/i }))
+      .or(page.locator("button, a, [role='button']").filter({ hasText: /more/i }))
+      .first();
+    if (await more.isVisible().catch(() => false)) {
+      await more.click({ timeout: 8000 }).catch(async () => {
+        await more.click({ force: true, timeout: 5000 }).catch(() => {});
+      });
+    } else {
+      await clickPracticeQControlByText(page, /more/i);
+    }
+
+    await page.waitForTimeout(1000);
+    const setCompleted = page
+      .getByText(/set\s+as\s+completed/i)
+      .or(page.locator("button, a, li, div, span").filter({ hasText: /set\s+as\s+completed/i }))
+      .first();
+    if (!(await setCompleted.isVisible().catch(() => false))) return false;
+
+    await setCompleted.click({ timeout: 8000 }).catch(async () => {
+      await setCompleted.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
+    await page.waitForTimeout(1000);
+    await clickPracticeQControlByText(page, /confirm|yes|ok|set\s+as\s+completed/i).catch(() => false);
+    await page.waitForTimeout(3000);
+    return true;
+  } finally {
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+  }
+}
+
+function getPracticeQAdminStorageState(): string | undefined {
+  if (process.env.PRACTICEQ_ADMIN_STORAGE_STATE) return process.env.PRACTICEQ_ADMIN_STORAGE_STATE;
+  if (!process.env.PRACTICEQ_ADMIN_STORAGE_STATE_JSON) return undefined;
+  const tmpPath = path.join(os.tmpdir(), `practiceq-admin-storage-${Date.now()}.json`);
+  fs.writeFileSync(tmpPath, process.env.PRACTICEQ_ADMIN_STORAGE_STATE_JSON);
+  return tmpPath;
+}
+
+async function completePracticeQAdminLoginIfNeeded(page: Page): Promise<void> {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (!/login|sign in|password/i.test(bodyText)) return;
+
+  const email = process.env.PRACTICEQ_ADMIN_EMAIL ?? "";
+  const password = process.env.PRACTICEQ_ADMIN_PASSWORD ?? "";
+  if (!email || !password) return;
+
+  const emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
+  const passwordInput = page.locator("input[type='password']").first();
+  if (await emailInput.isVisible().catch(() => false)) await emailInput.fill(email);
+  if (await passwordInput.isVisible().catch(() => false)) await passwordInput.fill(password);
+
+  const signIn = page
+    .getByRole("button", { name: /log\s*in|sign\s*in/i })
+    .or(page.locator("button, input[type='submit']").filter({ hasText: /log\s*in|sign\s*in/i }))
+    .first();
+  if (await signIn.isVisible().catch(() => false)) {
+    await signIn.click({ timeout: 8000 }).catch(async () => {
+      await signIn.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
+    await page.waitForTimeout(3000);
+  }
 }

@@ -41,6 +41,14 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).not.toContain("none apply to me)$/i.test(value)) continue");
   });
 
+  it("can optionally mark fully answered PracticeQ admin forms as completed", () => {
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS");
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_SET_COMPLETED");
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_STORAGE_STATE");
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_EMAIL");
+    expect(workerSource).toMatch(/set\\s\+as\\s\+completed/i);
+  });
+
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
