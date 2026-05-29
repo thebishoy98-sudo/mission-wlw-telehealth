@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
     db.orderDb.update(orderId, update);
     await dbServer.orderDb.update(orderId, update).catch(() => {});
 
-    const review = db.providerReviewDb.getByOrder(orderId);
+    const review =
+      (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
+      db.providerReviewDb.getByOrder(orderId);
     if (review) {
       db.providerReviewDb.update(review.id, {
         identityReviewRequired: false,
