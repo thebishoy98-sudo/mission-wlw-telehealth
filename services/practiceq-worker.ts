@@ -1099,7 +1099,11 @@ async function verifyPracticeQSavedSubmission(
     "PracticeQ API verification timed out."
   ).catch(() => null);
   if (!matchedIntake) {
-    return result;
+    return {
+      ...result,
+      status: "failed",
+      error: "PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.",
+    };
   }
 
   let intake = await withPracticeQTimeout(

@@ -34,8 +34,8 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("PRACTICEQ_API_VERIFY_TIMEOUT_MS");
     expect(workerSource).toContain("PracticeQ API verification timed out.");
     expect(workerSource).toContain("answer backfill timed out.");
-    expect(workerSource).toContain("return result;");
-    expect(workerSource).not.toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
+    expect(workerSource).toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
+    expect(workerSource).toContain('status: "failed",\n      error: "PracticeQ browser submit finished');
   });
 
   it("allows the real IntakeQ none option to be clicked when configured", () => {
