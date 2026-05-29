@@ -691,6 +691,20 @@ export const practiceqAutomationJobDb = {
     return rows.map(rowToPracticeQAutomationJob);
   },
 
+  async getAdminCompletionRetryCandidates(limit = 5): Promise<PracticeQAutomationJob[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs
+      WHERE status = 'failed'
+        AND intake_id IS NOT NULL
+        AND attempts < 5
+        AND last_error LIKE 'PracticeQ admin Set as Completed failed%'
+      ORDER BY updated_at ASC
+      LIMIT ${limit}
+    `;
+    return rows.map(rowToPracticeQAutomationJob);
+  },
+
   async update(id: string, data: Partial<PracticeQAutomationJob>): Promise<PracticeQAutomationJob | null> {
     if (!isDbAvailable()) return null;
     const existingRows = await sql`SELECT * FROM practiceq_automation_jobs WHERE id = ${id} LIMIT 1`;

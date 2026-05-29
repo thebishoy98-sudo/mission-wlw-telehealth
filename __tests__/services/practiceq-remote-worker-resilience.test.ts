@@ -43,6 +43,14 @@ describe("PracticeQ remote worker resilience", () => {
     expect(dbSource).toContain("status = 'running'");
   });
 
+  it("lets the Render worker retry failed admin completion jobs with linked intakes", () => {
+    expect(dbSource).toContain("getAdminCompletionRetryCandidates");
+    expect(dbSource).toContain("last_error LIKE 'PracticeQ admin Set as Completed failed%'");
+    expect(remoteServerSource).toContain("retryFailedAdminCompletionJobs");
+    expect(remoteServerSource).toContain("completePracticeQIntakeInAdmin(job.intakeId)");
+    expect(remoteServerSource).toContain("completePracticeQSession(job.id)");
+  });
+
   it("uploads the patient identity video to IntakeQ hidden file inputs", () => {
     expect(workerSource).toContain('u.type === "selfie_video"');
     expect(workerSource).toContain("uploadPracticeQFile");
@@ -103,7 +111,7 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
   });
 
-  it("polls PracticeQ after admin Set as Completed before failing the job", async () => {
+  it("polls PracticeQ status after admin Set as Completed", async () => {
     const fetchIntake = jest
       .fn()
       .mockResolvedValueOnce({ Status: "Draft" })
@@ -118,6 +126,13 @@ describe("PracticeQ remote worker resilience", () => {
 
     expect(fetchIntake).toHaveBeenCalledTimes(2);
     expect(fetchIntake).toHaveBeenCalledWith("intake_1");
+  });
+
+  it("trusts the admin browser when the PracticeQ page visibly shows completed", () => {
+    expect(workerSource).toContain("practiceQAdminPageShowsCompleted");
+    expect(workerSource).toContain("await waitForPracticeQCompletedStatus(matchedIntake.id).catch(() => false);");
+    expect(workerSource).toContain('return { ...result, status: "completed", intakeId: matchedIntake.id };');
+    expect(workerSource).toContain("return practiceQAdminPageShowsCompleted(page);");
   });
 
   it("binds the remote health route before loading heavy PracticeQ worker modules", () => {

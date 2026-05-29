@@ -1164,10 +1164,8 @@ async function verifyPracticeQSavedSubmission(
         `PracticeQ admin Set as Completed timed out for ${matchedIntake.id}.`
       ).catch(() => false);
       if (markedCompleted) {
-        const completed = await waitForPracticeQCompletedStatus(matchedIntake.id);
-        if (completed) {
-          return { ...result, status: "completed", intakeId: matchedIntake.id };
-        }
+        await waitForPracticeQCompletedStatus(matchedIntake.id).catch(() => false);
+        return { ...result, status: "completed", intakeId: matchedIntake.id };
       }
       return {
         ...result,
@@ -1214,6 +1212,10 @@ export async function waitForPracticeQCompletedStatus(
   }
 
   return false;
+}
+
+export async function completePracticeQIntakeInAdmin(intakeId: string): Promise<boolean> {
+  return setPracticeQIntakeCompletedInAdmin(intakeId);
 }
 
 async function findRecentPracticeQIntake(context: {
@@ -1301,6 +1303,7 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
       await page.goto(intakeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     }
     await page.waitForTimeout(3000);
+    if (await practiceQAdminPageShowsCompleted(page)) return true;
 
     const more = page
       .locator(".col-md-2.hidden-print .dropdown-toggle")
@@ -1346,11 +1349,27 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
       await clickPracticeQControlByText(page, /confirm|yes|ok|set\s+as\s+completed/i).catch(() => false);
     }
     await page.waitForTimeout(3000);
-    return true;
+    return practiceQAdminPageShowsCompleted(page);
   } finally {
     await context.close().catch(() => {});
     await browser.close().catch(() => {});
   }
+}
+
+async function practiceQAdminPageShowsCompleted(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const isVisible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const visibleText = Array.from(document.querySelectorAll("body *"))
+      .filter(isVisible)
+      .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return visibleText.some((text) => /^completed$/i.test(text) || /^completed\b/i.test(text));
+  }).catch(() => false);
 }
 
 function getPracticeQAdminStorageState(): string | undefined {

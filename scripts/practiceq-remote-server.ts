@@ -13,6 +13,7 @@ type RemoteServerModules = {
   dbServer: typeof import("@/lib/db.server");
   completePracticeQSession: typeof import("@/lib/practiceq-session-completion").completePracticeQSession;
   closePracticeQRemoteSession: typeof import("@/services/practiceq-worker").closePracticeQRemoteSession;
+  completePracticeQIntakeInAdmin: typeof import("@/services/practiceq-worker").completePracticeQIntakeInAdmin;
   getPracticeQRemoteSession: typeof import("@/services/practiceq-worker").getPracticeQRemoteSession;
   startPracticeQRemoteSession: typeof import("@/services/practiceq-worker").startPracticeQRemoteSession;
 };
@@ -29,6 +30,7 @@ function loadRemoteServerModules(): Promise<RemoteServerModules> {
       dbServer,
       completePracticeQSession: sessionCompletion.completePracticeQSession,
       closePracticeQRemoteSession: practiceQWorker.closePracticeQRemoteSession,
+      completePracticeQIntakeInAdmin: practiceQWorker.completePracticeQIntakeInAdmin,
       getPracticeQRemoteSession: practiceQWorker.getPracticeQRemoteSession,
       startPracticeQRemoteSession: practiceQWorker.startPracticeQRemoteSession,
     }));
@@ -121,8 +123,41 @@ async function pollQueuedJobs() {
         });
       }
     }
+    if (jobs.length === 0) {
+      await retryFailedAdminCompletionJobs(modules);
+    }
   } finally {
     polling = false;
+  }
+}
+
+async function retryFailedAdminCompletionJobs(modules: RemoteServerModules) {
+  const jobs = await modules.dbServer.practiceqAutomationJobDb.getAdminCompletionRetryCandidates(1);
+  for (const job of jobs) {
+    if (!job.intakeId) continue;
+    await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
+      status: "running",
+      attempts: job.attempts + 1,
+      lockedAt: new Date().toISOString(),
+      lastError: undefined,
+    });
+    const completed = await modules.completePracticeQIntakeInAdmin(job.intakeId).catch(() => false);
+    if (!completed) {
+      await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
+        status: "failed",
+        lastError: `PracticeQ admin Set as Completed failed for ${job.intakeId}.`,
+      });
+      await modules.dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+      continue;
+    }
+    await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
+      status: "completed",
+      intakeId: job.intakeId,
+      lastError: undefined,
+    });
+    await modules.completePracticeQSession(job.id).catch((error) => {
+      console.error("PracticeQ completion retry follow-up failed:", error instanceof Error ? error.message : error);
+    });
   }
 }
 
