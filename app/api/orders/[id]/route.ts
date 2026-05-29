@@ -6,11 +6,12 @@ import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const order =
-    (await dbServer.orderDb.getById(params.id).catch(() => null)) ??
-    db.orderDb.getById(params.id);
+    (await dbServer.orderDb.getById(id).catch(() => null)) ??
+    db.orderDb.getById(id);
 
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });

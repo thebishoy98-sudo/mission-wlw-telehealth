@@ -6,13 +6,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const unauthorized = requireProviderOrAdmin(req);
     if (unauthorized) return unauthorized;
 
-    const detail = await getPracticeQFormDetail(params.id);
+    const { id } = await params;
+    const detail = await getPracticeQFormDetail(id);
     return NextResponse.json(detail);
   } catch (error) {
     console.error("PracticeQ form detail load error:", error);

@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chart = await loadProviderPatientChart(params.id, {
+    const { id } = await params;
+    const chart = await loadProviderPatientChart(id, {
       patients: dbServer.patientDb,
       orders: dbServer.orderDb,
       products: dbServer.productDb,
@@ -43,16 +44,17 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const { orderId, action, reviewedBy = "Dr. Provider" } = await req.json();
     if (!orderId || action !== "mark_chart_viewed") {
       return NextResponse.json({ error: "orderId and action=mark_chart_viewed required" }, { status: 400 });
     }
 
     const review = await dbServer.providerReviewDb.getByOrder(orderId);
-    if (!review || review.patientId !== params.id) {
+    if (!review || review.patientId !== id) {
       return NextResponse.json({ error: "Review not found" }, { status: 404 });
     }
 
@@ -68,7 +70,7 @@ export async function PATCH(
       integrationName: "system",
       action: `Provider confirmed chart review for order ${orderId.slice(-6)}`,
       orderId,
-      patientId: params.id,
+      patientId: id,
       status: "success",
       details: { action: "chart_reviewed", reviewedBy },
     }).catch(() => {});

@@ -3,9 +3,10 @@ import { handleLifeFileWebhook } from "@/lib/lifefile-webhook-handler";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
-  return handleLifeFileWebhook(req, params.orderId);
+  const { orderId } = await params;
+  return handleLifeFileWebhook(req, orderId);
 }
 
 export const PUT = POST;

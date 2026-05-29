@@ -4,6 +4,8 @@ import * as dbServer from "@/lib/db.server";
 import { requireAdmin } from "@/lib/server-auth";
 import type { Product } from "@/types";
 
+type ProductRouteContext = { params: Promise<{ id: string }> };
+
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -12,10 +14,11 @@ const hasProductionDatabase = () =>
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: ProductRouteContext
 ) {
   const denied = requireAdmin(req);
   if (denied) return denied;
+  const { id } = await params;
 
   const body = await req.json();
   const update = {
@@ -26,28 +29,29 @@ export async function PATCH(
 
   let server: Product | null = null;
   try {
-    server = await dbServer.productDb.update(params.id, update);
+    server = await dbServer.productDb.update(id, update);
   } catch (error) {
     return NextResponse.json(
       { error: "Product could not be updated in the production database." },
       { status: 500 }
     );
   }
-  const local = hasProductionDatabase() ? null : db.productDb.update(params.id, update);
+  const local = hasProductionDatabase() ? null : db.productDb.update(id, update);
   if (!local && !server) return NextResponse.json({ error: "Product not found" }, { status: 404 });
   return NextResponse.json({ product: server ?? local });
 }
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: ProductRouteContext
 ) {
   const denied = requireAdmin(req);
   if (denied) return denied;
+  const { id } = await params;
 
   let archived = false;
   try {
-    archived = await dbServer.productDb.archive(params.id);
+    archived = await dbServer.productDb.archive(id);
   } catch (error) {
     return NextResponse.json(
       { error: "Product could not be archived in the production database." },
@@ -58,7 +62,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
   if (!hasProductionDatabase()) {
-    db.productDb.delete(params.id);
+    db.productDb.delete(id);
   }
   return NextResponse.json({ success: true });
 }

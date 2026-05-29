@@ -3,9 +3,10 @@ import * as dbServer from "@/lib/db.server";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
-  const job = await dbServer.practiceqAutomationJobDb.getByOrder(params.orderId).catch(() => null);
+  const { orderId } = await params;
+  const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
   if (!job) return NextResponse.json({ available: false });
 
   return NextResponse.json({

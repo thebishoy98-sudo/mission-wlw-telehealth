@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+
 export default function QBDisconnectPage() {
   return (
     <div style={{ fontFamily: "sans-serif", margin: "0 auto", maxWidth: 720, padding: "3rem 1.5rem" }}>
@@ -16,9 +18,9 @@ export default function QBDisconnectPage() {
         <a href="/api/auth/qb/start" style={{ background: "#0f766e", borderRadius: 8, color: "white", padding: "10px 14px", textDecoration: "none" }}>
           Reconnect QuickBooks
         </a>
-        <a href="/" style={{ border: "1px solid #d1d5db", borderRadius: 8, color: "#111827", padding: "10px 14px", textDecoration: "none" }}>
+        <Link href="/" style={{ border: "1px solid #d1d5db", borderRadius: 8, color: "#111827", padding: "10px 14px", textDecoration: "none" }}>
           Return to Mission WLW
-        </a>
+        </Link>
       </div>
     </div>
   );

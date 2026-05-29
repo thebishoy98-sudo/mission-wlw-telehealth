@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const uploadId = params.id;
+  const { id: uploadId } = await params;
 
   const upload =
     (await dbServer.uploadDb.getById(uploadId).catch(() => null)) ??

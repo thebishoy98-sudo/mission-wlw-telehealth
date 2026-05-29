@@ -4,11 +4,12 @@ import { downloadPracticeQFile } from "@/services/practiceq";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest, { params }: { params: { fileId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   const denied = requireProviderOrAdmin(req);
   if (denied) return denied;
 
-  const file = await downloadPracticeQFile(params.fileId).catch(() => null);
+  const { fileId } = await params;
+  const file = await downloadPracticeQFile(fileId).catch(() => null);
   if (!file) {
     return NextResponse.json({ error: "Clinical file not found" }, { status: 404 });
   }
