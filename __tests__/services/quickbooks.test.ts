@@ -165,3 +165,29 @@ describe("quickbooks.recordPayment", () => {
     expect(paymentLog).toBeDefined();
   });
 });
+
+describe("quickbooks.getCompanyInfo", () => {
+  const originalRealmId = process.env.QB_REALM_ID;
+  const originalUseMock = serviceConfig.quickbooks.useMock;
+
+  afterEach(() => {
+    process.env.QB_REALM_ID = originalRealmId;
+    serviceConfig.quickbooks.useMock = originalUseMock;
+    jest.restoreAllMocks();
+  });
+
+  it("performs a read-only company info request", async () => {
+    process.env.QB_REALM_ID = "realm_1";
+    serviceConfig.quickbooks.useMock = false;
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ CompanyInfo: { CompanyName: "Mission WLW" } }),
+    } as Response));
+    (global as any).fetch = fetchMock;
+
+    const info = await quickbooks.getCompanyInfo();
+
+    expect(info.CompanyInfo.CompanyName).toBe("Mission WLW");
+    expect(fetchMock.mock.calls[0][0]).toContain("/companyinfo/realm_1");
+  });
+});

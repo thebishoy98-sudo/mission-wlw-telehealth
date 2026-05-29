@@ -248,6 +248,14 @@ export async function recordPayment(
   });
 }
 
+export async function getCompanyInfo(): Promise<any> {
+  const realmId = process.env.QB_REALM_ID;
+  if (!realmId) throw new Error("QB_REALM_ID not configured");
+  return qboFetch(`/companyinfo/${encodeURIComponent(realmId)}?minorversion=75`, {
+    method: "GET",
+  });
+}
+
 export async function getAccountingMetrics(): Promise<{
   totalRevenue: number;
   totalOrders: number;
