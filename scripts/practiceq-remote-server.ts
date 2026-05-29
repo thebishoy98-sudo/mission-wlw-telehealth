@@ -1,13 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import http from "http";
 import { URL } from "url";
-import * as dbServer from "@/lib/db.server";
-import { completePracticeQSession } from "@/lib/practiceq-session-completion";
-import {
-  closePracticeQRemoteSession,
-  getPracticeQRemoteSession,
-  startPracticeQRemoteSession,
-} from "@/services/practiceq-worker";
 
 loadEnvConfig(process.cwd(), false, { info: () => {}, error: console.error });
 
@@ -15,6 +8,33 @@ const port = Number(process.env.PORT ?? 3033);
 const publicBaseUrl = process.env.PRACTICEQ_REMOTE_PUBLIC_URL ?? `http://localhost:${port}`;
 const pollMs = Number(process.env.PRACTICEQ_REMOTE_POLL_MS ?? 5000);
 let polling = false;
+
+type RemoteServerModules = {
+  dbServer: typeof import("@/lib/db.server");
+  completePracticeQSession: typeof import("@/lib/practiceq-session-completion").completePracticeQSession;
+  closePracticeQRemoteSession: typeof import("@/services/practiceq-worker").closePracticeQRemoteSession;
+  getPracticeQRemoteSession: typeof import("@/services/practiceq-worker").getPracticeQRemoteSession;
+  startPracticeQRemoteSession: typeof import("@/services/practiceq-worker").startPracticeQRemoteSession;
+};
+
+let remoteServerModulesPromise: Promise<RemoteServerModules> | null = null;
+
+function loadRemoteServerModules(): Promise<RemoteServerModules> {
+  if (!remoteServerModulesPromise) {
+    remoteServerModulesPromise = Promise.all([
+      import("@/lib/db.server"),
+      import("@/lib/practiceq-session-completion"),
+      import("@/services/practiceq-worker"),
+    ]).then(([dbServer, sessionCompletion, practiceQWorker]) => ({
+      dbServer,
+      completePracticeQSession: sessionCompletion.completePracticeQSession,
+      closePracticeQRemoteSession: practiceQWorker.closePracticeQRemoteSession,
+      getPracticeQRemoteSession: practiceQWorker.getPracticeQRemoteSession,
+      startPracticeQRemoteSession: practiceQWorker.startPracticeQRemoteSession,
+    }));
+  }
+  return remoteServerModulesPromise;
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -27,7 +47,8 @@ const server = http.createServer(async (req, res) => {
     const jobId = decodeURIComponent(match[1]);
     const action = match[2] ?? "";
     const token = url.searchParams.get("token") ?? "";
-    const session = getPracticeQRemoteSession(jobId, token);
+    const modules = await loadRemoteServerModules();
+    const session = modules.getPracticeQRemoteSession(jobId, token);
     if (!session) return sendText(res, 403, "PracticeQ session expired or unavailable.");
 
     if (!action) return sendHtml(res, sessionHtml(jobId, token));
@@ -56,8 +77,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
     if (action === "done" && req.method === "POST") {
-      await completePracticeQSession(jobId);
-      await closePracticeQRemoteSession(jobId);
+      await modules.completePracticeQSession(jobId);
+      await modules.closePracticeQRemoteSession(jobId);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -77,24 +98,25 @@ async function pollQueuedJobs() {
   if (polling) return;
   polling = true;
   try {
-    const jobs = await dbServer.practiceqAutomationJobDb.getQueued(1);
+    const modules = await loadRemoteServerModules();
+    const jobs = await modules.dbServer.practiceqAutomationJobDb.getQueued(1);
     for (const job of jobs) {
-      await dbServer.practiceqAutomationJobDb.update(job.id, {
+      await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
         status: "running",
         attempts: job.attempts + 1,
         lockedAt: new Date().toISOString(),
       });
-      const result = await startPracticeQRemoteSession({ ...job, attempts: job.attempts + 1 }, publicBaseUrl);
-      await dbServer.practiceqAutomationJobDb.update(job.id, {
+      const result = await modules.startPracticeQRemoteSession({ ...job, attempts: job.attempts + 1 }, publicBaseUrl);
+      await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
         status: result.status,
         handoffUrl: result.handoffUrl,
         intakeId: result.intakeId,
         lastError: result.error,
       });
       if (result.status === "failed") {
-        await dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+        await modules.dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
       } else if (result.status === "completed") {
-        await completePracticeQSession(job.id).catch((error) => {
+        await modules.completePracticeQSession(job.id).catch((error) => {
           console.error("PracticeQ completion follow-up failed:", error instanceof Error ? error.message : error);
         });
       }

@@ -27,6 +27,7 @@ jest.mock("@/services/practiceq", () => ({
 
 describe("PracticeQ remote worker resilience", () => {
   const workerSource = fs.readFileSync(path.join(process.cwd(), "services/practiceq-worker.ts"), "utf8");
+  const remoteServerSource = fs.readFileSync(path.join(process.cwd(), "scripts/practiceq-remote-server.ts"), "utf8");
   const dbSource = fs.readFileSync(path.join(process.cwd(), "lib/db.server.ts"), "utf8");
 
   it("allows enough time for IntakeQ Angular pages with many visible fields", () => {
@@ -117,5 +118,16 @@ describe("PracticeQ remote worker resilience", () => {
 
     expect(fetchIntake).toHaveBeenCalledTimes(2);
     expect(fetchIntake).toHaveBeenCalledWith("intake_1");
+  });
+
+  it("binds the remote health route before loading heavy PracticeQ worker modules", () => {
+    expect(remoteServerSource).not.toContain('from "@/services/practiceq-worker"');
+    expect(remoteServerSource).not.toContain('from "@/lib/db.server"');
+
+    const healthIndex = remoteServerSource.indexOf('url.pathname === "/health"');
+    const moduleLoadIndex = remoteServerSource.indexOf("await loadRemoteServerModules()");
+
+    expect(healthIndex).toBeGreaterThanOrEqual(0);
+    expect(moduleLoadIndex).toBeGreaterThan(healthIndex);
   });
 });
