@@ -41,6 +41,7 @@ export default function PatientDetail() {
   const [providerNotes, setProviderNotes] = useState("");
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [chartReviewing, setChartReviewing] = useState(false);
   const [approvalSteps, setApprovalSteps] = useState<{ label: string; status: "pending" | "done" | "running" }[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -150,6 +151,34 @@ export default function PatientDetail() {
     setSelectedOrderPatch({ status: "rejected", rejectionReason: reason });
   };
 
+  const handleMarkChartReviewed = async () => {
+    if (!chart || !patientId) return;
+    setActionError("");
+    setChartReviewing(true);
+
+    try {
+      const res = await fetch(`/api/provider/patients/${patientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: chart.selectedOrder.id,
+          action: "mark_chart_viewed",
+          reviewedBy: "Dr. Provider",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not mark chart reviewed.");
+
+      if (data.review) {
+        setChart((prev) => prev ? { ...prev, review: data.review } : prev);
+      }
+    } catch (error) {
+      setActionError((error as Error).message);
+    } finally {
+      setChartReviewing(false);
+    }
+  };
+
   if (loadError) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -176,7 +205,7 @@ export default function PatientDetail() {
     );
   }
 
-  const { patient, selectedOrder, questionnaire, answers, consent, uploads } = chart;
+  const { patient, selectedOrder, questionnaire, answers, consent, uploads, review } = chart;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -322,6 +351,41 @@ export default function PatientDetail() {
           </div>
 
           <div className="space-y-5">
+            <Card>
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-gray-400" />
+                  Chart Review Audit
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <span className="text-gray-500">Viewed</span>
+                    {review?.chartViewedAt ? (
+                      <Badge variant="success">Confirmed</Badge>
+                    ) : (
+                      <span className="font-medium text-amber-600">Not yet confirmed</span>
+                    )}
+                  </div>
+                  {review?.chartViewedAt ? (
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <p>{formatDateTime(review.chartViewedAt)}</p>
+                      {review.chartViewedBy && <p>By {review.chartViewedBy}</p>}
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      fullWidth
+                      variant="outline"
+                      onClick={handleMarkChartReviewed}
+                      disabled={chartReviewing}
+                    >
+                      {chartReviewing ? "Marking..." : "Mark Chart as Reviewed"}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="p-5">
                 <h3 className="font-semibold text-gray-900 mb-3">Order Details</h3>
