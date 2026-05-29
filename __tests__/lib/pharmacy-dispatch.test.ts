@@ -56,8 +56,9 @@ const order: Order = {
 };
 
 describe("pharmacy dispatch guards", () => {
-  it("requires PracticeQ to be submitted or completed before pharmacy dispatch", () => {
-    expect(practiceQReadyForPharmacy({ ...order, practiceQStatus: "pending" })).toBe(false);
+  it("does not block pharmacy dispatch on PracticeQ status", () => {
+    expect(practiceQReadyForPharmacy({ ...order, practiceQStatus: "pending" })).toBe(true);
+    expect(practiceQReadyForPharmacy({ ...order, practiceQStatus: "error" })).toBe(true);
     expect(practiceQReadyForPharmacy({ ...order, practiceQStatus: "submitted" })).toBe(true);
     expect(practiceQReadyForPharmacy({ ...order, practiceQStatus: "completed" })).toBe(true);
   });

@@ -9,7 +9,7 @@ import { preferCompletePatientForIntegrations, resolvePatient } from "@/lib/pati
 import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
 import { generateId } from "@/lib/utils";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
-import { normalizeOrderForPharmacyDispatch, practiceQReadyForPharmacy } from "@/lib/pharmacy-dispatch";
+import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import type { Patient } from "@/types";
 
 function answerValue(practiceq: Awaited<ReturnType<typeof getPracticeQMirrorForOrder>> | null | undefined, pattern: RegExp): string {
@@ -94,16 +94,6 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    if (!practiceQReadyForPharmacy(order)) {
-      return NextResponse.json(
-        {
-          error: "Clinical consent must be completed before pharmacy dispatch",
-          practiceQStatus: order.practiceQStatus,
-        },
-        { status: 409 }
-      );
-    }
-
     const submittedPatient =
       patientData ??
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??

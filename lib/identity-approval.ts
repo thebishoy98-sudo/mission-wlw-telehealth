@@ -45,7 +45,6 @@ export function buildManualIdentityApprovalReviewUpdate(
 
 export function shouldRetryPracticeQCompletionAfterIdentityApproval(order: Pick<Order, "practiceQStatus" | "pharmacyStatus">) {
   return (
-    (order.practiceQStatus === "completed" || order.practiceQStatus === "submitted") &&
     (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error")
   );
 }

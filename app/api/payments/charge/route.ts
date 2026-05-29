@@ -412,8 +412,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment,
-    // and do not dispatch pharmacy until PracticeQ is completed/signed.
+    // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment.
+    // PracticeQ completion is tracked separately and does not block pharmacy dispatch.
     try {
       const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
       await dbServer.practiceqAutomationJobDb.create(automationJob);
@@ -441,8 +441,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 10. Pharmacy prescription order
-    const practiceQReadyForPharmacy = false;
-    if (dispatchGate.canDispatch && practiceQReadyForPharmacy) {
+    if (dispatchGate.canDispatch) {
       const pharmacyIntegration = pharmacy.getPharmacyProvider() === "appsheet" ? "appsheet" : "lifefile";
       try {
         const pharmacyOrder = await pharmacy.createPharmacyOrder(updatedOrder, { patient, product: persistedProduct ?? productData ?? null });

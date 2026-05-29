@@ -13,7 +13,6 @@ import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "
 import * as spruceService from "@/services/spruce";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
-import { practiceQReadyForPharmacy } from "@/lib/pharmacy-dispatch";
 
 type AdminDashboardData = {
   orders: Types.Order[];
@@ -194,11 +193,6 @@ export default function OrdersManagement() {
         setToast({ message: "Identity must be verified or manually approved before pharmacy dispatch.", type: "error" });
         return;
       }
-      if (!practiceQReadyForPharmacy(order)) {
-        setToast({ message: "PracticeQ consent must be completed before pharmacy dispatch.", type: "error" });
-        return;
-      }
-
       const patient = patients[order.patientId] ?? db.patientDb.getById(order.patientId);
       const product = products[order.productId] ?? db.productDb.getById(order.productId);
       const response = await fetch("/api/orders/dispatch", {
@@ -516,7 +510,7 @@ export default function OrdersManagement() {
                         </div>
                       )}
 
-                      {(selectedOrder.status === "approved" || selectedOrder.status === "pending_review") && (selectedOrder.pharmacyStatus === "draft" || selectedOrder.pharmacyStatus === "error") && practiceQReadyForPharmacy(selectedOrder) && (
+                      {(selectedOrder.status === "approved" || selectedOrder.status === "pending_review") && (selectedOrder.pharmacyStatus === "draft" || selectedOrder.pharmacyStatus === "error") && (
                         <Button fullWidth className="mt-4" onClick={() => handleSendToPharmacy(selectedOrder)}>
                           Send to Pharmacy
                         </Button>

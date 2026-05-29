@@ -77,10 +77,11 @@ describe("manual identity approval workflow", () => {
     });
   });
 
-  it("retries PracticeQ completion only when pharmacy dispatch is unblocked", () => {
+  it("retries dispatch after identity approval regardless of PracticeQ status", () => {
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval(order)).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "submitted" })).toBe(true);
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "error" })).toBe(false);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "error" })).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "pending" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, pharmacyStatus: "submitted" })).toBe(false);
   });
 });

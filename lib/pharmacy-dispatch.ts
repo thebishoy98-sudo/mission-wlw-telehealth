@@ -1,7 +1,7 @@
 import type { DoseOption, Order, Product } from "@/types";
 
 export function practiceQReadyForPharmacy(order: Pick<Order, "practiceQStatus">): boolean {
-  return order.practiceQStatus === "submitted" || order.practiceQStatus === "completed";
+  return true;
 }
 
 function normalizeText(value: string): string {
