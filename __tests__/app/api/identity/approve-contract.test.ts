@@ -8,4 +8,11 @@ describe("identity approval route", () => {
     expect(source).toContain("dbServer.providerReviewDb.getByOrder(orderId)");
     expect(source).toMatch(/dbServer\.providerReviewDb\.getByOrder\(orderId\)[\s\S]*db\.providerReviewDb\.getByOrder\(orderId\)/);
   });
+
+  it("approves the provider review and retries completed PracticeQ jobs after identity approval", () => {
+    expect(source).toContain("buildManualIdentityApprovalOrderUpdate");
+    expect(source).toContain("buildManualIdentityApprovalReviewUpdate");
+    expect(source).toContain("dbServer.practiceqAutomationJobDb.getByOrder(orderId)");
+    expect(source).toContain("completePracticeQSession(job.id)");
+  });
 });
