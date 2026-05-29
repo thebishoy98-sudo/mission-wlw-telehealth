@@ -101,3 +101,25 @@ export function normalizeProducts(products: Product[]): Product[] {
   const hasTirzepatide = normalized.some((product) => product.slug === "tirzepatide");
   return hasTirzepatide ? normalized : [tirzepatideProduct, ...normalized];
 }
+
+function isCustomerVisibleProduct(product: Product): boolean {
+  const text = `${product.name} ${product.slug}`.toLowerCase();
+  if (/\b(demo|test|prod|sample|placeholder)\b/.test(text)) return false;
+  return product.isActive !== false;
+}
+
+export function normalizeCustomerProducts(products: Product[]): Product[] {
+  const visible = normalizeProducts(products).filter(isCustomerVisibleProduct);
+  const bySlug = new Map<string, Product>();
+
+  for (const product of visible) {
+    const key = product.slug || product.name.toLowerCase().trim();
+    const existing = bySlug.get(key);
+    if (!existing || product.id === tirzepatideProduct.id) {
+      bySlug.set(key, product);
+    }
+  }
+
+  const deduped = Array.from(bySlug.values());
+  return deduped.length ? deduped : canonicalProducts;
+}
