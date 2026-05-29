@@ -40,16 +40,25 @@ export function buildSpruceMessageRecord(
   templateKey: string,
   variables: Record<string, string> = {}
 ): SpruceMessage {
+  const phoneNumber = normalizeSprucePhoneNumber(patient.phone);
   return {
     id: generateId(),
     orderId: variables.orderId || "",
     patientId: patient.id,
     templateKey,
-    phoneNumber: patient.phone,
+    phoneNumber: phoneNumber ?? patient.phone,
     messageText: renderSpruceTemplate(templateKey, variables),
     status: "pending",
     createdAt: new Date().toISOString(),
   };
+}
+
+export function normalizeSprucePhoneNumber(phoneNumber: string): string | null {
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (digits.length > 10 && !digits.startsWith("1")) return `+1${digits.slice(0, 10)}`;
+  return null;
 }
 
 async function resolvePhoneEndpoint(token: string) {
@@ -75,6 +84,9 @@ async function resolvePhoneEndpoint(token: string) {
 async function sendViaSpruceApi(phoneNumber: string, messageText: string, idempotencyKey: string) {
   if (process.env.USE_REAL_SPRUCE !== "true") return { skipped: true, reason: "USE_REAL_SPRUCE is not true" };
 
+  const normalizedPhoneNumber = normalizeSprucePhoneNumber(phoneNumber);
+  if (!normalizedPhoneNumber) throw new Error(`Invalid SMS phone number: ${phoneNumber}`);
+
   const token = getSpruceAuthToken();
   if (!token) throw new Error("Missing Spruce credentials");
 
@@ -89,7 +101,7 @@ async function sendViaSpruceApi(phoneNumber: string, messageText: string, idempo
       "s-idempotency-key": idempotencyKey.slice(0, 255),
     },
     body: JSON.stringify({
-      destination: { smsOrEmailEndpoint: phoneNumber },
+      destination: { smsOrEmailEndpoint: normalizedPhoneNumber },
       message: { body: [{ type: "text", value: messageText }] },
     }),
   });
@@ -115,7 +127,7 @@ export async function sendMessage(
   await dbServer.spruceMessageDb.create(pending);
 
   try {
-    const response = await sendViaSpruceApi(patient.phone, pending.messageText, `spruce_${pending.id}`);
+    const response = await sendViaSpruceApi(pending.phoneNumber, pending.messageText, `spruce_${pending.id}`);
     const sent = {
       ...pending,
       status: response?.skipped ? "pending" as const : "sent" as const,
@@ -133,7 +145,7 @@ export async function sendMessage(
       patientId: patient.id,
       orderId: variables.orderId || undefined,
       status: response?.skipped ? "pending" : "success",
-      details: { messageId: pending.id, templateKey, phone: patient.phone },
+      details: { messageId: pending.id, templateKey, phone: pending.phoneNumber },
     });
     return sent;
   } catch (error) {
@@ -146,7 +158,7 @@ export async function sendMessage(
       patientId: patient.id,
       orderId: variables.orderId || undefined,
       status: "error",
-      details: { messageId: pending.id, templateKey, phone: patient.phone },
+      details: { messageId: pending.id, templateKey, phone: pending.phoneNumber },
       error: (error as Error).message,
     });
     throw error;

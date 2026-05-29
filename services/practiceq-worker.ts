@@ -617,16 +617,27 @@ function fieldValueMatches(actual: string, expected: string, prompt: string): bo
   if (normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected)) return true;
 
   if (/phone/i.test(prompt)) {
-    return actual.replace(/\D/g, "") === expected.replace(/\D/g, "");
+    return normalizeComparablePhone(actual) === normalizeComparablePhone(expected);
   }
   if (/date of birth|dob/i.test(prompt)) {
     return normalizeDateLike(actual) === normalizeDateLike(expected);
+  }
+  if (/(^|\b)(first|last)\s+name\b/i.test(prompt)) {
+    const expectedWithoutDigits = normalizePracticeQText(expected.replace(/\d+/g, ""));
+    if (expectedWithoutDigits && normalizedActual === expectedWithoutDigits) return true;
   }
   return false;
 }
 
 function normalizePracticeQText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeComparablePhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  if (digits.length > 10 && !digits.startsWith("1")) return digits.slice(0, 10);
+  return digits;
 }
 
 function normalizeDateLike(value: string) {
@@ -1267,7 +1278,8 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
   if (process.env.PRACTICEQ_ADMIN_SET_COMPLETED !== "true") return false;
 
   const storageState = getPracticeQAdminStorageState();
-  const intakeUrl = `https://intakeq.com/#/history/${encodeURIComponent(intakeId)}`;
+  const adminBase = "https://app.intakeq.com";
+  const intakeUrl = `${adminBase}/#/history/${encodeURIComponent(intakeId)}`;
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_ADMIN_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
@@ -1277,33 +1289,23 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
   page.setDefaultTimeout(12000);
 
   try {
-    await page.goto(intakeUrl, {
+    // Navigate to the admin root first so login check fires before hash-routing
+    await page.goto(`${adminBase}/`, {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
     await completePracticeQAdminLoginIfNeeded(page);
-    if (!page.url().includes(`#/history/${intakeId}`)) {
-      await page.goto(intakeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-    }
-    await page.waitForTimeout(3000);
+
+    // Navigate to the history page for this specific intake
+    await page.goto(intakeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await waitForPracticeQPageText(page);
+    await page.waitForTimeout(2000);
+
     if (await practiceQAdminPageShowsCompleted(page)) return true;
 
-    const more = page
-      .locator(".col-md-2.hidden-print .dropdown-toggle")
-      .filter({ hasText: /more/i })
-      .last()
-      .or(page
-      .getByRole("button", { name: /more/i })
-      .or(page.getByRole("link", { name: /more/i }))
-      .or(page.locator("button, a, [role='button']").filter({ hasText: /more/i }))
-      .first());
-    if (await more.isVisible().catch(() => false)) {
-      await more.click({ timeout: 8000 }).catch(async () => {
-        await more.click({ force: true, timeout: 5000 }).catch(() => {});
-      });
-    } else {
-      await clickPracticeQControlByText(page, /more/i);
-    }
+    // Find the intake row and open its action dropdown ("Toggle Dropdown" split button)
+    const dropdownOpened = await clickPracticeQIntakeRowDropdown(page, intakeId);
+    if (!dropdownOpened) return false;
 
     await page.waitForTimeout(1000);
     const exactSetCompletedSelector =
@@ -1337,6 +1339,86 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
     await context.close().catch(() => {});
     await browser.close().catch(() => {});
   }
+}
+
+/**
+ * In the PracticeQ admin history list, find the intake row for `intakeId` and click
+ * its per-row "Toggle Dropdown" action button (split button arrow next to "View").
+ * Uses page.evaluate with closest('tr') to avoid matching the filter-bar dropdowns.
+ * Falls back to the first table row whose Status cell says "Not Completed".
+ * Returns true if the dropdown was opened, false otherwise.
+ */
+async function clickPracticeQIntakeRowDropdown(page: Page, intakeId: string): Promise<boolean> {
+  await page.waitForTimeout(1000);
+
+  const clicked = await page.evaluate((id) => {
+    const isVisible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+
+    const clickToggle = (row: Element): boolean => {
+      const btn = row.querySelector(
+        'button[aria-label="Toggle Dropdown"], button.dropdown-toggle, [data-toggle="dropdown"]'
+      ) as HTMLElement | null;
+      if (btn && isVisible(btn)) {
+        btn.scrollIntoView({ block: "center" });
+        btn.click();
+        return true;
+      }
+      return false;
+    };
+
+    // Strategy 1: find a <tr> that has a link containing the intakeId
+    const allLinks = Array.from(document.querySelectorAll(`a[href*="${id}"]`));
+    for (const link of allLinks) {
+      const row = link.closest("tr");
+      if (row && clickToggle(row)) return "by-id";
+    }
+
+    // Strategy 2: find a <tr> inside a <tbody> whose cells contain "Not Completed"
+    const tableRows = Array.from(document.querySelectorAll("table tbody tr, table tr"));
+    for (const row of tableRows) {
+      const cells = Array.from(row.querySelectorAll("td"));
+      if (cells.some((td) => /not completed/i.test(td.textContent ?? ""))) {
+        if (clickToggle(row)) return "not-completed";
+      }
+    }
+
+    return null;
+  }, intakeId).catch(() => null);
+
+  if (clicked) {
+    await page.waitForTimeout(800);
+    return true;
+  }
+
+  // Final fallback: navigate to intake detail via View link and look for dropdown there
+  const viewLink = page
+    .locator("table tbody tr, table tr")
+    .filter({ has: page.locator("td").filter({ hasText: /not completed/i }) })
+    .first()
+    .locator("a")
+    .first();
+  if (await viewLink.isVisible().catch(() => false)) {
+    await viewLink.click({ timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+    await waitForPracticeQPageText(page);
+    const detailToggle = page
+      .locator('button[aria-label="Toggle Dropdown"], button.dropdown-toggle, .col-md-2.hidden-print .dropdown-toggle')
+      .first();
+    if (await detailToggle.isVisible().catch(() => false)) {
+      await detailToggle.click({ timeout: 8000 }).catch(async () => {
+        await detailToggle.click({ force: true, timeout: 5000 }).catch(() => {});
+      });
+      await page.waitForTimeout(800);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function practiceQAdminPageShowsCompleted(page: Page): Promise<boolean> {
@@ -1373,7 +1455,7 @@ async function completePracticeQAdminLoginIfNeeded(page: Page): Promise<void> {
 
   let emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
   if (!(await emailInput.isVisible().catch(() => false))) {
-    await page.goto("https://intakeq.com/signin/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.goto("https://app.intakeq.com/signin", { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(1000);
     emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
   }
@@ -1386,9 +1468,14 @@ async function completePracticeQAdminLoginIfNeeded(page: Page): Promise<void> {
     .or(page.locator("button, input[type='submit']").filter({ hasText: /log\s*in|sign\s*in/i }))
     .first();
   if (await signIn.isVisible().catch(() => false)) {
-    await signIn.click({ timeout: 8000 }).catch(async () => {
-      await signIn.click({ force: true, timeout: 5000 }).catch(() => {});
-    });
-    await page.waitForTimeout(3000);
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {}),
+      signIn.click({ timeout: 8000 }).catch(async () => {
+        await signIn.click({ force: true, timeout: 5000 }).catch(() => {});
+      }),
+    ]);
+    // Wait for the post-login SPA to finish rendering
+    await waitForPracticeQPageText(page);
+    await page.waitForTimeout(1500);
   }
 }

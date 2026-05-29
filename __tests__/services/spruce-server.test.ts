@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { buildSpruceMessageRecord, renderSpruceTemplate } from "@/services/spruce.server";
+import { buildSpruceMessageRecord, normalizeSprucePhoneNumber, renderSpruceTemplate } from "@/services/spruce.server";
 import type { Patient } from "@/types";
 
 const patient: Patient = {
@@ -51,9 +51,16 @@ describe("buildSpruceMessageRecord", () => {
       orderId: "o1",
       patientId: "p1",
       templateKey: "order_sent_to_pharmacy",
-      phoneNumber: "7328228376",
+      phoneNumber: "+17328228376",
       status: "pending",
     });
     expect(message.messageText).toContain("sent to the pharmacy");
+  });
+
+  it("normalizes patient SMS phone numbers before sending to Spruce", () => {
+    expect(normalizeSprucePhoneNumber("7328228376")).toBe("+17328228376");
+    expect(normalizeSprucePhoneNumber("+1 (732) 822-8376")).toBe("+17328228376");
+    expect(normalizeSprucePhoneNumber("73228228376")).toBe("+17322822837");
+    expect(normalizeSprucePhoneNumber("12345")).toBeNull();
   });
 });
