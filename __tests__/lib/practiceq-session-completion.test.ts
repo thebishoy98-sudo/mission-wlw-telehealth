@@ -1,7 +1,7 @@
 import type { Order, Patient, Product } from "@/types";
 import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import * as dbServer from "@/lib/db.server";
-import * as lifefile from "@/services/lifefile";
+import * as pharmacy from "@/services/pharmacy";
 import * as spruceServer from "@/services/spruce.server";
 import * as practiceq from "@/services/practiceq";
 
@@ -14,8 +14,9 @@ jest.mock("@/lib/db.server", () => ({
   pharmacyOrderDb: { getByOrder: jest.fn(), create: jest.fn() },
 }));
 
-jest.mock("@/services/lifefile", () => ({
+jest.mock("@/services/pharmacy", () => ({
   createPharmacyOrder: jest.fn(),
+  getPharmacyProvider: jest.fn(() => "appsheet"),
 }));
 
 jest.mock("@/services/spruce.server", () => ({
@@ -111,7 +112,7 @@ describe("completePracticeQSession", () => {
       pending: [],
       all: [],
     });
-    (lifefile.createPharmacyOrder as jest.Mock).mockResolvedValue({
+    (pharmacy.createPharmacyOrder as jest.Mock).mockResolvedValue({
       id: "pharmacy_1",
       orderId: order.id,
       patientId: patient.id,
@@ -155,7 +156,7 @@ describe("completePracticeQSession", () => {
     expect(result).toEqual({ status: "sent_to_pharmacy", pharmacyOrderId: "pharmacy_1" });
     expect(dbServer.practiceqAutomationJobDb.update).toHaveBeenCalledWith("job_1", { status: "completed" });
     expect(dbServer.orderDb.update).toHaveBeenCalledWith(order.id, { practiceQStatus: "completed" });
-    expect(lifefile.createPharmacyOrder).toHaveBeenCalledWith(
+    expect(pharmacy.createPharmacyOrder).toHaveBeenCalledWith(
       expect.objectContaining({ id: order.id, doseId: "tirzepatide_20mg_8_week" }),
       { patient, product }
     );
@@ -175,7 +176,7 @@ describe("completePracticeQSession", () => {
     }));
 
     await expect(completePracticeQSession("job_1")).resolves.toEqual({ status: "waiting_for_identity" });
-    expect(lifefile.createPharmacyOrder).not.toHaveBeenCalled();
+    expect(pharmacy.createPharmacyOrder).not.toHaveBeenCalled();
     expect(spruceServer.sendMessage).not.toHaveBeenCalled();
   });
 });

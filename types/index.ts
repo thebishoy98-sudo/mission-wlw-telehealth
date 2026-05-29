@@ -378,7 +378,7 @@ export interface MessageTemplate {
 export interface IntegrationLog {
   id: string;
   timestamp: string;
-  integrationName: "practiceq" | "quickbooks" | "lifefile" | "spruce" | "system";
+  integrationName: "practiceq" | "quickbooks" | "lifefile" | "appsheet" | "spruce" | "system";
   action: string;
   orderId?: string;
   patientId?: string;

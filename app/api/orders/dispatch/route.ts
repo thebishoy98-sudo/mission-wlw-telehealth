@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as lifefile from "@/services/lifefile";
+import * as pharmacy from "@/services/pharmacy";
 import * as spruceServer from "@/services/spruce.server";
 import { getIdentityGate } from "@/lib/identity";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (!practiceQReadyForPharmacy(order)) {
       return NextResponse.json(
         {
-          error: "PracticeQ consent must be completed before pharmacy dispatch",
+          error: "Clinical consent must be completed before pharmacy dispatch",
           practiceQStatus: order.practiceQStatus,
         },
         { status: 409 }
@@ -131,9 +131,10 @@ export async function POST(req: NextRequest) {
       db.orderDb.update(orderId, { doseId: normalized.normalizedOrder.doseId });
     }
     const auditCtx = actorFromHeaders(req.headers);
+    const pharmacyIntegration = pharmacy.getPharmacyProvider() === "appsheet" ? "appsheet" : "lifefile";
     let pharmacyOrder;
     try {
-      pharmacyOrder = await lifefile.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
+      pharmacyOrder = await pharmacy.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
       await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
       const update = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
       db.orderDb.update(orderId, update);
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
       if (patient) {
         await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId }).catch(() => {});
       }
-      logPhiDisclosure(order.patientId, orderId, "lifefile", auditCtx.actor);
+      logPhiDisclosure(order.patientId, orderId, pharmacyIntegration, auditCtx.actor);
     } catch (error) {
       const errorMessage = (error as Error).message;
       const update = { status: "approved" as const, pharmacyStatus: "error" as const };
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
       await dbServer.integrationLogDb.create({
         id: generateId(),
         timestamp: new Date().toISOString(),
-        integrationName: "lifefile",
+        integrationName: pharmacyIntegration,
         action: "Pharmacy order submission failed",
         orderId,
         patientId: order.patientId,
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
         details: { source: "manual_dispatch" },
         error: errorMessage,
       }).catch(() => {});
-      logPhiDisclosure(order.patientId, orderId, "lifefile", auditCtx.actor, "error", errorMessage);
+      logPhiDisclosure(order.patientId, orderId, pharmacyIntegration, auditCtx.actor, "error", errorMessage);
       return NextResponse.json({ error: "Order dispatch failed", detail: errorMessage }, { status: 502 });
     }
 

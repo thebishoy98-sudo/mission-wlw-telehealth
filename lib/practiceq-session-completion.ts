@@ -3,7 +3,7 @@ import * as dbServer from "@/lib/db.server";
 import { getIdentityGate } from "@/lib/identity";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { logPhiDisclosure } from "@/lib/phi-audit";
-import * as lifefile from "@/services/lifefile";
+import * as pharmacy from "@/services/pharmacy";
 import * as practiceq from "@/services/practiceq";
 import * as spruceServer from "@/services/spruce.server";
 
@@ -67,12 +67,12 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
   if (!patient || !normalized.normalizedOrder) {
     const reason = !patient ? "missing patient" : normalized.reason ?? "missing pharmacy order data";
     await dbServer.orderDb.update(dispatchOrder.id, { pharmacyStatus: "error" }).catch(() => null);
-    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, "lifefile", "practiceq-remote-worker", "error", reason);
+    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, pharmacy.getPharmacyProvider(), "practiceq-remote-worker", "error", reason);
     return { status: "pharmacy_error", error: reason };
   }
 
   try {
-    const pharmacyOrder = await lifefile.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
+    const pharmacyOrder = await pharmacy.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
     await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => null);
     await dbServer.orderDb
       .update(dispatchOrder.id, {
@@ -81,12 +81,12 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
       })
       .catch(() => null);
     await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId: dispatchOrder.id }).catch(() => null);
-    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, "lifefile", "practiceq-remote-worker");
+    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, pharmacy.getPharmacyProvider(), "practiceq-remote-worker");
     return { status: "sent_to_pharmacy", pharmacyOrderId: pharmacyOrder.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await dbServer.orderDb.update(dispatchOrder.id, { pharmacyStatus: "error" }).catch(() => null);
-    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, "lifefile", "practiceq-remote-worker", "error", message);
+    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, pharmacy.getPharmacyProvider(), "practiceq-remote-worker", "error", message);
     return { status: "pharmacy_error", error: message };
   }
 }

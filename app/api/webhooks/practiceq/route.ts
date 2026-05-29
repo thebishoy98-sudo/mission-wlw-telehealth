@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
-import * as lifefile from "@/services/lifefile";
+import * as pharmacy from "@/services/pharmacy";
 import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
           db.pharmacyOrderDb.getByOrder(orderId);
         if (!existingPharmacyOrder) {
           try {
-            const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+            const pharmacyOrder = await pharmacy.createPharmacyOrder(order);
             await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
           } catch {}
         }
