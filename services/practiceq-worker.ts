@@ -51,6 +51,7 @@ const PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS = 60000;
 const PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS = 6;
 const PRACTICEQ_ADMIN_STATUS_POLL_DELAY_MS = 5000;
 export const PRACTICEQ_REMOTE_JOB_TIMEOUT_MS = Number(process.env.PRACTICEQ_REMOTE_JOB_TIMEOUT_MS ?? 420000);
+const PRACTICEQ_MAX_FILL_STEPS = Number(process.env.PRACTICEQ_MAX_FILL_STEPS ?? 12);
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -178,6 +179,13 @@ export async function startPracticeQRemoteSession(
     await browser.close().catch(() => {});
     return verifiedResult;
   } catch (error) {
+    const progress = await page.evaluate(() => (window as any).__missionPracticeQProgress ?? null).catch(() => null);
+    if (progress && error instanceof Error && /timed out/i.test(error.message)) {
+      return {
+        status: "failed",
+        error: `${error.message} Last PracticeQ page: step ${progress.step}, visible fields ${progress.visibleFieldCount}, filled ${progress.filled}. Text: ${progress.text}`,
+      };
+    }
     await browser.close().catch(() => {});
     return { status: "failed", error: (error as Error).message };
   }
@@ -212,7 +220,7 @@ export async function fillPracticeQQuestionPages(
   uploadFile: PracticeQUploadFile | null = null,
 ): Promise<FillOutcome> {
   let noProgressCount = 0;
-  for (let step = 0; step < 40; step += 1) {
+  for (let step = 0; step < PRACTICEQ_MAX_FILL_STEPS; step += 1) {
     await page.waitForTimeout(750);
     await waitForPracticeQPageText(page);
     const bodyText = await page.locator("body").innerText().catch(() => "");
@@ -221,6 +229,7 @@ export async function fillPracticeQQuestionPages(
     if (await resolvePracticeQIntroPage(page, bodyText)) continue;
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
+    const visibleFieldCount = await countVisiblePracticeQFields(page);
     const filled = await withPracticeQTimeout(
       fillVisibleFields(page, fillPlan),
       PRACTICEQ_PAGE_FILL_TIMEOUT_MS,
@@ -243,6 +252,8 @@ export async function fillPracticeQQuestionPages(
       await uploadPracticeQFile(page, uploadFile).catch(() => {});
     }
 
+    await setPracticeQProgress(page, fillPlan, step, visibleFieldCount, filled).catch(() => {});
+
     await savePracticeQPage(page);
     await waitForPracticeQSaved(page);
     await assertVisiblePracticeQFieldsFilled(page, fillPlan);
@@ -263,6 +274,32 @@ export async function fillPracticeQQuestionPages(
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
   return { stoppedForPatientConsent: false };
+}
+
+async function countVisiblePracticeQFields(page: Page): Promise<number> {
+  return page
+    .locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible")
+    .count()
+    .catch(() => 0);
+}
+
+async function setPracticeQProgress(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
+  step: number,
+  visibleFieldCount: number,
+  filled: number
+) {
+  // Stored in page context so timeout/errors can include where the browser was.
+  await page.evaluate(({ step, visibleFieldCount, filled, fillPlanLength }) => {
+    (window as any).__missionPracticeQProgress = {
+      step: step + 1,
+      visibleFieldCount,
+      filled,
+      fillPlanLength,
+      text: (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
+    };
+  }, { step, visibleFieldCount, filled, fillPlanLength: fillPlan.length });
 }
 
 function practiceQPageSignature(url: string, text: string) {
