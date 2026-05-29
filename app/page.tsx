@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
@@ -331,11 +332,13 @@ export default function Home() {
             <div className="grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
               {products.map((product) => (
                 <div key={product.id} className="group relative bg-white rounded-3xl border border-gray-200 overflow-hidden hover:border-teal-300 hover:shadow-xl transition-all duration-300">
-                  <div className="aspect-video bg-gradient-to-br from-teal-50 to-slate-100 overflow-hidden">
-                    <img
+                  <div className="relative aspect-video bg-gradient-to-br from-teal-50 to-slate-100 overflow-hidden">
+                    <Image
                       src={product.image}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      fill
+                      sizes="(min-width: 640px) 384px, 100vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => {
                         const el = e.currentTarget;
                         el.style.display = "none";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -706,5 +707,15 @@ function AdminIdentityUploadPreview({ upload }: { upload: Types.Upload }) {
     return <video controls playsInline src={src} className="aspect-video w-full rounded-lg bg-white object-contain" />;
   }
 
-  return <img src={src} alt={upload.type === "driver_license" ? "Submitted license" : "Submitted identity capture"} className="aspect-video w-full rounded-lg bg-white object-contain" />;
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-white">
+      <Image
+        src={src}
+        alt={upload.type === "driver_license" ? "Submitted license" : "Submitted identity capture"}
+        fill
+        unoptimized
+        className="object-contain"
+      />
+    </div>
+  );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -41,11 +42,13 @@ export default function Products() {
           {products.map((product) => (
             <Card key={product.id} clickable className="hover:shadow-lg">
               <CardContent className="p-0">
-                <div className="aspect-video bg-gray-200 rounded-t-lg flex items-center justify-center">
-                  <img
+                <div className="relative aspect-video bg-gray-200 rounded-t-lg overflow-hidden">
+                  <Image
                     src={product.image}
                     alt={product.name}
-                    className="w-full h-full object-cover rounded-t-lg"
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                    className="object-cover"
                     onError={(e) => {
                       e.currentTarget.src =
                         "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23E5E7EB' width='400' height='300'/%3E%3C/svg%3E";

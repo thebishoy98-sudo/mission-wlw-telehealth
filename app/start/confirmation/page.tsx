@@ -16,20 +16,21 @@ type ConsentAutomationStatus = {
 
 export default function Confirmation() {
   const intakeState = getIntakeState();
+  const orderId = intakeState.orderId;
+  const patientId = intakeState.patientId;
   const [order, setOrder] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
   const [consentAutomation, setConsentAutomation] = useState<ConsentAutomationStatus | null>(null);
 
   useEffect(() => {
-    if (intakeState.orderId && intakeState.patientId) {
-      setOrder(db.orderDb.getById(intakeState.orderId));
-      setPatient(db.patientDb.getById(intakeState.patientId));
+    if (orderId && patientId) {
+      setOrder(db.orderDb.getById(orderId));
+      setPatient(db.patientDb.getById(patientId));
     }
-  }, []);
+  }, [orderId, patientId]);
 
   useEffect(() => {
-    if (!intakeState.orderId) return;
-    const orderId = intakeState.orderId;
+    if (!orderId) return;
 
     let cancelled = false;
     const loadStatus = async () => {
@@ -45,7 +46,7 @@ export default function Confirmation() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [intakeState.orderId]);
+  }, [orderId]);
 
   if (!order || !patient) {
     return (

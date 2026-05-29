@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle, Camera, CheckCircle, Flashlight, FlashlightOff, ShieldCheck, Video } from "lucide-react";
 
@@ -261,7 +262,9 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
               <CheckCircle className="h-5 w-5" />
               ID photo ready
             </div>
-            <img src={idImageData} alt="Government ID preview" className="max-h-44 w-full rounded-lg object-contain bg-gray-50" />
+            <div className="relative h-44 w-full overflow-hidden rounded-lg bg-gray-50">
+              <Image src={idImageData} alt="Government ID preview" fill unoptimized className="object-contain" />
+            </div>
             <Button type="button" fullWidth variant="outline" onClick={() => setIdImageData("")}>
               Retake ID Photo
             </Button>

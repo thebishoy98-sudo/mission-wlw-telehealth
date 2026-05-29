@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { ChevronLeft, CheckCircle, Eye, FileText, X } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
@@ -449,11 +450,15 @@ export default function PatientDetail() {
                   src={selectedUpload.base64Data || `/api/provider/uploads/${selectedUpload.id}`}
                 />
               ) : selectedUpload.mimeType.startsWith("image/") ? (
-                <img
-                  src={selectedUpload.base64Data || `/api/provider/uploads/${selectedUpload.id}`}
-                  alt={selectedUpload.type === "driver_license" ? "Uploaded government ID proof" : "Uploaded identity proof"}
-                  className="max-h-[65vh] w-full rounded-xl bg-gray-50 object-contain"
-                />
+                <div className="relative h-[65vh] w-full overflow-hidden rounded-xl bg-gray-50">
+                  <Image
+                    src={selectedUpload.base64Data || `/api/provider/uploads/${selectedUpload.id}`}
+                    alt={selectedUpload.type === "driver_license" ? "Uploaded government ID proof" : "Uploaded identity proof"}
+                    fill
+                    unoptimized
+                    className="object-contain"
+                  />
+                </div>
               ) : (
                 <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
                   This proof file cannot be previewed in the browser.

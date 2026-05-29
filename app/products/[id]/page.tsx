@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -58,11 +59,13 @@ export default function ProductDetail() {
 
         <div className="grid md:grid-cols-2 gap-12">
           <div>
-            <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
-              <img
+            <div className="relative aspect-square bg-gray-200 rounded-lg overflow-hidden">
+              <Image
                 src={product.image}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                fill
+                sizes="(min-width: 768px) 50vw, 100vw"
+                className="object-cover"
                 onError={(e) => {
                   e.currentTarget.src =
                     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect fill='%23E5E7EB' width='600' height='600'/%3E%3C/svg%3E";

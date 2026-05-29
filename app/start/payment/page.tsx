@@ -27,6 +27,8 @@ const chargeAmountOverride =
 export default function Payment() {
   const router = useRouter();
   const [intakeState] = useState(getIntakeState());
+  const productId = intakeState.productId;
+  const doseId = intakeState.doseId;
   const [product, setProduct] = useState<Types.Product | null>(null);
   const [dose, setDose] = useState<Types.DoseOption | null>(null);
   const [cardNumber, setCardNumber] = useState("");
@@ -39,14 +41,14 @@ export default function Payment() {
   const total = chargeAmountOverride ?? productTotal;
 
   useEffect(() => {
-    if (intakeState.productId) {
-      const p = db.productDb.getById(intakeState.productId);
+    if (productId) {
+      const p = db.productDb.getById(productId);
       setProduct(p);
-      if (intakeState.doseId && p) {
-        setDose(p.doses.find((d) => d.id === intakeState.doseId) || null);
+      if (doseId && p) {
+        setDose(p.doses.find((d) => d.id === doseId) || null);
       }
     }
-  }, []);
+  }, [productId, doseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
