@@ -23,6 +23,7 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("uploadPracticeQFile");
     expect(workerSource).toContain("10000");
     expect(workerSource).not.toContain("fileInput.isVisible");
+    expect(workerSource).toContain("question?.Attachments");
   });
 
   it("reads IntakeQ prompts from ancestor headings for standalone text inputs", () => {

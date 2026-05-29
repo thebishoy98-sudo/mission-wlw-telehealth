@@ -1195,6 +1195,7 @@ function countPracticeQAnswers(intake: any) {
     const answer = question?.Answer ?? question?.Value ?? question?.AnswerText ?? question?.Response;
     if (Array.isArray(answer)) return answer.length > 0;
     if (String(answer ?? "").trim()) return true;
+    if (Array.isArray(question?.Attachments) && question.Attachments.length > 0) return true;
     if (Array.isArray(question?.Rows)) {
       return question.Rows.some((row: any) =>
         Array.isArray(row?.Answers) && row.Answers.some((value: unknown) => String(value ?? "").trim())
