@@ -8,8 +8,9 @@ services:
   - type: web
     name: mission-wlw-web
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm ci && npm run build
+    preDeployCommand: npm run db:migrate
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -159,7 +160,7 @@ services:
   - type: worker
     name: mission-wlw-practiceq-worker
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm ci && npx playwright install chromium
     startCommand: npm run practiceq:remote
     envVars:
@@ -199,7 +200,7 @@ services:
   - type: cron
     name: mission-wlw-identity-reminders
     runtime: node
-    plan: free
+    plan: starter
     schedule: "0 13 * * *"
     buildCommand: npm ci
     startCommand: 'curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/identity-reminders"'
@@ -212,7 +213,7 @@ services:
   - type: cron
     name: mission-wlw-pharmacy-tracking-sync
     runtime: node
-    plan: free
+    plan: starter
     schedule: "30 13 * * *"
     buildCommand: npm ci
     startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/pharmacy-tracking-sync"'
