@@ -636,6 +636,17 @@ export default function OrdersManagement() {
                   </CardContent>
                 </Card>
 
+                {(selectedOrder.status === "approved" || selectedOrder.status === "pending_review") && (selectedOrder.pharmacyStatus === "draft" || selectedOrder.pharmacyStatus === "error") && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-bold text-gray-900 mb-3">Pharmacy Dispatch</h3>
+                      <Button fullWidth onClick={() => handleSendToPharmacy(selectedOrder)}>
+                        Send to Pharmacy
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {selectedOrder.pharmacyStatus === "submitted" && (
                   <Card>
                     <CardContent className="p-6">
