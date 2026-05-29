@@ -41,6 +41,7 @@ export default function PatientDetail() {
   const [providerNotes, setProviderNotes] = useState("");
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [approvalMessage, setApprovalMessage] = useState("");
   const [chartReviewing, setChartReviewing] = useState(false);
   const [approvalSteps, setApprovalSteps] = useState<{ label: string; status: "pending" | "done" | "running" }[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -78,28 +79,53 @@ export default function PatientDetail() {
   const handleApprove = async () => {
     if (!chart) return;
     setActionError("");
+    setApprovalMessage("");
     setApproving(true);
+    const canDispatchPharmacy =
+      chart.selectedOrder.practiceQStatus === "completed" ||
+      chart.selectedOrder.practiceQStatus === "submitted";
     setApprovalSteps([
       { label: "Recording provider approval", status: "running" },
-      { label: "Sending to pharmacy", status: "pending" },
+      canDispatchPharmacy
+        ? { label: "Sending to pharmacy", status: "pending" }
+        : { label: "Waiting for PracticeQ completion", status: "pending" },
       { label: "Finalizing chart status", status: "pending" },
     ]);
 
     await stepDelay(500);
     try {
-      if (chart.selectedOrder.status !== "approved") {
-        const reviewRes = await fetch("/api/provider/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: chart.selectedOrder.id,
-            action: "approve",
-            notes: providerNotes,
-            reviewedBy: "Dr. Provider",
-          }),
-        });
-        if (!reviewRes.ok) throw new Error((await reviewRes.json()).error ?? "Provider approval failed");
-        setSelectedOrderPatch({ status: "approved", approvedAt: new Date().toISOString() });
+      const reviewedAt = new Date().toISOString();
+      const reviewRes = await fetch("/api/provider/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: chart.selectedOrder.id,
+          action: "approve",
+          notes: providerNotes,
+          reviewedBy: "Dr. Provider",
+        }),
+      });
+      const reviewData = await reviewRes.json().catch(() => ({}));
+      if (!reviewRes.ok) throw new Error(reviewData.error ?? "Provider approval failed");
+      setChart((prev) => prev ? {
+        ...prev,
+        selectedOrder: { ...prev.selectedOrder, status: "approved", approvedAt: reviewedAt },
+        review: reviewData.review ?? (prev.review ? {
+          ...prev.review,
+          status: "approved",
+          reviewedAt,
+          reviewedBy: "Dr. Provider",
+          chartViewedAt: reviewedAt,
+          chartViewedBy: "Dr. Provider",
+        } : prev.review),
+      } : prev);
+      if (!canDispatchPharmacy) {
+        setApprovalSteps((prev) => prev.map((step, index) => index <= 1 ? { ...step, status: "done" } : index === 2 ? { ...step, status: "running" } : step));
+        await stepDelay(300);
+        setApprovalSteps((prev) => prev.map((step, index) => index === 2 ? { ...step, status: "done" } : step));
+        setApprovalMessage("Chart approved. Pharmacy dispatch will wait for PracticeQ completion.");
+        setApproved(true);
+        return;
       }
       setApprovalSteps((prev) => prev.map((step, index) => index === 0 ? { ...step, status: "done" } : index === 1 ? { ...step, status: "running" } : step));
 
@@ -119,6 +145,7 @@ export default function PatientDetail() {
 
       await stepDelay(300);
       setApprovalSteps((prev) => prev.map((step, index) => index === 2 ? { ...step, status: "done" } : step));
+      setApprovalMessage("Order approved and sent to pharmacy.");
       setApproved(true);
     } catch (error) {
       setActionError((error as Error).message);
@@ -342,7 +369,7 @@ export default function PatientDetail() {
                   {approved && (
                     <div className="mt-5 p-4 bg-green-50 rounded-xl border border-green-100 text-center">
                       <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                      <p className="font-semibold text-green-800">Order approved and sent to pharmacy.</p>
+                      <p className="font-semibold text-green-800">{approvalMessage || "Order approved."}</p>
                     </div>
                   )}
                 </CardContent>

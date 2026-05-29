@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
     const review =
       (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
       db.providerReviewDb.getByOrder(orderId);
+    let providerReview = review;
     let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
 
     if (action === "approve") {
@@ -61,11 +62,14 @@ export async function POST(req: NextRequest) {
           status: "approved",
           reviewedAt: now,
           reviewedBy,
+          chartViewedAt: now,
+          chartViewedBy: reviewedBy,
           notes,
           identityReviewRequired: false,
         } as const;
         db.providerReviewDb.update(review.id, reviewUpdate);
-        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
+        const updatedReview = await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => null);
+        providerReview = updatedReview ?? { ...review, ...reviewUpdate };
       } else {
         const createdReview = {
           id: generateId(),
@@ -74,11 +78,14 @@ export async function POST(req: NextRequest) {
           status: "approved" as const,
           reviewedAt: now,
           reviewedBy,
+          chartViewedAt: now,
+          chartViewedBy: reviewedBy,
           notes,
           identityReviewRequired: false,
         };
         db.providerReviewDb.create(createdReview);
         await dbServer.providerReviewDb.create(createdReview).catch(() => {});
+        providerReview = createdReview;
       }
 
       // Send approval SMS
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, action, orderId, practiceQCompletion });
+    return NextResponse.json({ success: true, action, orderId, review: providerReview, practiceQCompletion });
   } catch (err) {
     console.error("Provider review error:", err);
     return NextResponse.json(

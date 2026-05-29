@@ -17,4 +17,11 @@ describe("provider patient page", () => {
     expect(source).not.toContain("Sent to Pharmacy");
     expect(source).not.toContain("No manual action required");
   });
+
+  it("does not call pharmacy dispatch from approval until PracticeQ is ready", () => {
+    expect(source).toContain("canDispatchPharmacy");
+    expect(source).toContain('practiceQStatus === "completed"');
+    expect(source).toContain('practiceQStatus === "submitted"');
+    expect(source).toMatch(/if \(!canDispatchPharmacy\)/);
+  });
 });

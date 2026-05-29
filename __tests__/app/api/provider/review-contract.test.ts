@@ -10,4 +10,10 @@ describe("provider review route", () => {
     expect(source).toContain("dbServer.practiceqAutomationJobDb.getByOrder(orderId)");
     expect(source).toContain("completePracticeQSession(job.id)");
   });
+
+  it("marks provider-approved charts as viewed separately from identity verification", () => {
+    expect(source).toContain("chartViewedAt: now");
+    expect(source).toContain("chartViewedBy: reviewedBy");
+    expect(source).toContain("identityReviewRequired: false");
+  });
 });
