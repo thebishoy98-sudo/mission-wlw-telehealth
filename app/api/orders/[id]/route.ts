@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import { isAdminRequest, isProviderRequest } from "@/lib/server-auth";
+import { isAdminRequest, isProviderRequest, requireAdmin } from "@/lib/server-auth";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import * as spruceServer from "@/services/spruce.server";
+import { generateId } from "@/lib/utils";
 
 export async function GET(
   req: NextRequest,
@@ -102,5 +104,76 @@ export async function GET(
           })),
         }
       : undefined,
+  });
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
+  const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const trackingNumber = String(body.trackingNumber ?? "").trim();
+
+  if (!trackingNumber) {
+    return NextResponse.json({ error: "Tracking number is required" }, { status: 400 });
+  }
+
+  const order =
+    (await dbServer.orderDb.getById(id).catch(() => null)) ??
+    db.orderDb.getById(id);
+
+  if (!order) {
+    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  }
+
+  const pharmacyOrder =
+    (await dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null)) ??
+    db.pharmacyOrderDb.getByOrder(order.id);
+
+  if (!pharmacyOrder) {
+    return NextResponse.json({ error: "No pharmacy order found for tracking" }, { status: 404 });
+  }
+
+  const shippedAt = new Date().toISOString();
+  const pharmacyUpdate = { trackingNumber, status: "shipped" as const, shippedAt };
+  const orderUpdate = { pharmacyStatus: "shipped" as const, status: "shipped" as const };
+
+  const localPharmacyOrder = db.pharmacyOrderDb.update(pharmacyOrder.id, pharmacyUpdate);
+  db.orderDb.update(order.id, orderUpdate);
+  const serverPharmacyOrder =
+    (await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, pharmacyUpdate).catch(() => null)) ??
+    localPharmacyOrder;
+  const updatedOrder =
+    (await dbServer.orderDb.update(order.id, orderUpdate).catch(() => null)) ??
+    db.orderDb.getById(order.id);
+
+  const patient =
+    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+    db.patientDb.getById(order.patientId);
+
+  if (patient) {
+    await spruceServer.sendMessage(patient, "order_shipped", { orderId: order.id, trackingNumber }).catch(() => {});
+  }
+
+  const log = {
+    id: generateId(),
+    timestamp: shippedAt,
+    integrationName: "lifefile" as const,
+    action: "Tracking number manually recorded",
+    orderId: order.id,
+    patientId: order.patientId,
+    status: "success" as const,
+    details: { lifeFileOrderId: pharmacyOrder.lifeFileOrderId, trackingNumber },
+  };
+  db.integrationLogDb.create(log);
+  await dbServer.integrationLogDb.create(log).catch(() => {});
+
+  return NextResponse.json({
+    order: updatedOrder,
+    pharmacy: serverPharmacyOrder,
   });
 }

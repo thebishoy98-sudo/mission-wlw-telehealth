@@ -11,7 +11,6 @@ import { Image as ImageIcon, Video } from "lucide-react";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "@/lib/utils";
-import * as spruceService from "@/services/spruce";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
 
@@ -206,9 +205,6 @@ export default function OrdersManagement() {
         throw new Error(body.detail ?? body.error ?? "Pharmacy dispatch failed");
       }
 
-      if (patient) {
-        spruceService.sendMessage(patient.id, "sent_to_pharmacy", { orderId: order.id });
-      }
       await loadOrders();
       setToast({ message: "Order sent to pharmacy - patient notified via SMS.", type: "success" });
     } catch (error) {
@@ -216,32 +212,34 @@ export default function OrdersManagement() {
     }
   };
 
-  const handleAddTracking = (order: Types.Order) => {
+  const handleAddTracking = async (order: Types.Order) => {
     if (!trackingNumber) return;
     try {
-      const pharmacyOrder = pharmacyOrders[order.id] ?? db.pharmacyOrderDb.getByOrder(order.id);
-      if (!pharmacyOrder) {
-        setToast({ message: "No pharmacy order found for tracking.", type: "error" });
-        return;
-      }
-
-      db.pharmacyOrderDb.update(pharmacyOrder.id, {
-        trackingNumber,
-        status: "shipped",
-        shippedAt: new Date().toISOString(),
+      const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingNumber }),
       });
-
-      const patient = patients[order.patientId] ?? db.patientDb.getById(order.patientId);
-      if (patient) {
-        spruceService.sendMessage(patient.id, "tracking", { trackingNumber, orderId: order.id });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Error adding tracking number.");
       }
 
-      setOrders((prev) => prev.map((item) => item.id === order.id ? { ...item, pharmacyStatus: "shipped" } : item));
+      if (data.order) {
+        setOrders((prev) => prev.map((item) => item.id === order.id ? data.order : item));
+        setSelectedOrder((current) => current?.id === order.id ? data.order : current);
+      } else {
+        setOrders((prev) => prev.map((item) => item.id === order.id ? { ...item, pharmacyStatus: "shipped", status: "shipped" } : item));
+      }
+      if (data.pharmacy) {
+        setPharmacyOrders((prev) => ({ ...prev, [order.id]: data.pharmacy }));
+      }
       setTrackingNumber("");
       setShowForm(false);
       setToast({ message: "Tracking added - SMS sent to patient.", type: "success" });
-    } catch {
-      setToast({ message: "Error adding tracking number.", type: "error" });
+      await loadOrders();
+    } catch (error) {
+      setToast({ message: (error as Error).message || "Error adding tracking number.", type: "error" });
     }
   };
 
