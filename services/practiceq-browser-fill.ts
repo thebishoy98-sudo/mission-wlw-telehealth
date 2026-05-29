@@ -41,8 +41,10 @@ export function buildPracticeQFillPlan(
   const clinicalAnswers = answers
     .map((answer) => {
       const question = questionById.get(answer.questionId);
-      if (!question || !String(answer.answer ?? "").trim()) return null;
-      return { prompt: question.text, value: answer.answer.trim() };
+      const fallbackPrompt = practiceQFallbackPrompt(answer.questionId);
+      if (!question && !fallbackPrompt) return null;
+      if (!String(answer.answer ?? "").trim()) return null;
+      return { prompt: question?.text ?? fallbackPrompt!, value: answer.answer.trim() };
     })
     .filter((item): item is PracticeQFillItem => item !== null);
 
@@ -58,6 +60,19 @@ export function buildPracticeQFillPlan(
     : [];
 
   return [...demographics, ...clinicalAnswers, ...consentAnswers].filter((item) => item.value.trim().length > 0);
+}
+
+function practiceQFallbackPrompt(questionId: string): string | null {
+  const prompts: Record<string, string> = {
+    pq_height: "What is your height?",
+    pq_current_weight: "What is your current body weight?",
+    pq_ideal_weight: "What is your ideal body weight?",
+    pq_conditions: "Medical conditions",
+    pq_surgical_history: "Surgical history",
+    pq_medication_allergies: "Medication allergies",
+    pq_intake_purpose: "Purpose of visit",
+  };
+  return prompts[questionId] ?? null;
 }
 
 export function findPracticeQAnswerForPrompt(
