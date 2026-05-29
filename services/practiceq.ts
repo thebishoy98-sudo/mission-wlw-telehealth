@@ -977,6 +977,38 @@ export async function populateAndUpdatePracticeQIntake(
   return (result as PracticeQIntake | null) ?? fullIntake;
 }
 
+export async function markPracticeQIntakeCompletedViaApi(
+  intake: PracticeQIntake | null
+): Promise<PracticeQIntake | null> {
+  const intakeId = intake?.Id ?? intake?.id;
+  if (!serviceConfig.practiceq.apiKey || !intake || !intakeId) return null;
+
+  if (/completed/i.test(String(intake.Status ?? intake.status ?? ""))) return intake;
+
+  const fullIntake = Array.isArray(intake.Questions) || Array.isArray(intake.questions)
+    ? intake
+    : await getIntakeById(String(intakeId)).catch(() => null);
+  if (!fullIntake) return null;
+
+  const payload: PracticeQIntake = {
+    ...fullIntake,
+    Id: fullIntake.Id ?? fullIntake.id ?? String(intakeId),
+    Status: "Completed",
+  };
+
+  const response = await fetch(`${pqBase()}/intakes`, {
+    method: "POST",
+    headers: pqHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const result = await parsePracticeQResponse(response);
+  if (!response.ok) {
+    const message = result ? JSON.stringify(result) : `HTTP ${response.status}`;
+    throw new Error(`PracticeQ intake status update failed: ${message}`);
+  }
+  return (result as PracticeQIntake | null) ?? payload;
+}
+
 export function applyMissionAnswersToPracticeQQuestions(
   intakeQuestions: unknown[],
   context: {

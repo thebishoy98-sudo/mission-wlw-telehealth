@@ -14,6 +14,7 @@ import {
 import {
   getIntakeById,
   getIntakeSummaryFeed,
+  markPracticeQIntakeCompletedViaApi,
   populateAndUpdatePracticeQIntake,
 } from "@/services/practiceq";
 
@@ -1143,6 +1144,20 @@ async function verifyPracticeQSavedSubmission(
 
   if (!/completed/i.test(status) || !consentSigned) {
     if (consentSigned && answerStats.answered >= expectedPracticeQAnswerCount(context.answers)) {
+      let apiCompletionError: string | undefined;
+      const apiMarkedCompleted = await withPracticeQTimeout(
+        markPracticeQIntakeCompletedViaApi(verifiedIntake as any),
+        PRACTICEQ_API_VERIFY_TIMEOUT_MS,
+        `PracticeQ API Set as Completed timed out for ${matchedIntake.id}.`
+      ).catch((error) => {
+        apiCompletionError = error instanceof Error ? error.message : String(error);
+        return null;
+      });
+      const apiStatus = String((apiMarkedCompleted as any)?.Status ?? (apiMarkedCompleted as any)?.status ?? "");
+      if (/completed/i.test(apiStatus) || (apiMarkedCompleted && await waitForPracticeQCompletedStatus(matchedIntake.id))) {
+        return { ...result, status: "completed", intakeId: matchedIntake.id };
+      }
+
       const markedCompleted = await withPracticeQTimeout(
         setPracticeQIntakeCompletedInAdmin(matchedIntake.id),
         PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS,
@@ -1158,7 +1173,9 @@ async function verifyPracticeQSavedSubmission(
         ...result,
         status: "failed",
         intakeId: matchedIntake.id,
-        error: `PracticeQ admin Set as Completed failed for ${matchedIntake.id}.`,
+        error: apiCompletionError
+          ? `PracticeQ admin Set as Completed failed for ${matchedIntake.id}. API completion fallback failed: ${apiCompletionError}`
+          : `PracticeQ admin Set as Completed failed for ${matchedIntake.id}.`,
       };
     }
     return {
@@ -1303,10 +1320,14 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
     }
 
     await page.waitForTimeout(1000);
+    const exactSetCompletedSelector =
+      'a[title="Change the status of this form to Completed"][ng-click="setAsCompleted()"]';
     const setCompleted = page
-      .locator(".col-md-2.hidden-print a")
-      .filter({ hasText: /set\s+as\s+completed/i })
+      .locator(exactSetCompletedSelector)
       .first()
+      .or(page.locator(".col-md-2.hidden-print a")
+      .filter({ hasText: /set\s+as\s+completed/i })
+      .first())
       .or(page.getByText(/set\s+as\s+completed/i)
       .or(page.locator("button, a, li, div, span").filter({ hasText: /set\s+as\s+completed/i }))
       .first());

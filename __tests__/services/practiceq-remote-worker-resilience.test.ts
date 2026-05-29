@@ -21,6 +21,7 @@ jest.mock("@/lib/db.server", () => ({
 jest.mock("@/services/practiceq", () => ({
   getIntakeById: jest.fn(),
   getIntakeSummaryFeed: jest.fn(),
+  markPracticeQIntakeCompletedViaApi: jest.fn(),
   populateAndUpdatePracticeQIntake: jest.fn(),
 }));
 
@@ -77,10 +78,23 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("PracticeQ admin Set as Completed failed");
   });
 
+  it("tries PracticeQ API completion before falling back to admin Set as Completed", () => {
+    const apiCompletionIndex = workerSource.indexOf("markPracticeQIntakeCompletedViaApi(");
+    const adminCompletionIndex = workerSource.indexOf("setPracticeQIntakeCompletedInAdmin(");
+
+    expect(apiCompletionIndex).toBeGreaterThanOrEqual(0);
+    expect(adminCompletionIndex).toBeGreaterThan(apiCompletionIndex);
+  });
+
   it("logs into PracticeQ admin from a clean browser before marking completion", () => {
     expect(workerSource).toContain("https://intakeq.com/signin/");
     expect(workerSource).toContain(".col-md-2.hidden-print");
     expect(workerSource).toContain(".modal-dialog button");
+  });
+
+  it("uses the exact PracticeQ Set as Completed admin action selector", () => {
+    expect(workerSource).toContain('title="Change the status of this form to Completed"');
+    expect(workerSource).toContain('ng-click="setAsCompleted()"');
   });
 
   it("enters the IntakeQ intro page before filling questions", () => {

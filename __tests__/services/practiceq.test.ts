@@ -1,5 +1,6 @@
 import * as practiceq from "@/services/practiceq";
 import * as db from "@/lib/db";
+import { serviceConfig } from "@/lib/service-config";
 import type { Order, Patient, Product, Question, QuestionnaireAnswer } from "@/types";
 
 const makePatient = (): Patient => ({
@@ -179,6 +180,50 @@ describe("PracticeQ answer mapping contract", () => {
         expect.objectContaining({ Id: "practiceq_first", Answer: "Bob" }),
         expect.objectContaining({ Id: "practiceq_email", Answer: "bob@example.com" }),
       ])
+    );
+  });
+});
+
+describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
+  const originalConfig = { ...serviceConfig.practiceq };
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    Object.assign(serviceConfig.practiceq, {
+      ...originalConfig,
+      apiKey: "test-practiceq-key",
+      baseUrl: "https://intakeq.test/api/v1",
+    });
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ Id: "intake_1", Status: "Completed" }),
+    })) as jest.Mock;
+  });
+
+  afterEach(() => {
+    Object.assign(serviceConfig.practiceq, originalConfig);
+    global.fetch = originalFetch;
+  });
+
+  it("posts the full intake with Status Completed without requiring answer changes", async () => {
+    const result = await practiceq.markPracticeQIntakeCompletedViaApi({
+      Id: "intake_1",
+      Status: "Submitted",
+      Questions: [{ Id: "q1", Text: "First Name", Answer: "Bob" }],
+    });
+
+    expect(result?.Status).toBe("Completed");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://intakeq.test/api/v1/intakes",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          Id: "intake_1",
+          Status: "Completed",
+          Questions: [{ Id: "q1", Text: "First Name", Answer: "Bob" }],
+        }),
+      })
     );
   });
 });
