@@ -140,6 +140,8 @@ services:
         sync: false
       - key: PRACTICEQ_ADMIN_SET_COMPLETED
         value: true
+      - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
+        sync: false
       - key: PRACTICEQ_REMOTE_PUBLIC_URL
         value: https://mission-wlw-practiceq-remote.onrender.com
       - key: USE_REAL_SPRUCE

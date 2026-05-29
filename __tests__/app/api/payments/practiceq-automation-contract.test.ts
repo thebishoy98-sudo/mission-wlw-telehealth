@@ -29,7 +29,10 @@ describe("payment to PracticeQ automation contract", () => {
   });
 
   it("uses the persisted server product for QuickBooks invoices", () => {
-    expect(source).toContain("product: persistedProduct ?? productData ?? null");
+    // productForIntegrations is resolved from persistedProduct ?? productData ?? DB fallback
+    expect(source).toContain("persistedProduct ??");
+    expect(source).toContain("productForIntegrations");
+    expect(source).toContain("product: productForIntegrations,");
     expect(source).not.toContain("product: productData ?? null,\n        qbCustomerId");
   });
 

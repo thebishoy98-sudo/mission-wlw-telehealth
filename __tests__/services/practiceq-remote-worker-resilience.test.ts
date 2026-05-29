@@ -68,7 +68,9 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("PracticeQ API verification timed out.");
     expect(workerSource).toContain("answer backfill timed out.");
     expect(workerSource).toContain("PracticeQ browser submit finished, but the submitted intake could not be found through the PracticeQ API.");
-    expect(workerSource).toContain('status: "failed",\n      error: "PracticeQ browser submit finished');
+    // Use platform-neutral checks (file may have \r\n on Windows, \n on Linux)
+    expect(workerSource).toContain('status: "failed",');
+    expect(workerSource).toContain('error: "PracticeQ browser submit finished');
   });
 
   it("allows the real IntakeQ none option to be clicked when configured", () => {
@@ -86,7 +88,8 @@ describe("PracticeQ remote worker resilience", () => {
   it("declares the Render env needed for PracticeQ admin browser completion", () => {
     const renderSource = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
     expect(renderSource).toContain("PRACTICEQ_ADMIN_SET_COMPLETED");
-    expect(renderSource).toContain('value: "true"');
+    // YAML booleans are unquoted in render.yaml (value: true, not value: "true")
+    expect(renderSource).toContain("value: true");
     expect(renderSource).toContain("PRACTICEQ_ADMIN_EMAIL");
     expect(renderSource).toContain("PRACTICEQ_ADMIN_PASSWORD");
     expect(renderSource).toContain("PRACTICEQ_ADMIN_STORAGE_STATE_JSON");
@@ -103,14 +106,18 @@ describe("PracticeQ remote worker resilience", () => {
   });
 
   it("logs into PracticeQ admin from a clean browser before marking completion", () => {
-    expect(workerSource).toContain("https://intakeq.com/signin/");
+    // Admin portal is app.intakeq.com — navigating to /signin directly avoids redirect to patient portal
+    expect(workerSource).toContain("app.intakeq.com");
+    expect(workerSource).toContain("/signin");
     expect(workerSource).toContain(".col-md-2.hidden-print");
     expect(workerSource).toContain(".modal-dialog button");
   });
 
   it("uses the exact PracticeQ Set as Completed admin action selector", () => {
-    expect(workerSource).toContain('title="Change the status of this form to Completed"');
+    // Primary selector: Angular ng-click attribute on the Set as Completed link
     expect(workerSource).toContain('ng-click="setAsCompleted()"');
+    // Text fallback for when the ng-click locator doesn't resolve
+    expect(workerSource).toContain("set\\s+as\\s+completed");
   });
 
   it("enters the IntakeQ intro page before filling questions", () => {
