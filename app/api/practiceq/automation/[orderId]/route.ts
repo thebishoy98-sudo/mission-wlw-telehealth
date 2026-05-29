@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
+  const denied = requireProviderOrAdmin(request);
+  if (denied) return denied;
+
   const { orderId } = await params;
   const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
   if (!job) return NextResponse.json({ available: false });

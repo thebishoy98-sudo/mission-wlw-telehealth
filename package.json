@@ -23,7 +23,7 @@
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.408.0",
-    "next": "^15.5.18",
+    "next": "^16.2.6",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "recharts": "^2.12.0",
@@ -46,10 +46,13 @@
     "jest-environment-jsdom": "^30.4.1",
     "pg": "^8.21.0",
     "playwright": "^1.60.0",
-    "postcss": "^8.4.0",
+    "postcss": "8.5.10",
     "tailwindcss": "^3.4.0",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
   }
 }

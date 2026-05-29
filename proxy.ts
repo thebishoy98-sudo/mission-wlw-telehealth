@@ -64,7 +64,7 @@ function checkAdminAuth(req: NextRequest): boolean {
 }
 
 // ── Main middleware ────────────────────────────────────────────────────────────
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const path = req.nextUrl.pathname;
 
@@ -110,6 +110,13 @@ export function middleware(req: NextRequest) {
   res.headers.set("x-request-id", requestId);
   // Echo request-id back to client for support tracing
   res.headers.set("X-Request-Id", requestId);
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
+  if (req.nextUrl.protocol === "https:") {
+    res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
 
   return res;
 }

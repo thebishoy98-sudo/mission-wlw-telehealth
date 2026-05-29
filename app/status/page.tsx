@@ -12,7 +12,7 @@ import type { Order } from "@/types";
 
 type LookupResult = {
   order: Order;
-  patient: { firstName: string; lastName: string; email: string } | null;
+  patient: { firstName: string; lastName: string; email?: string } | null;
   product: { name: string } | null;
   pharmacy: { status: string; trackingNumber?: string; shippedAt?: string } | null;
 };
@@ -46,14 +46,12 @@ export default function PatientStatus() {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/orders/${encodeURIComponent(orderId.trim())}`, {
+      const params = new URLSearchParams({ email: email.trim() });
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderId.trim())}?${params.toString()}`, {
         cache: "no-store",
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error ?? "Order not found.");
-      if (payload.patient?.email?.toLowerCase() !== email.trim().toLowerCase()) {
-        throw new Error("Order not found for that email.");
-      }
       setResult(payload);
     } catch (err) {
       setError((err as Error).message);

@@ -22,7 +22,49 @@ const configuredChargeOverride = Number(process.env.NEXT_PUBLIC_PAYMENT_CHARGE_A
 const chargeAmountOverride =
   Number.isFinite(configuredChargeOverride) && configuredChargeOverride > 0
     ? configuredChargeOverride
-    : 0.01;
+    : null;
+const quickBooksPaymentsEnabled = process.env.NEXT_PUBLIC_QB_PAYMENTS_ENABLED === "true";
+const quickBooksPaymentsEnvironment = process.env.NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT === "sandbox" ? "sandbox" : "production";
+const quickBooksTokenBaseUrl =
+  quickBooksPaymentsEnvironment === "sandbox"
+    ? "https://sandbox.api.intuit.com/quickbooks/v4/payments"
+    : "https://api.intuit.com/quickbooks/v4/payments";
+
+async function tokenizeQuickBooksCard(card: {
+  number: string;
+  expMonth: string;
+  expYear: string;
+  cvc: string;
+  name: string;
+  address?: Types.Address;
+}) {
+  const response = await fetch(`${quickBooksTokenBaseUrl}/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      card: {
+        number: card.number,
+        expMonth: card.expMonth,
+        expYear: card.expYear,
+        cvc: card.cvc,
+        name: card.name,
+        address: {
+          streetAddress: card.address?.street1 ?? "",
+          city: card.address?.city ?? "",
+          region: card.address?.state ?? "",
+          postalCode: card.address?.zipCode ?? "",
+          country: card.address?.country ?? "US",
+        },
+      },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.value) {
+    throw new Error(payload.errors?.[0]?.message ?? "Card tokenization failed.");
+  }
+  return String(payload.value);
+}
 
 export default function Payment() {
   const router = useRouter();
@@ -57,8 +99,27 @@ export default function Payment() {
     setPaymentError("");
     setProcessing(true);
 
-    setProcessingStep("Setting up your account...");
-    await delay(400);
+    setProcessingStep(quickBooksPaymentsEnabled ? "Securing payment details..." : "Setting up your account...");
+    let quickBooksToken = "";
+    try {
+      if (quickBooksPaymentsEnabled) {
+        const [expMonth, expYearInput] = cardExpiry.split("/").map((s) => s.trim());
+        quickBooksToken = await tokenizeQuickBooksCard({
+          number: digits,
+          expMonth,
+          expYear: expYearInput?.length === 2 ? `20${expYearInput}` : expYearInput,
+          cvc: cardCvc,
+          name: `${intakeState.firstName} ${intakeState.lastName}`,
+          address: intakeState.address,
+        });
+      } else {
+        await delay(400);
+      }
+    } catch (error) {
+      setPaymentError((error as Error).message || "Payment setup failed. Please check your card details.");
+      setProcessing(false);
+      return;
+    }
 
     // Create a local draft so the confirmation page has immediate browser state.
     // The charge API persists and returns the authoritative order status.
@@ -151,18 +212,18 @@ export default function Payment() {
       });
     }
 
-    // Call API route -> testing payment bypass -> integration chain
-    setProcessingStep("Confirming test payment...");
+    setProcessingStep("Confirming payment...");
 
     const res = await fetch("/api/payments/charge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         orderId: order.id,
-        cardNumber: cardDigits,
-        expMonth,
-        expYear: expYear?.length === 2 ? `20${expYear}` : expYear,
-        cvc: cardCvc,
+        token: quickBooksToken || undefined,
+        cardNumber: quickBooksPaymentsEnabled ? undefined : cardDigits,
+        expMonth: quickBooksPaymentsEnabled ? undefined : expMonth,
+        expYear: quickBooksPaymentsEnabled ? undefined : (expYear?.length === 2 ? `20${expYear}` : expYear),
+        cvc: quickBooksPaymentsEnabled ? undefined : cardCvc,
         cardName: `${intakeState.firstName} ${intakeState.lastName}`,
         cardLast4,
         cardBrand: "Visa",

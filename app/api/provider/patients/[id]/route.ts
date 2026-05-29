@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { loadProviderPatientChart } from "@/lib/provider-chart";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireProviderOrAdmin(req);
+  if (denied) return denied;
+
   try {
     const { id } = await params;
     const chart = await loadProviderPatientChart(id, {

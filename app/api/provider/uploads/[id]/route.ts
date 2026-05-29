@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireProviderOrAdmin(req);
+  if (denied) return denied;
+
   const { id: uploadId } = await params;
 
   const upload =

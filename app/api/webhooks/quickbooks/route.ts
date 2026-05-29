@@ -17,24 +17,36 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
+import crypto from "crypto";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
-  const intuitToken = req.headers.get("intuit-webhook-signature") ??
-    req.headers.get("intuit-verifier-token") ?? "";
+  const body = await req.text();
+  const signature = req.headers.get("intuit-signature") ?? "";
+  const verifierToken = process.env.QB_WEBHOOK_VERIFIER_TOKEN ?? "";
 
-  if (
-    process.env.QB_WEBHOOK_VERIFIER_TOKEN &&
-    intuitToken !== process.env.QB_WEBHOOK_VERIFIER_TOKEN
-  ) {
+  if (!verifierToken && process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ error: "QB_WEBHOOK_VERIFIER_TOKEN is not configured" }, { status: 500 });
+  }
+
+  if (verifierToken && !signature) {
+    return NextResponse.json({ error: "Missing signature" }, { status: 401 });
+  }
+
+  if (verifierToken && !verifyIntuitSignature(body, signature, verifierToken)) {
     console.warn("QuickBooks webhook: invalid verifier token");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = await req.json();
+  let payload: any;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const notifications: any[] = payload.eventNotifications ?? [payload];
 
   for (const notification of notifications) {
@@ -46,6 +58,13 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+function verifyIntuitSignature(body: string, signature: string, verifierToken: string) {
+  const expected = crypto.createHmac("sha256", verifierToken).update(body).digest("base64");
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
 async function getPaymentByTransactionId(transactionId: string) {

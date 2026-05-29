@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import * as quickbooks from "@/services/quickbooks";
 import { generateId } from "@/lib/utils";
+import { requireAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const { orderId } = await req.json();
     if (!orderId) {

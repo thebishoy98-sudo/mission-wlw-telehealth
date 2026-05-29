@@ -5,8 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/server-auth";
 
 export async function GET(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   const clientId = process.env.QB_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json({ error: "QB_CLIENT_ID not set" }, { status: 500 });

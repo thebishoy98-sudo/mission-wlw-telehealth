@@ -33,6 +33,14 @@ export async function GET(
   const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
   const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId).catch(() => null);
   const canViewIdentity = isAdminRequest(req) || isProviderRequest(req);
+  const isPrivilegedRequest = canViewIdentity;
+  const requestedEmail = req.nextUrl.searchParams.get("email")?.trim().toLowerCase() ?? "";
+
+  if (!isPrivilegedRequest) {
+    if (!patient?.email || !requestedEmail || patient.email.toLowerCase() !== requestedEmail) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+  }
   const [uploads, review, integrationLogs] = canViewIdentity
     ? await Promise.all([
         dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
@@ -50,7 +58,7 @@ export async function GET(
           id: patient.id,
           firstName: patient.firstName,
           lastName: patient.lastName,
-          email: patient.email,
+          email: isPrivilegedRequest ? patient.email : undefined,
         }
       : null,
     product: product ? { id: product.id, name: product.name } : null,

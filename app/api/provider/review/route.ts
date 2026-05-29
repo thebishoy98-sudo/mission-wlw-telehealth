@@ -4,8 +4,12 @@ import * as dbServer from "@/lib/db.server";
 import * as spruce from "@/services/spruce";
 import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
+import { requireProviderOrAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
+  const denied = requireProviderOrAdmin(req);
+  if (denied) return denied;
+
   try {
     const body = await req.json();
     const { orderId, action, notes, rejectionReason, reviewedBy } = body;

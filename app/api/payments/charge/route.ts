@@ -56,7 +56,7 @@ async function wakePracticeQRemoteWorker() {
 }
 
 function shouldBypassQuickBooksPayment() {
-  return process.env.BYPASS_QB_PAYMENTS !== "false";
+  return process.env.BYPASS_QB_PAYMENTS === "true";
 }
 
 export async function POST(req: NextRequest) {

@@ -10,7 +10,7 @@ import {
 import * as db from "@/lib/db";
 
 const AUTH_KEY = "tele_auth_session";
-const PATIENT_PORTAL_PASSWORD = "patient123";
+const PATIENT_PORTAL_PASSWORD = process.env.NEXT_PUBLIC_PATIENT_PORTAL_PASSWORD ?? "";
 
 export type UserRole = "patient" | "provider" | "admin";
 
@@ -34,22 +34,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-const STAFF_CREDENTIALS: Record<
-  string,
-  { password: string; role: UserRole; name: string }
-> = {
-  "dr.johnson@telehealth.com": {
-    password: "provider123",
-    role: "provider",
-    name: "Dr. Sarah Johnson",
-  },
-  "admin@telehealth.com": {
-    password: "admin123",
-    role: "admin",
-    name: "Admin User",
-  },
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -86,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (role === "patient") {
-      if (password !== PATIENT_PORTAL_PASSWORD) {
+      if (!PATIENT_PORTAL_PASSWORD || password !== PATIENT_PORTAL_PASSWORD) {
         return { success: false, error: "Invalid email or password." };
       }
       const patients = db.patientDb.getAll();
@@ -123,20 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
 
-    const staff = STAFF_CREDENTIALS[normalized];
-    if (!staff || staff.role !== role || staff.password !== password) {
-      return { success: false, error: "Invalid email or password." };
-    }
-
-    const authUser: AuthUser = {
-      id: `${role}_session`,
-      name: staff.name,
-      email: normalized,
-      role: staff.role,
-    };
-    setUser(authUser);
-    localStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
-    return { success: true };
+    return { success: false, error: "Invalid email or password." };
   };
 
   const logout = () => {

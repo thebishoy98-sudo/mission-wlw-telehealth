@@ -1,8 +1,25 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
+
+function safeEquals(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
 
 export async function POST(req: Request) {
   const { email, password } = await req.json().catch(() => ({}));
-  if (String(email).toLowerCase().trim() !== "dr.johnson@telehealth.com" || password !== "provider123") {
+  const configuredEmail = process.env.PROVIDER_EMAIL ?? "";
+  const configuredPassword = process.env.PROVIDER_PASSWORD ?? "";
+  const providerSecret = process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET;
+
+  if (!configuredEmail || !configuredPassword || !providerSecret) {
+    return NextResponse.json({ error: "Provider login is not configured" }, { status: 500 });
+  }
+
+  const submittedEmail = String(email).toLowerCase().trim();
+  const submittedPassword = String(password ?? "");
+  if (submittedEmail !== configuredEmail.toLowerCase().trim() || !safeEquals(submittedPassword, configuredPassword)) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
@@ -12,15 +29,16 @@ export async function POST(req: Request) {
     user: {
       id: "provider_session",
       name: "Dr. Sarah Johnson",
-      email: "dr.johnson@telehealth.com",
+      email: configuredEmail,
       role: "provider",
     },
   });
-  response.cookies.set("provider_secret", process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET ?? "", {
+  response.cookies.set("provider_secret", providerSecret, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
+    maxAge: 8 * 60 * 60,
   });
   return response;
 }

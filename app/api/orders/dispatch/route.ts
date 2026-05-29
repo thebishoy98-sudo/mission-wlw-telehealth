@@ -11,6 +11,7 @@ import { generateId } from "@/lib/utils";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
+import { requireAdmin } from "@/lib/server-auth";
 import type { Patient } from "@/types";
 
 function answerValue(practiceq: Awaited<ReturnType<typeof getPracticeQMirrorForOrder>> | null | undefined, pattern: RegExp): string {
@@ -71,6 +72,9 @@ function patientStub(order: NonNullable<Awaited<ReturnType<typeof dbServer.order
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const { orderId, patientData, productData } = await req.json();
     if (!orderId) {

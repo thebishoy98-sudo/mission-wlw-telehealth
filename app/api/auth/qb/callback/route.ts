@@ -5,8 +5,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/server-auth";
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export async function GET(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const realmId = searchParams.get("realmId");
@@ -25,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return html(
-      `<pre style="font-family:monospace;padding:2rem">OAuth error: ${error}\n${searchParams.get("error_description") ?? ""}</pre>`,
+      `<pre style="font-family:monospace;padding:2rem">OAuth error: ${escapeHtml(error)}\n${escapeHtml(searchParams.get("error_description"))}</pre>`,
       400
     );
   }
@@ -81,7 +94,7 @@ export async function GET(req: NextRequest) {
   if (!tokenRes.ok) {
     const text = await tokenRes.text();
     return html(
-      `<pre style="font-family:monospace;padding:2rem">Token exchange failed (${tokenRes.status}):\n${text}</pre>`,
+      `<pre style="font-family:monospace;padding:2rem">Token exchange failed (${tokenRes.status}):\n${escapeHtml(text)}</pre>`,
       502
     );
   }
@@ -95,8 +108,8 @@ export async function GET(req: NextRequest) {
 <h2>✅ QuickBooks Connected!</h2>
 <p>Add these to your <strong>Vercel environment variables</strong>:</p>
 <pre style="background:#fff;border:1px solid #86efac;padding:1.5rem;border-radius:8px;font-size:14px">
-QB_REALM_ID=${realmId}
-QB_REFRESH_TOKEN=${tokens.refresh_token}
+QB_REALM_ID=${escapeHtml(realmId)}
+QB_REFRESH_TOKEN=${escapeHtml(tokens.refresh_token)}
 USE_REAL_QUICKBOOKS=true
 </pre>
 <p style="color:#6b7280;font-size:13px">⚠️ The access token expires in 1 hour - the refresh token lasts 100 days and gets auto-renewed.</p>
