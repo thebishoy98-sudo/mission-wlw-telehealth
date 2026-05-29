@@ -26,9 +26,11 @@ describe("PracticeQ worker background submission contract", () => {
     expect(source).toContain('el.closest("[ng-repeat], .question, .panel, fieldset")');
   });
 
-  it("fails the job instead of reporting completed when expected visible answers are not written", () => {
+  it("retries and warns when expected visible answers are not written, without killing the job", () => {
     expect(source).toContain("assertVisiblePracticeQFieldsFilled");
-    expect(source).toContain("PracticeQ did not keep the expected answer");
+    // Re-fills missing fields once before recording a warning; does NOT throw so the form can still submit
+    expect(source).toContain("PracticeQ field fill warnings");
+    expect(source).toContain("enterFieldValue(field, expected, prompt)");
   });
 
   it("bounds each PracticeQ field inspection so one custom input cannot hang the worker", () => {

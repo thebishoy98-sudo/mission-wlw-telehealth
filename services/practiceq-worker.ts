@@ -286,23 +286,54 @@ async function fillPracticeQVitalsPage(
     return 0;
   }
 
-  const values = [
-    findPracticeQAnswerForPrompt("What is your height?", fillPlan),
-    findPracticeQAnswerForPrompt("What is your current body weight?", fillPlan),
-    findPracticeQAnswerForPrompt("What is your ideal body weight?", fillPlan),
-  ].filter((value): value is string => Boolean(value));
-  if (values.length < 3) return 0;
+  const heightVal = findPracticeQAnswerForPrompt("What is your height?", fillPlan);
+  const currentWeightVal = findPracticeQAnswerForPrompt("What is your current body weight?", fillPlan);
+  const idealWeightVal = findPracticeQAnswerForPrompt("What is your ideal body weight?", fillPlan);
+  if (!heightVal || !currentWeightVal || !idealWeightVal) return 0;
 
-  const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
-  const count = Math.min(await fields.count().catch(() => 0), values.length);
+  // Map each value to its exact question text so we can match by label, not position
+  const vitalsMap: Array<{ text: RegExp; value: string }> = [
+    { text: /what is your height/i, value: heightVal },
+    { text: /current body weight/i, value: currentWeightVal },
+    { text: /ideal body weight/i, value: idealWeightVal },
+  ];
+
   let filled = 0;
+  const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
+  const count = await fields.count().catch(() => 0);
+
   for (let i = 0; i < count; i += 1) {
     const field = fields.nth(i);
+    if (!(await field.isVisible().catch(() => false))) continue;
     const current = await field.inputValue().catch(() => "");
     if (current.trim()) continue;
-    await enterFieldValue(field, values[i], `PracticeQ vitals field ${i + 1}`);
+    const prompt = await getPracticeQFieldPrompt(field);
+    const match = vitalsMap.find((v) => v.text.test(prompt));
+    if (!match) continue;
+    await enterFieldValue(field, match.value, prompt);
     filled += 1;
   }
+
+  // Positional fallback: if label matching found nothing, fill by position (height, weight, ideal)
+  if (filled === 0) {
+    const vals = [heightVal, currentWeightVal, idealWeightVal];
+    const posFields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
+    const posCount = Math.min(await posFields.count().catch(() => 0), vals.length);
+    for (let i = 0; i < posCount; i += 1) {
+      const field = posFields.nth(i);
+      const current = await field.inputValue().catch(() => "");
+      if (current.trim()) continue;
+      await enterFieldValue(field, vals[i], `PracticeQ vitals field ${i + 1}`);
+      filled += 1;
+    }
+  }
+
+  if (filled > 0) {
+    // Let Angular settle after all vitals fields are filled before returning to the main loop
+    await page.waitForTimeout(300);
+    await setPracticeQAngularTextAnswers(page, fillPlan);
+  }
+
   return filled;
 }
 
