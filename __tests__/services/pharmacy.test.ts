@@ -48,6 +48,31 @@ describe("pharmacy provider router", () => {
     expect(lifefile.createPharmacyOrder).not.toHaveBeenCalled();
   });
 
+  it("routes pharmacy dispatch to AppSheet when production AppSheet is enabled", async () => {
+    process.env.PHARMACY_PROVIDER = "appsheet";
+    process.env.USE_REAL_APPSHEET = "true";
+    process.env.APPSHEET_ID = "app_123";
+    process.env.APPSHEET_API_KEY = "key_123";
+
+    await pharmacy.createPharmacyOrder(order);
+
+    expect(appsheet.createPharmacyOrder).toHaveBeenCalledWith(order, undefined);
+    expect(lifefile.createPharmacyOrder).not.toHaveBeenCalled();
+  });
+
+  it("declares AppSheet dispatch settings for the Render PracticeQ worker", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const renderSource = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
+
+    expect(renderSource).toContain("PHARMACY_PROVIDER");
+    expect(renderSource).toContain("value: appsheet");
+    expect(renderSource).toContain("USE_REAL_APPSHEET");
+    expect(renderSource).toContain('value: "true"');
+    expect(renderSource).toContain("APPSHEET_ID");
+    expect(renderSource).toContain("APPSHEET_API_KEY");
+  });
+
   it("keeps LifeFile as the default when AppSheet is not configured", async () => {
     delete process.env.PHARMACY_PROVIDER;
     process.env.APPSHEET_ID = "configured_but_not_selected";

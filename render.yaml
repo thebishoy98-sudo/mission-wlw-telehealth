@@ -19,6 +19,18 @@ services:
         sync: false
       - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
         sync: false
+      - key: PHARMACY_PROVIDER
+        value: appsheet
+      - key: USE_REAL_APPSHEET
+        value: "true"
+      - key: APPSHEET_ID
+        sync: false
+      - key: APPSHEET_API_KEY
+        sync: false
+      - key: APPSHEET_BASE_URL
+        value: https://www.appsheet.com
+      - key: APPSHEET_ORDER_TABLE
+        value: OrderItems
       - key: POSTGRES_URL
         sync: false
       - key: POSTGRES_URL_NON_POOLING
