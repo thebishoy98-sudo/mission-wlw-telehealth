@@ -7,9 +7,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/server-auth";
 
+function publicOrigin(req: NextRequest) {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : req.nextUrl.origin;
+}
+
 export async function GET(req: NextRequest) {
   if (!isAdminRequest(req)) {
-    const loginUrl = new URL("/login/admin", req.nextUrl.origin);
+    const loginUrl = new URL("/login/admin", publicOrigin(req));
     loginUrl.searchParams.set("next", `${req.nextUrl.pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
