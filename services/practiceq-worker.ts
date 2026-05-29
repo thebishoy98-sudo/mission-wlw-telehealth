@@ -50,6 +50,7 @@ const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
 const PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS = 60000;
 const PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS = 6;
 const PRACTICEQ_ADMIN_STATUS_POLL_DELAY_MS = 5000;
+export const PRACTICEQ_REMOTE_JOB_TIMEOUT_MS = Number(process.env.PRACTICEQ_REMOTE_JOB_TIMEOUT_MS ?? 420000);
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -157,14 +158,23 @@ export async function startPracticeQRemoteSession(
     await fillKnownPracticeQLogin(page, patient);
     await clickContinue(page);
     await resolvePracticeQResumePrompt(page);
-    const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
-    const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
-    const verifiedResult = await verifyPracticeQSavedSubmission(submitResult, {
-      patient,
-      answers,
-      questions,
-      startedAt: job.createdAt,
-    });
+    const verifiedResult = await withPracticeQTimeout(
+      (async () => {
+        await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: filling intake form" }).catch(() => null);
+        const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
+        await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: submitting intake form" }).catch(() => null);
+        const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
+        await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: verifying submitted intake" }).catch(() => null);
+        return verifyPracticeQSavedSubmission(submitResult, {
+          patient,
+          answers,
+          questions,
+          startedAt: job.createdAt,
+        });
+      })(),
+      PRACTICEQ_REMOTE_JOB_TIMEOUT_MS,
+      `PracticeQ automation timed out after ${Math.round(PRACTICEQ_REMOTE_JOB_TIMEOUT_MS / 1000)} seconds.`
+    );
     await browser.close().catch(() => {});
     return verifiedResult;
   } catch (error) {
@@ -355,7 +365,7 @@ export async function submitPracticeQInBackground(
 }
 
 async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<number> {
-  const fields = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
   const count = await fields.count();
   let filled = 0;
 
@@ -388,7 +398,7 @@ async function fillPracticeQField(
 }
 
 async function assertVisiblePracticeQFieldsFilled(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
-  const fields = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
   const count = await fields.count();
   const missing: string[] = [];
 
@@ -816,7 +826,7 @@ async function fillVisibleConsentFields(
     .join("")
     .toUpperCase();
 
-  const inputs = page.locator("input:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea");
+  const inputs = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
   const count = await inputs.count();
   for (let i = 0; i < count; i += 1) {
     const input = inputs.nth(i);
