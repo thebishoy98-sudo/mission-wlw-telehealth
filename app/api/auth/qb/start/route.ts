@@ -5,11 +5,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/server-auth";
+import { isAdminRequest } from "@/lib/server-auth";
 
 export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+  if (!isAdminRequest(req)) {
+    const loginUrl = new URL("/login/admin", req.nextUrl.origin);
+    loginUrl.searchParams.set("next", `${req.nextUrl.pathname}${req.nextUrl.search}`);
+    return NextResponse.redirect(loginUrl);
+  }
 
   const clientId = process.env.QB_CLIENT_ID;
   if (!clientId) {

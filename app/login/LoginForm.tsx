@@ -56,7 +56,9 @@ export function LoginForm({ role }: { role: UserRole }) {
       return;
     }
 
-    router.push(config.destination);
+    const next = new URLSearchParams(window.location.search).get("next");
+    const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "";
+    router.push(safeNext || config.destination);
   };
 
   return (
