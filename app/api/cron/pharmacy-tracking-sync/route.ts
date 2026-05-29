@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTrackingScriptUpdates } from "@/services/pharmacy-tracking-script";
+import { fetchAppSheetTrackingUpdates, isAppSheetTrackingConfigured } from "@/services/appsheet-tracking";
 import { applyLifeFileWebhookPayload } from "@/lib/lifefile-webhook-handler";
 
 function isAuthorized(req: NextRequest) {
@@ -26,7 +27,17 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
-    const updates = await fetchTrackingScriptUpdates();
+    const [scriptResult, appSheetResult] = await Promise.allSettled([
+      fetchTrackingScriptUpdates(),
+      isAppSheetTrackingConfigured() ? fetchAppSheetTrackingUpdates() : Promise.resolve([]),
+    ]);
+    if (scriptResult.status === "rejected" && appSheetResult.status === "rejected") {
+      throw new Error(`${scriptResult.reason?.message ?? scriptResult.reason}; ${appSheetResult.reason?.message ?? appSheetResult.reason}`);
+    }
+    const updates = [
+      ...(scriptResult.status === "fulfilled" ? scriptResult.value : []),
+      ...(appSheetResult.status === "fulfilled" ? appSheetResult.value : []),
+    ];
     const results: { status: number; body: unknown }[] = [];
 
     for (const update of updates) {
@@ -42,6 +53,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       processed: updates.length,
+      sources: {
+        trackingScript: scriptResult.status === "fulfilled" ? scriptResult.value.length : { error: scriptResult.reason?.message ?? String(scriptResult.reason) },
+        appSheet: appSheetResult.status === "fulfilled" ? appSheetResult.value.length : { error: appSheetResult.reason?.message ?? String(appSheetResult.reason) },
+      },
       results,
       runAt: new Date().toISOString(),
     });
