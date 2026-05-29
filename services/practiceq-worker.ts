@@ -230,11 +230,12 @@ export async function fillPracticeQQuestionPages(
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
 
     const visibleFieldCount = await countVisiblePracticeQFields(page);
-    const filled = await withPracticeQTimeout(
+    let filled = await withPracticeQTimeout(
       fillVisibleFields(page, fillPlan),
       PRACTICEQ_PAGE_FILL_TIMEOUT_MS,
       "PracticeQ text field fill step timed out."
     );
+    filled += await fillPracticeQVitalsPage(page, fillPlan, bodyText).catch(() => 0);
     await withPracticeQTimeout(
       clickMatchingChoices(page, fillPlan),
       PRACTICEQ_CHOICE_TIMEOUT_MS,
@@ -274,6 +275,35 @@ export async function fillPracticeQQuestionPages(
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
   return { stoppedForPatientConsent: false };
+}
+
+async function fillPracticeQVitalsPage(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
+  bodyText: string
+): Promise<number> {
+  if (!/what is your height/i.test(bodyText) || !/current body weight/i.test(bodyText) || !/ideal body weight/i.test(bodyText)) {
+    return 0;
+  }
+
+  const values = [
+    findPracticeQAnswerForPrompt("What is your height?", fillPlan),
+    findPracticeQAnswerForPrompt("What is your current body weight?", fillPlan),
+    findPracticeQAnswerForPrompt("What is your ideal body weight?", fillPlan),
+  ].filter((value): value is string => Boolean(value));
+  if (values.length < 3) return 0;
+
+  const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
+  const count = Math.min(await fields.count().catch(() => 0), values.length);
+  let filled = 0;
+  for (let i = 0; i < count; i += 1) {
+    const field = fields.nth(i);
+    const current = await field.inputValue().catch(() => "");
+    if (current.trim()) continue;
+    await enterFieldValue(field, values[i], `PracticeQ vitals field ${i + 1}`);
+    filled += 1;
+  }
+  return filled;
 }
 
 async function countVisiblePracticeQFields(page: Page): Promise<number> {
