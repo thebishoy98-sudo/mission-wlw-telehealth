@@ -1,37 +1,223 @@
+databases:
+  - name: mission-wlw-postgres
+    databaseName: mission_wlw
+    user: mission_wlw
+    plan: free
+
 services:
   - type: web
-    name: mission-wlw-practiceq-remote
-    runtime: docker
+    name: mission-wlw-web
+    runtime: node
     plan: free
-    dockerfilePath: ./Dockerfile.practiceq-remote
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
-      - key: PRACTICEQ_REMOTE_HEADLESS
-        value: "true"
-      - key: PRACTICEQ_REMOTE_POLL_MS
-        value: "5000"
-      - key: PRACTICEQ_REMOTE_PUBLIC_URL
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: POSTGRES_URL_NON_POOLING
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: VERCEL_ENV
+        value: production
+
+      # Render public URL. Fill this after the first Render web service URL is known.
+      - key: APP_BASE_URL
         sync: false
-      - key: PRACTICEQ_ADMIN_SET_COMPLETED
-        value: "true"
+
+      # Staff/session secrets.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: PROVIDER_EMAIL
+        sync: false
+      - key: PROVIDER_PASSWORD
+        sync: false
+      - key: PROVIDER_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+      # QuickBooks sandbox/payment configuration.
+      - key: USE_REAL_QUICKBOOKS
+        value: true
+      - key: BYPASS_QB_PAYMENTS
+        value: false
+      - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
+        value: true
+      - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
+        value: sandbox
+      - key: QB_CLIENT_ID
+        sync: false
+      - key: QB_CLIENT_SECRET
+        sync: false
+      - key: QB_REALM_ID
+        sync: false
+      - key: QB_REFRESH_TOKEN
+        sync: false
+      - key: QB_REDIRECT_URI
+        sync: false
+      - key: QB_OAUTH_INCLUDE_PAYMENTS
+        value: true
+      - key: QB_WEBHOOK_VERIFIER_TOKEN
+        sync: false
+      - key: NEXT_PUBLIC_QB_PAYMENTS_APP_KEY
+        sync: false
+
+      # Pharmacy is intentionally wired to LifeFile sandbox for Render testing.
+      - key: PHARMACY_PROVIDER
+        value: lifefile
+      - key: USE_REAL_LIFEFILE
+        value: true
+      - key: LIFEFILE_BASE_URL
+        value: https://host100-7.lifefile.net/lfapi/v1
+      - key: LIFEFILE_VENDOR_ID
+        sync: false
+      - key: LIFEFILE_LOCATION_ID
+        sync: false
+      - key: LIFEFILE_API_NETWORK_ID
+        sync: false
+      - key: LIFEFILE_API_USERNAME
+        sync: false
+      - key: LIFEFILE_API_PASSWORD
+        sync: false
+      - key: LIFEFILE_PRACTICE_ID
+        sync: false
+      - key: LIFEFILE_ORDER_ENDPOINT
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_NPI
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LICENSE_STATE
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LICENSE_NUMBER
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_FIRST_NAME
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LAST_NAME
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_EMAIL
+        sync: false
+      - key: LIFEFILE_SHIPPING_SERVICE_ID
+        value: 999
+      - key: LIFEFILE_WEBHOOK_SECRET
+        sync: false
+
+      # PracticeQ, Spruce, identity, and AI integrations.
+      - key: USE_REAL_PRACTICEQ
+        value: true
+      - key: PRACTICEQ_API_KEY
+        sync: false
+      - key: PRACTICEQ_BASE_URL
+        value: https://intakeq.com/api/v1
+      - key: PRACTICEQ_QUESTIONNAIRE_ID
+        sync: false
+      - key: PRACTICEQ_WEBHOOK_KEY
+        sync: false
       - key: PRACTICEQ_ADMIN_EMAIL
         sync: false
       - key: PRACTICEQ_ADMIN_PASSWORD
         sync: false
-      - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
+      - key: PRACTICEQ_ADMIN_SET_COMPLETED
+        value: true
+      - key: PRACTICEQ_REMOTE_PUBLIC_URL
         sync: false
-      - key: PHARMACY_PROVIDER
-        value: appsheet
+      - key: USE_REAL_SPRUCE
+        value: true
+      - key: SPRUCE_AUTH_TOKEN
+        sync: false
+      - key: SPRUCE_INTERNAL_ENDPOINT_ID
+        sync: false
+      - key: SPRUCE_WEBHOOK_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: IDENTITY_STORAGE_PROVIDER
+        sync: false
+
+      # Optional AppSheet mirror/tracking support.
       - key: USE_REAL_APPSHEET
-        value: "true"
+        value: false
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY
         sync: false
-      - key: APPSHEET_BASE_URL
-        value: https://www.appsheet.com
-      - key: APPSHEET_ORDER_TABLE
-        value: OrderItems
+
+  - type: worker
+    name: mission-wlw-practiceq-worker
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npx playwright install chromium
+    startCommand: npm run practiceq:remote
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
       - key: POSTGRES_URL
-        sync: false
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
       - key: POSTGRES_URL_NON_POOLING
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: USE_REAL_PRACTICEQ
+        value: true
+      - key: PRACTICEQ_API_KEY
+        sync: false
+      - key: PRACTICEQ_BASE_URL
+        value: https://intakeq.com/api/v1
+      - key: PRACTICEQ_QUESTIONNAIRE_ID
+        sync: false
+      - key: PRACTICEQ_ADMIN_EMAIL
+        sync: false
+      - key: PRACTICEQ_ADMIN_PASSWORD
+        sync: false
+      - key: PRACTICEQ_ADMIN_SET_COMPLETED
+        value: true
+      - key: PRACTICEQ_REMOTE_PUBLIC_URL
+        sync: false
+      - key: PRACTICEQ_REMOTE_HEADLESS
+        value: true
+      - key: PRACTICEQ_REMOTE_POLL_MS
+        value: 5000
+
+  - type: cron
+    name: mission-wlw-identity-reminders
+    runtime: node
+    plan: free
+    schedule: "0 13 * * *"
+    buildCommand: npm ci
+    startCommand: 'curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/identity-reminders"'
+    envVars:
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-pharmacy-tracking-sync
+    runtime: node
+    plan: free
+    schedule: "30 13 * * *"
+    buildCommand: npm ci
+    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/pharmacy-tracking-sync"'
+    envVars:
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
         sync: false
