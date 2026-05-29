@@ -58,7 +58,11 @@ export function LoginForm({ role }: { role: UserRole }) {
 
     const next = new URLSearchParams(window.location.search).get("next");
     const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "";
-    router.push(safeNext || config.destination);
+    if (safeNext) {
+      window.location.assign(safeNext);
+      return;
+    }
+    router.push(config.destination);
   };
 
   return (
