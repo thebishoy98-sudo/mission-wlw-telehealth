@@ -11,7 +11,7 @@
     },
     {
       "path": "/api/cron/pharmacy-tracking-sync",
-      "schedule": "30 13 * * *"
+      "schedule": "* * * * *"
     }
   ]
 }
