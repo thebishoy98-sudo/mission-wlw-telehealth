@@ -83,16 +83,23 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toMatch(/set\\s\+as\\s\+completed/i);
   });
 
+  it("declares the Render env needed for PracticeQ admin browser completion", () => {
+    const renderSource = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
+    expect(renderSource).toContain("PRACTICEQ_ADMIN_SET_COMPLETED");
+    expect(renderSource).toContain('value: "true"');
+    expect(renderSource).toContain("PRACTICEQ_ADMIN_EMAIL");
+    expect(renderSource).toContain("PRACTICEQ_ADMIN_PASSWORD");
+    expect(renderSource).toContain("PRACTICEQ_ADMIN_STORAGE_STATE_JSON");
+  });
+
   it("does not report completion when PracticeQ admin completion fails", () => {
     expect(workerSource).toContain("PracticeQ admin Set as Completed failed");
   });
 
-  it("tries PracticeQ API completion before falling back to admin Set as Completed", () => {
-    const apiCompletionIndex = workerSource.indexOf("markPracticeQIntakeCompletedViaApi(");
-    const adminCompletionIndex = workerSource.indexOf("setPracticeQIntakeCompletedInAdmin(");
-
-    expect(apiCompletionIndex).toBeGreaterThanOrEqual(0);
-    expect(adminCompletionIndex).toBeGreaterThan(apiCompletionIndex);
+  it("uses the PracticeQ admin browser path to mark intakes completed", () => {
+    expect(workerSource).not.toContain("markPracticeQIntakeCompletedViaApi(");
+    expect(workerSource).toContain("setPracticeQIntakeCompletedInAdmin(");
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_SET_COMPLETED");
   });
 
   it("logs into PracticeQ admin from a clean browser before marking completion", () => {

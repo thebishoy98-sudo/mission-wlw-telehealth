@@ -14,7 +14,6 @@ import {
 import {
   getIntakeById,
   getIntakeSummaryFeed,
-  markPracticeQIntakeCompletedViaApi,
   populateAndUpdatePracticeQIntake,
 } from "@/services/practiceq";
 
@@ -1144,20 +1143,6 @@ async function verifyPracticeQSavedSubmission(
 
   if (!/completed/i.test(status) || !consentSigned) {
     if (consentSigned && answerStats.answered >= expectedPracticeQAnswerCount(context.answers)) {
-      let apiCompletionError: string | undefined;
-      const apiMarkedCompleted = await withPracticeQTimeout(
-        markPracticeQIntakeCompletedViaApi(verifiedIntake as any),
-        PRACTICEQ_API_VERIFY_TIMEOUT_MS,
-        `PracticeQ API Set as Completed timed out for ${matchedIntake.id}.`
-      ).catch((error) => {
-        apiCompletionError = error instanceof Error ? error.message : String(error);
-        return null;
-      });
-      const apiStatus = String((apiMarkedCompleted as any)?.Status ?? (apiMarkedCompleted as any)?.status ?? "");
-      if (/completed/i.test(apiStatus) || (apiMarkedCompleted && await waitForPracticeQCompletedStatus(matchedIntake.id))) {
-        return { ...result, status: "completed", intakeId: matchedIntake.id };
-      }
-
       const markedCompleted = await withPracticeQTimeout(
         setPracticeQIntakeCompletedInAdmin(matchedIntake.id),
         PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS,
@@ -1171,9 +1156,7 @@ async function verifyPracticeQSavedSubmission(
         ...result,
         status: "failed",
         intakeId: matchedIntake.id,
-        error: apiCompletionError
-          ? `PracticeQ admin Set as Completed failed for ${matchedIntake.id}. API completion fallback failed: ${apiCompletionError}`
-          : `PracticeQ admin Set as Completed failed for ${matchedIntake.id}.`,
+        error: `PracticeQ admin Set as Completed failed for ${matchedIntake.id}.`,
       };
     }
     return {
