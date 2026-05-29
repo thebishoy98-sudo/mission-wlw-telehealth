@@ -8,6 +8,7 @@ import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { formatCurrency } from "@/lib/utils";
+import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
 import { Lock, CreditCard } from "lucide-react";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -53,7 +54,7 @@ async function tokenizeQuickBooksCard(card: {
           city: card.address?.city ?? "",
           region: card.address?.state ?? "",
           postalCode: card.address?.zipCode ?? "",
-          country: card.address?.country ?? "US",
+          country: normalizeQuickBooksPaymentsCountry(card.address?.country),
         },
       },
     }),

@@ -18,6 +18,7 @@ import * as db from "@/lib/db";
 import { serviceConfig } from "@/lib/service-config";
 import { generateId } from "@/lib/utils";
 import { getQBAccessToken } from "@/lib/qb-oauth";
+import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
 
 const PAYMENTS_BASE_URL =
   process.env.QB_PAYMENTS_BASE_URL ??
@@ -148,7 +149,7 @@ export async function chargeCard(
                     streetAddress: paymentDetails.billingAddress.street1,
                     city: paymentDetails.billingAddress.city,
                     region: paymentDetails.billingAddress.state,
-                    country: paymentDetails.billingAddress.country ?? "US",
+                    country: normalizeQuickBooksPaymentsCountry(paymentDetails.billingAddress.country),
                     postalCode: paymentDetails.billingAddress.zipCode,
                   },
                 }
