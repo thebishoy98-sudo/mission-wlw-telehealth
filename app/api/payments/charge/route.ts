@@ -35,6 +35,8 @@ import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { resolvePersistedDose } from "@/lib/product-dose";
 import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
+import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
+import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import type { Payment, Upload } from "@/types";
 
 async function wakePracticeQRemoteWorker() {
@@ -131,6 +133,14 @@ export async function POST(req: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+
+    const productForIntegrations = normalizeProduct(
+      persistedProduct ??
+      productData ??
+      (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
+      db.productDb.getById(order.productId) ??
+      tirzepatideProduct
+    );
 
     // 2. Duplicate submission guard
     if (order.status !== "draft") {
@@ -360,7 +370,7 @@ export async function POST(req: NextRequest) {
     // Build updatedOrder from known persisted data (localStorage not available server-side).
     const orderForIntegrations = {
       ...order,
-      productId: persistedProduct?.id ?? order.productId,
+      productId: productForIntegrations.id,
       doseId: persistedDose?.id ?? order.doseId,
     };
     const updatedOrder = { ...orderForIntegrations, ...orderUpdates };
@@ -387,7 +397,7 @@ export async function POST(req: NextRequest) {
         const qbCustomerId = await quickbooks.createCustomerRecord(patient);
         const invoiceId = await quickbooks.createInvoice(updatedOrder, payment, {
           patient,
-          product: persistedProduct ?? productData ?? null,
+          product: productForIntegrations,
           qbCustomerId,
         });
         await quickbooks.recordPayment(invoiceId, payment.amount, qbCustomerId);
@@ -444,7 +454,23 @@ export async function POST(req: NextRequest) {
     if (dispatchGate.canDispatch) {
       const pharmacyIntegration = pharmacy.getPharmacyProvider() === "appsheet" ? "appsheet" : "lifefile";
       try {
-        const pharmacyOrder = await pharmacy.createPharmacyOrder(updatedOrder, { patient, product: persistedProduct ?? productData ?? null });
+        const selectedProductDose = productData?.doses?.find((dose: { id: string }) => dose.id === orderData?.doseId);
+        const normalized = normalizeOrderForPharmacyDispatch(updatedOrder, productForIntegrations, [
+          orderData?.doseId,
+          persistedDose?.id,
+          selectedProductDose?.label,
+          selectedProductDose?.strength,
+          selectedProductDose?.patientDescription,
+          ...submittedAnswerRows.map((answer) => answer.answer),
+        ]);
+        if (!normalized.normalizedOrder) {
+          throw new Error(`Invalid order data - ${normalized.reason ?? "missing product or dose"}`);
+        }
+        if (normalized.repaired) {
+          db.orderDb.update(orderId, { doseId: normalized.normalizedOrder.doseId });
+          await dbServer.orderDb.update(orderId, { doseId: normalized.normalizedOrder.doseId }).catch(() => {});
+        }
+        const pharmacyOrder = await pharmacy.createPharmacyOrder(normalized.normalizedOrder, { patient, product: productForIntegrations });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
