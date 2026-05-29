@@ -28,7 +28,7 @@ export async function GET(
   const product = serverProduct ?? db.productDb.getById(order.productId);
   const pharmacyOrder = serverPharmacyOrder ?? db.pharmacyOrderDb.getByOrder(order.id);
   const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
-  const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket).catch(() => null);
+  const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId).catch(() => null);
   const canViewIdentity = isAdminRequest(req) || isProviderRequest(req);
   const [uploads, review, integrationLogs] = canViewIdentity
     ? await Promise.all([

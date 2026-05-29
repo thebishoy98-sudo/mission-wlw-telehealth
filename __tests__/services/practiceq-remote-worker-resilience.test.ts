@@ -50,6 +50,10 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toMatch(/set\\s\+as\\s\+completed/i);
   });
 
+  it("does not report completion when PracticeQ admin completion fails", () => {
+    expect(workerSource).toContain("PracticeQ admin Set as Completed failed");
+  });
+
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");

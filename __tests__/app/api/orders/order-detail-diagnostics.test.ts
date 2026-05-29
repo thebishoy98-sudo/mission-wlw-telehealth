@@ -11,6 +11,11 @@ describe("order detail diagnostics", () => {
     expect(routeSource).toContain("diagnostics");
   });
 
+  it("uses the PracticeQ automation intake id as a mirror lookup fallback", () => {
+    expect(routeSource).toContain("practiceqAutomationJob?.intakeId");
+    expect(routeSource).toContain("getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId)");
+  });
+
   it("renders integration error details instead of only showing Error badges", () => {
     expect(adminSource).toContain("selectedDiagnostics");
     expect(adminSource).toContain("Latest Integration Details");

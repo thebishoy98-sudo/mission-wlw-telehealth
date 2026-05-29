@@ -389,10 +389,11 @@ export async function getPracticeQFormDetail(intakeId: string): Promise<Types.Pr
 
 export async function getPracticeQMirrorForOrder(
   order: Types.Order,
-  packet?: Types.PracticeQPacket | null
+  packet?: Types.PracticeQPacket | null,
+  linkedIntakeId?: string
 ): Promise<Types.PracticeQMirror> {
   const clientId = order.practiceqClientId;
-  let intakeId = packet?.id;
+  let intakeId = packet?.id ?? linkedIntakeId;
   const unavailable = (reason: string): Types.PracticeQMirror => ({
     available: false,
     reason,

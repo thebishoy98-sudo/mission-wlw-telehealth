@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, CheckCircle, ClipboardCheck, CreditCard, Eye, FileText, X } from "lucide-react";
+import { ChevronLeft, CheckCircle, CreditCard, Eye, FileText, X } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -76,28 +76,6 @@ export default function PatientDetail() {
 
   const setSelectedOrderPatch = (data: Partial<Order>) => {
     setChart((prev) => prev ? { ...prev, selectedOrder: { ...prev.selectedOrder, ...data } } : prev);
-  };
-
-  const handleMarkChartViewed = async () => {
-    if (!chart?.review) return;
-    setActionError("");
-    const res = await fetch(`/api/provider/patients/${chart.patient.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderId: chart.selectedOrder.id,
-        action: "mark_chart_viewed",
-        reviewedBy: "Dr. Provider",
-      }),
-    });
-
-    if (!res.ok) {
-      setActionError("Could not mark chart as reviewed.");
-      return;
-    }
-
-    const data = await res.json();
-    setChart((prev) => prev ? { ...prev, review: data.review ?? prev.review } : prev);
   };
 
   const handleApprove = async () => {
@@ -202,8 +180,7 @@ export default function PatientDetail() {
     );
   }
 
-  const { patient, selectedOrder, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review } = chart;
-  const chartMarkedViewed = !!review?.chartViewedAt;
+  const { patient, selectedOrder, questionnaire, answers, consent, uploads, payment, pharmacyOrder } = chart;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -219,30 +196,6 @@ export default function PatientDetail() {
             {actionError}
           </div>
         )}
-
-        <div className={`mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border ${chartMarkedViewed ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-100"}`}>
-          <div className="flex items-center gap-3">
-            {chartMarkedViewed ? <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" /> : <Eye className="w-5 h-5 text-amber-500 flex-shrink-0" />}
-            <div>
-              <p className={`text-sm font-semibold ${chartMarkedViewed ? "text-green-800" : "text-amber-800"}`}>
-                {chartMarkedViewed ? "Chart reviewed" : "Chart not yet marked as reviewed"}
-              </p>
-              {chartMarkedViewed && review?.chartViewedAt ? (
-                <p className="text-xs text-green-600 mt-0.5">
-                  Confirmed by {review.chartViewedBy} on {new Date(review.chartViewedAt).toLocaleString()}
-                </p>
-              ) : (
-                <p className="text-xs text-amber-600 mt-0.5">Mark this chart as reviewed to create an audit record</p>
-              )}
-            </div>
-          </div>
-          {!chartMarkedViewed && (
-            <Button size="sm" variant="outline" onClick={handleMarkChartViewed} className="flex items-center gap-2 whitespace-nowrap">
-              <ClipboardCheck className="w-4 h-4" />
-              Mark Chart as Reviewed
-            </Button>
-          )}
-        </div>
 
         <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
           <div className="lg:col-span-2 space-y-5">
@@ -389,29 +342,6 @@ export default function PatientDetail() {
                     <span className="text-gray-500">Status</span>
                     <Badge className={getStatusColor(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</Badge>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <ClipboardCheck className="w-4 h-4 text-gray-400" />
-                  Chart Review Audit
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between flex-wrap gap-1">
-                    <span className="text-gray-500">Viewed</span>
-                    <span className={`font-semibold text-xs ${chartMarkedViewed ? "text-green-600" : "text-amber-600"}`}>
-                      {chartMarkedViewed ? "Yes - confirmed" : "Not yet confirmed"}
-                    </span>
-                  </div>
-                  {review?.chartViewedAt && (
-                    <div className="flex justify-between flex-wrap gap-1">
-                      <span className="text-gray-500">At</span>
-                      <span className="text-gray-700 text-xs">{new Date(review.chartViewedAt).toLocaleString()}</span>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>

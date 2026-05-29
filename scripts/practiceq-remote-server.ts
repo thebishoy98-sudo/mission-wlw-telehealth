@@ -88,6 +88,7 @@ async function pollQueuedJobs() {
       await dbServer.practiceqAutomationJobDb.update(job.id, {
         status: result.status,
         handoffUrl: result.handoffUrl,
+        intakeId: result.intakeId,
         lastError: result.error,
       });
       if (result.status === "failed") {

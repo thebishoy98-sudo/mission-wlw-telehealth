@@ -1149,7 +1149,12 @@ async function verifyPracticeQSavedSubmission(
           return { ...result, status: "completed", intakeId: matchedIntake.id };
         }
       }
-      return { ...result, status: "completed", intakeId: matchedIntake.id };
+      return {
+        ...result,
+        status: "failed",
+        intakeId: matchedIntake.id,
+        error: `PracticeQ admin Set as Completed failed for ${matchedIntake.id}.`,
+      };
     }
     return {
       ...result,
