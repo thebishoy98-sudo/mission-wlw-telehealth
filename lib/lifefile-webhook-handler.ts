@@ -112,6 +112,17 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
     }
 
     case "order.shipped": {
+      const existingTrackingNumber = String(pharmacyOrder.trackingNumber ?? "").trim();
+      const incomingTrackingNumber = String(trackingNumber ?? "").trim();
+      const isDuplicateShippedUpdate =
+        pharmacyOrder.status === "shipped" &&
+        Boolean(existingTrackingNumber) &&
+        existingTrackingNumber === incomingTrackingNumber;
+
+      if (isDuplicateShippedUpdate) {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+
       const now = new Date().toISOString();
       db.pharmacyOrderDb.update(pharmacyOrder.id, { status: "shipped", trackingNumber, shippedAt: now });
       db.orderDb.update(orderId, { pharmacyStatus: "shipped", status: "shipped" });

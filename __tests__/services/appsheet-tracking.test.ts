@@ -1,4 +1,4 @@
-import { extractAppSheetTrackingUpdates } from "@/services/appsheet-tracking";
+import { dedupeAppSheetTrackingUpdates, extractAppSheetTrackingUpdates } from "@/services/appsheet-tracking";
 
 describe("appsheet-tracking", () => {
   it("maps AppSheet shipment rows to LifeFile webhook-compatible tracking updates", () => {
@@ -46,6 +46,31 @@ describe("appsheet-tracking", () => {
         orderId: "900001",
         trackingNumber: "1Z999",
         appSheetTable: "PharmacyOrder",
+      }),
+    ]);
+  });
+
+  it("dedupes the same tracking update across AppSheet tables", () => {
+    const shipmentUpdates = extractAppSheetTrackingUpdates([
+      {
+        ID: "ship_1",
+        OrderId: "223983473",
+        TrackingNumber: "872397884408",
+      },
+    ], "PharmacyShipment");
+    const orderUpdates = extractAppSheetTrackingUpdates([
+      {
+        ID: "po_1",
+        "Pharmacy Order ID": "223983473",
+        "Tracking Number": "872397884408",
+      },
+    ], "PharmacyOrder");
+
+    expect(dedupeAppSheetTrackingUpdates([...shipmentUpdates, ...orderUpdates])).toEqual([
+      expect.objectContaining({
+        orderId: "223983473",
+        trackingNumber: "872397884408",
+        appSheetTable: "PharmacyShipment",
       }),
     ]);
   });

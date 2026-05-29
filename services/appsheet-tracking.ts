@@ -58,6 +58,20 @@ export function extractAppSheetTrackingUpdates(rows: AppSheetRow[], table = "Pha
   return updates;
 }
 
+export function dedupeAppSheetTrackingUpdates(updates: AppSheetTrackingUpdate[]): AppSheetTrackingUpdate[] {
+  const seen = new Set<string>();
+  const deduped: AppSheetTrackingUpdate[] = [];
+
+  for (const update of updates) {
+    const key = `${update.orderId}:${update.trackingNumber}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(update);
+  }
+
+  return deduped;
+}
+
 export async function fetchAppSheetTrackingUpdates(): Promise<AppSheetTrackingUpdate[]> {
   const c = config();
   if (!isAppSheetTrackingConfigured()) {
@@ -69,10 +83,10 @@ export async function fetchAppSheetTrackingUpdates(): Promise<AppSheetTrackingUp
     findRows(c.pharmacyOrderTable),
   ]);
 
-  return [
+  return dedupeAppSheetTrackingUpdates([
     ...extractAppSheetTrackingUpdates(shipmentRows, c.shipmentTable),
     ...extractAppSheetTrackingUpdates(orderRows, c.pharmacyOrderTable),
-  ];
+  ]);
 }
 
 async function findRows(table: string): Promise<AppSheetRow[]> {
