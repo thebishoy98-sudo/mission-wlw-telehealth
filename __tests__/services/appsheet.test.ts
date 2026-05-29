@@ -2,6 +2,10 @@ import * as db from "@/lib/db";
 import { tirzepatideProduct } from "@/data/products";
 import type { Order } from "@/types";
 
+jest.mock("@/services/lifefile", () => ({
+  createPharmacyOrder: jest.fn(),
+}));
+
 const seed = (doseId = "tirzepatide_20mg_8_week"): Order => {
   db.clearAllData();
   db.patientDb.create({
@@ -110,9 +114,19 @@ describe("appsheet pharmacy integration", () => {
     process.env.APPSHEET_ID = "app_123";
     process.env.APPSHEET_API_KEY = "key_123";
     process.env.APPSHEET_ORDER_TABLE = "OrderItems";
+    const lifefile = await import("@/services/lifefile");
+    (lifefile.createPharmacyOrder as jest.Mock).mockResolvedValue({
+      id: "lf_local_1",
+      orderId: "order_tirzepatide_40mg_8_week",
+      patientId: "p1",
+      lifeFileOrderId: "900001",
+      status: "submitted",
+      payload: { message: { id: "m1", sentTime: "2026-01-01T00:00:00.000Z" }, order: {} },
+      submittedAt: "2026-01-01T00:00:00.000Z",
+    });
     const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
-      json: async () => ({ Rows: [{ "Order ID": "order_tirzepatide_40mg_8_week" }] }),
+      json: async () => ({ Rows: [{ ID: "AS_order_tirzepatide_40mg_8_week" }] }),
     } as Response);
     const order = seed("tirzepatide_40mg_8_week");
     const appsheet = await import("@/services/appsheet");
@@ -120,6 +134,10 @@ describe("appsheet pharmacy integration", () => {
     await appsheet.createPharmacyOrder(order);
 
     expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(lifefile.createPharmacyOrder).toHaveBeenCalledWith(order, expect.objectContaining({
+      patient: expect.objectContaining({ id: "p1" }),
+      product: expect.objectContaining({ id: tirzepatideProduct.id }),
+    }));
     expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/v2/apps/app_123/tables/Client/Action");
     expect(String(fetchSpy.mock.calls[1][0])).toContain("/api/v2/apps/app_123/tables/PharmacyOrder/Action");
     const [url, init] = fetchSpy.mock.calls[2];
@@ -143,6 +161,7 @@ describe("appsheet pharmacy integration", () => {
           Status: "Order",
           Pharmacy: "1stChoiceRx",
           Package: "1stChoiceRx TIRZEPATIDE 40mg",
+          "Pharmacy Order ID": "900001",
         }),
       ]),
     });
@@ -152,7 +171,7 @@ describe("appsheet pharmacy integration", () => {
       Rows: expect.arrayContaining([
         expect.objectContaining({
           "Client Order ID": `AS_${order.id}`,
-          "Pharmacy Order Id": order.id,
+          "Pharmacy Order Id": "900001",
           lfProductID: "8279096",
           lfProduct_ID: "8279096",
           drugName: "TIRZEPATIDE/PYRIDOXINE",

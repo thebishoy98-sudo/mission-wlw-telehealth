@@ -9,6 +9,7 @@
 import * as Types from "@/types";
 import * as db from "@/lib/db";
 import { generateId } from "@/lib/utils";
+import * as lifefile from "@/services/lifefile";
 
 type AppSheetOrderLine = {
   itemId: string;
@@ -189,13 +190,14 @@ function buildAppSheetRows(
   product: Types.Product,
   dose: Types.DoseOption,
   lines: AppSheetOrderLine[],
-  pharmacyOrderId: string
+  appSheetOrderId: string,
+  lifeFileOrderId: string
 ) {
   const config = cfg();
   return lines.map((line, index) => ({
     ID: `${order.id}_${line.itemId}_${index + 1}`.slice(0, 80),
-    "Client Order ID": pharmacyOrderId,
-    "Pharmacy Order Id": order.id,
+    "Client Order ID": appSheetOrderId,
+    "Pharmacy Order Id": lifeFileOrderId,
     lfProductID: line.itemId,
     lfProduct_ID: line.itemId,
     drugName: line.drugName,
@@ -270,16 +272,22 @@ function buildAppSheetClientRow(order: Types.Order, patient: Types.Patient, pack
   };
 }
 
-function buildAppSheetPharmacyOrderRow(order: Types.Order, patient: Types.Patient, packageName: string, pharmacyOrderId: string) {
+function buildAppSheetPharmacyOrderRow(
+  order: Types.Order,
+  patient: Types.Patient,
+  packageName: string,
+  appSheetOrderId: string,
+  lifeFileOrderId: string
+) {
   const now = new Date();
   return {
-    ID: pharmacyOrderId,
+    ID: appSheetOrderId,
     Client: order.id,
     Status: "Order",
     Pharmacy: cfg().pharmacyName,
     Package: packageName,
     Note: `Mission WLW order ${order.id} for ${patient.firstName} ${patient.lastName}`.trim(),
-    "Pharmacy Order ID": order.id,
+    "Pharmacy Order ID": lifeFileOrderId,
     "Pharmacy Order Date": formatAppSheetDate(now),
     TS_PharmacyOrder: formatAppSheetDateTime(now),
     WebhookType: "Mission WLW",
@@ -340,20 +348,59 @@ export const createPharmacyOrder = async (
   const lines = buildAppSheetOrderLines(product, dose);
   const packageName = buildPackageName(product, dose);
   let appSheetOrderId = config.useMock ? `AS_MOCK_${generateId()}` : `AS_${order.id}`;
-  const clientRow = buildAppSheetClientRow(order, patient, packageName);
-  const pharmacyOrderRow = buildAppSheetPharmacyOrderRow(order, patient, packageName, appSheetOrderId);
-  const rows = buildAppSheetRows(order, patient, product, dose, lines, appSheetOrderId);
+  let placedPharmacyOrder: Types.PharmacyOrder | null = null;
   let lastError: string | undefined;
 
   if (!config.useMock) {
     try {
+      placedPharmacyOrder = await lifefile.createPharmacyOrder(order, { patient, product });
+      const lifeFileOrderId = requiredText(placedPharmacyOrder.lifeFileOrderId, "LifeFile order id");
+      const clientRow = buildAppSheetClientRow(order, patient, packageName);
+      const pharmacyOrderRow = buildAppSheetPharmacyOrderRow(order, patient, packageName, appSheetOrderId, lifeFileOrderId);
+      const rows = buildAppSheetRows(order, patient, product, dose, lines, appSheetOrderId, lifeFileOrderId);
       await postAppSheetTableRows(config.clientTable, [clientRow]);
       const parentBody = await postAppSheetTableRows(config.pharmacyOrderTable, [pharmacyOrderRow]);
       await postAppSheetRows(rows);
-      const returned = parentBody?.Rows?.[0]?.["Pharmacy Order ID"] ?? parentBody?.Rows?.[0]?.ID ?? appSheetOrderId;
+      const returned = parentBody?.Rows?.[0]?.ID ?? appSheetOrderId;
       appSheetOrderId = String(returned || appSheetOrderId);
+      db.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "appsheet",
+        action: "LifeFile pharmacy order mirrored to AppSheet",
+        orderId: order.id,
+        patientId: order.patientId,
+        status: "success",
+        details: {
+          appSheetOrderId,
+          lifeFileOrderId,
+          pharmacyOrderTable: config.pharmacyOrderTable,
+          table: config.orderTable,
+          itemIds: lines.map((line) => line.itemId),
+        },
+      });
+      return placedPharmacyOrder;
     } catch (error) {
       lastError = (error as Error).message;
+      if (placedPharmacyOrder) {
+        db.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "appsheet",
+          action: "AppSheet mirror failed after LifeFile pharmacy order placement",
+          orderId: order.id,
+          patientId: order.patientId,
+          status: "error",
+          details: {
+            appSheetOrderId,
+            lifeFileOrderId: placedPharmacyOrder.lifeFileOrderId,
+            table: config.pharmacyOrderTable,
+            itemTable: config.orderTable,
+          },
+          error: lastError,
+        });
+        return placedPharmacyOrder;
+      }
       const failedOrder: Types.PharmacyOrder = {
         id: generateId(),
         orderId: order.id,
@@ -379,6 +426,10 @@ export const createPharmacyOrder = async (
       throw error;
     }
   }
+
+  const clientRow = buildAppSheetClientRow(order, patient, packageName);
+  const pharmacyOrderRow = buildAppSheetPharmacyOrderRow(order, patient, packageName, appSheetOrderId, appSheetOrderId);
+  const rows = buildAppSheetRows(order, patient, product, dose, lines, appSheetOrderId, appSheetOrderId);
 
   const pharmacyOrder: Types.PharmacyOrder = {
     id: generateId(),
