@@ -55,9 +55,9 @@ services:
 
       # QuickBooks sandbox/payment configuration.
       - key: USE_REAL_QUICKBOOKS
-        value: false
-      - key: BYPASS_QB_PAYMENTS
         value: true
+      - key: BYPASS_QB_PAYMENTS
+        value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
@@ -77,7 +77,7 @@ services:
       - key: QB_REFRESH_TOKEN
         sync: false
       - key: QB_REDIRECT_URI
-        sync: false
+        value: https://mission-wlw-web.onrender.com/api/auth/qb/callback
       - key: QB_OAUTH_INCLUDE_PAYMENTS
         value: true
       - key: QB_WEBHOOK_VERIFIER_TOKEN
@@ -125,7 +125,7 @@ services:
 
       # PracticeQ, Spruce, identity, and AI integrations.
       - key: USE_REAL_PRACTICEQ
-        value: false
+        value: true
       - key: PRACTICEQ_API_KEY
         sync: false
       - key: PRACTICEQ_BASE_URL
@@ -141,7 +141,7 @@ services:
       - key: PRACTICEQ_ADMIN_SET_COMPLETED
         value: true
       - key: PRACTICEQ_REMOTE_PUBLIC_URL
-        sync: false
+        value: https://mission-wlw-practiceq-remote.onrender.com
       - key: USE_REAL_SPRUCE
         value: false
       - key: SPRUCE_AUTH_TOKEN
