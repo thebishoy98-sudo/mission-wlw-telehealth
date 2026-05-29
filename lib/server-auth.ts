@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 
 function readCookie(req: Request, name: string) {
   const cookieHeader = req.headers.get("cookie") ?? "";
-  return cookieHeader
+  const rawValue = cookieHeader
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`))
     ?.slice(name.length + 1);
+  if (!rawValue) return undefined;
+  try {
+    return decodeURIComponent(rawValue);
+  } catch {
+    return rawValue;
+  }
 }
 
 function hasSecret(req: Request, cookieName: string, envName = "ADMIN_SECRET") {
