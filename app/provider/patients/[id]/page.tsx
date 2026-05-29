@@ -88,7 +88,7 @@ export default function PatientDetail() {
       { label: "Recording provider approval", status: "running" },
       canDispatchPharmacy
         ? { label: "Sending to pharmacy", status: "pending" }
-        : { label: "Waiting for PracticeQ completion", status: "pending" },
+        : { label: "Waiting for clinical consent completion", status: "pending" },
       { label: "Finalizing chart status", status: "pending" },
     ]);
 
@@ -123,7 +123,7 @@ export default function PatientDetail() {
         setApprovalSteps((prev) => prev.map((step, index) => index <= 1 ? { ...step, status: "done" } : index === 2 ? { ...step, status: "running" } : step));
         await stepDelay(300);
         setApprovalSteps((prev) => prev.map((step, index) => index === 2 ? { ...step, status: "done" } : step));
-        setApprovalMessage("Chart approved. Pharmacy dispatch will wait for PracticeQ completion.");
+        setApprovalMessage("Chart approved. Pharmacy dispatch will wait for clinical consent completion.");
         setApproved(true);
         return;
       }

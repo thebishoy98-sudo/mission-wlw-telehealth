@@ -202,33 +202,6 @@ function AdminDashboardContent() {
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Management</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-            <Link href="/admin/products">
-              <Button fullWidth variant="outline">
-                Manage Products
-              </Button>
-            </Link>
-            <Link href="/admin/cms">
-              <Button fullWidth variant="outline">
-                Edit Content
-              </Button>
-            </Link>
-            <Link href="/admin/questionnaire">
-              <Button fullWidth variant="outline">
-                Edit Questions
-              </Button>
-            </Link>
-            <Link href="/admin/notifications">
-              <Button fullWidth variant="outline">
-                Notification Settings
-              </Button>
-            </Link>
-          </div>
-        </div>
-
         {/* Recent Orders */}
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Recent Orders</h2>
         <Card>
