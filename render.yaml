@@ -55,9 +55,9 @@ services:
 
       # QuickBooks sandbox/payment configuration.
       - key: USE_REAL_QUICKBOOKS
-        value: true
-      - key: BYPASS_QB_PAYMENTS
         value: false
+      - key: BYPASS_QB_PAYMENTS
+        value: true
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
