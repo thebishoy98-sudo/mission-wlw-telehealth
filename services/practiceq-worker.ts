@@ -219,6 +219,7 @@ export async function fillPracticeQQuestionPages(
       PRACTICEQ_CHOICE_TIMEOUT_MS,
       "PracticeQ choice selection step timed out."
     );
+    await setPracticeQAngularTextAnswers(page, fillPlan);
     await withPracticeQTimeout(
       completeVisibleConsentDocument(page, fillPlan),
       PRACTICEQ_CONSENT_TIMEOUT_MS,
@@ -538,6 +539,79 @@ async function getPracticeQFieldValue(field: ReturnType<Page["locator"]>): Promi
     }
     return "";
   }).catch(() => "");
+}
+
+async function setPracticeQAngularTextAnswers(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  await page.evaluate((fillPlan) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const answerFor = (prompt: unknown) => {
+      const normalizedPrompt = normalize(prompt);
+      if (!normalizedPrompt) return "";
+      const exact = fillPlan.find((item) => normalize(item.prompt) === normalizedPrompt);
+      if (exact) return exact.value;
+      const partial = fillPlan
+        .map((item) => ({ item, candidate: normalize(item.prompt) }))
+        .filter(({ candidate }) =>
+          candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+        )
+        .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+      return partial?.item.value ?? "";
+    };
+
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+
+    let changed = false;
+    for (const question of questions) {
+      const questionAnswer = answerFor(question?.Text);
+      if (questionAnswer && !String(question?.Answer ?? "").trim()) {
+        question.Answer = questionAnswer;
+        intakeScope?.onblur?.(question, questionAnswer);
+        intakeScope?.textChanged?.();
+        changed = true;
+      }
+      if (!Array.isArray(question?.QuestionItems)) continue;
+      for (const item of question.QuestionItems) {
+        const itemAnswer = answerFor(item?.Text);
+        if (itemAnswer && !String(item?.Answer ?? "").trim()) {
+          item.Answer = itemAnswer;
+          intakeScope?.onblur?.(item, itemAnswer);
+          intakeScope?.textChanged?.();
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      intakeScope?.changed?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, fillPlan).catch(() => {});
 }
 
 async function waitForPracticeQSaved(page: Page) {
@@ -1289,8 +1363,8 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
   page.setDefaultTimeout(12000);
 
   try {
-    // Navigate to the admin root first so login check fires before hash-routing
-    await page.goto(`${adminBase}/`, {
+    // Navigate directly to signin (avoids redirect to forms.intakeq.com from root)
+    await page.goto(`${adminBase}/signin`, {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
@@ -1303,26 +1377,22 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
 
     if (await practiceQAdminPageShowsCompleted(page)) return true;
 
-    // Find the intake row and open its action dropdown ("Toggle Dropdown" split button)
-    const dropdownOpened = await clickPracticeQIntakeRowDropdown(page, intakeId);
-    if (!dropdownOpened) return false;
+    // Click the "More ▼" dropdown in the intake detail view right panel
+    const moreClicked = await clickPracticeQDetailMoreDropdown(page);
+    if (!moreClicked) return false;
 
     await page.waitForTimeout(1000);
-    const exactSetCompletedSelector =
-      'a[title="Change the status of this form to Completed"][ng-click="setAsCompleted()"]';
-    const setCompleted = page
-      .locator(exactSetCompletedSelector)
-      .first()
-      .or(page.locator(".col-md-2.hidden-print a")
-      .filter({ hasText: /set\s+as\s+completed/i })
-      .first())
-      .or(page.getByText(/set\s+as\s+completed/i)
-      .or(page.locator("button, a, li, div, span").filter({ hasText: /set\s+as\s+completed/i }))
-      .first());
-    if (!(await setCompleted.isVisible().catch(() => false))) return false;
+    // "Set as Completed" item in the More dropdown
+    const setCompleted = page.locator('a[ng-click="setAsCompleted()"], li a[ng-click="setAsCompleted()"]').first();
+    const setCompletedVisible = await setCompleted.isVisible({ timeout: 5000 }).catch(() => false)
+      || await page.locator("button, a, li").filter({ hasText: /^set as completed$/i }).first().isVisible().catch(() => false);
+    if (!setCompletedVisible) return false;
 
     await setCompleted.click({ timeout: 8000 }).catch(async () => {
-      await setCompleted.click({ force: true, timeout: 5000 }).catch(() => {});
+      // Fallback: click by text if ng-click locator fails
+      await page.locator("button, a, li, span").filter({ hasText: /^set as completed$/i }).first().click({ timeout: 5000, force: true }).catch(async () => {
+        await clickPracticeQControlByText(page, /set\s+as\s+completed/i);
+      });
     });
     await page.waitForTimeout(1000);
     const modalYes = page.locator(".modal-dialog button").filter({ hasText: /^\s*yes\s*$/i }).first();
@@ -1342,83 +1412,55 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
 }
 
 /**
- * In the PracticeQ admin history list, find the intake row for `intakeId` and click
- * its per-row "Toggle Dropdown" action button (split button arrow next to "View").
- * Uses page.evaluate with closest('tr') to avoid matching the filter-bar dropdowns.
- * Falls back to the first table row whose Status cell says "Not Completed".
+ * On the PracticeQ intake DETAIL view (#/history/{intakeId}), click the
+ * "More ▼" dropdown button in the top-right action panel.
  * Returns true if the dropdown was opened, false otherwise.
  */
-async function clickPracticeQIntakeRowDropdown(page: Page, intakeId: string): Promise<boolean> {
-  await page.waitForTimeout(1000);
+async function clickPracticeQDetailMoreDropdown(page: Page): Promise<boolean> {
+  // The "More" button is in the right-side action panel of the detail view
+  const moreBtn = page
+    .locator(".col-md-2.hidden-print .dropdown-toggle, .panel .dropdown-toggle, aside .dropdown-toggle")
+    .filter({ hasText: /more/i })
+    .first()
+    .or(
+      page
+        .getByRole("button", { name: /^more$/i })
+        .or(page.locator("button.dropdown-toggle, a.dropdown-toggle").filter({ hasText: /^more$/i }))
+        .first()
+    );
 
-  const clicked = await page.evaluate((id) => {
+  if (await moreBtn.isVisible().catch(() => false)) {
+    await moreBtn.scrollIntoViewIfNeeded().catch(() => {});
+    await moreBtn.click({ timeout: 8000 }).catch(async () => {
+      await moreBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
+    await page.waitForTimeout(800);
+    return true;
+  }
+
+  // Fallback: use DOM evaluate to find the More button by its text content
+  const clicked = await page.evaluate(() => {
     const isVisible = (el: Element) => {
       const node = el as HTMLElement;
       const style = window.getComputedStyle(node);
       const rect = node.getBoundingClientRect();
       return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
     };
-
-    const clickToggle = (row: Element): boolean => {
-      const btn = row.querySelector(
-        'button[aria-label="Toggle Dropdown"], button.dropdown-toggle, [data-toggle="dropdown"]'
-      ) as HTMLElement | null;
-      if (btn && isVisible(btn)) {
-        btn.scrollIntoView({ block: "center" });
-        btn.click();
+    const candidates = Array.from(
+      document.querySelectorAll("button.dropdown-toggle, a.dropdown-toggle, [data-toggle='dropdown']")
+    );
+    for (const el of candidates) {
+      if (/^\s*more\s*/i.test((el as HTMLElement).innerText ?? "") && isVisible(el)) {
+        (el as HTMLElement).scrollIntoView({ block: "center" });
+        (el as HTMLElement).click();
         return true;
       }
-      return false;
-    };
-
-    // Strategy 1: find a <tr> that has a link containing the intakeId
-    const allLinks = Array.from(document.querySelectorAll(`a[href*="${id}"]`));
-    for (const link of allLinks) {
-      const row = link.closest("tr");
-      if (row && clickToggle(row)) return "by-id";
     }
+    return false;
+  }).catch(() => false);
 
-    // Strategy 2: find a <tr> inside a <tbody> whose cells contain "Not Completed"
-    const tableRows = Array.from(document.querySelectorAll("table tbody tr, table tr"));
-    for (const row of tableRows) {
-      const cells = Array.from(row.querySelectorAll("td"));
-      if (cells.some((td) => /not completed/i.test(td.textContent ?? ""))) {
-        if (clickToggle(row)) return "not-completed";
-      }
-    }
-
-    return null;
-  }, intakeId).catch(() => null);
-
-  if (clicked) {
-    await page.waitForTimeout(800);
-    return true;
-  }
-
-  // Final fallback: navigate to intake detail via View link and look for dropdown there
-  const viewLink = page
-    .locator("table tbody tr, table tr")
-    .filter({ has: page.locator("td").filter({ hasText: /not completed/i }) })
-    .first()
-    .locator("a")
-    .first();
-  if (await viewLink.isVisible().catch(() => false)) {
-    await viewLink.click({ timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(2000);
-    await waitForPracticeQPageText(page);
-    const detailToggle = page
-      .locator('button[aria-label="Toggle Dropdown"], button.dropdown-toggle, .col-md-2.hidden-print .dropdown-toggle')
-      .first();
-    if (await detailToggle.isVisible().catch(() => false)) {
-      await detailToggle.click({ timeout: 8000 }).catch(async () => {
-        await detailToggle.click({ force: true, timeout: 5000 }).catch(() => {});
-      });
-      await page.waitForTimeout(800);
-      return true;
-    }
-  }
-
-  return false;
+  if (clicked) await page.waitForTimeout(800);
+  return clicked;
 }
 
 async function practiceQAdminPageShowsCompleted(page: Page): Promise<boolean> {
@@ -1446,21 +1488,15 @@ function getPracticeQAdminStorageState(): string | undefined {
 }
 
 async function completePracticeQAdminLoginIfNeeded(page: Page): Promise<void> {
-  const bodyText = await page.locator("body").innerText().catch(() => "");
-  if (!/login|sign in|password/i.test(bodyText)) return;
-
   const email = process.env.PRACTICEQ_ADMIN_EMAIL ?? "";
   const password = process.env.PRACTICEQ_ADMIN_PASSWORD ?? "";
   if (!email || !password) return;
 
-  let emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
-  if (!(await emailInput.isVisible().catch(() => false))) {
-    await page.goto("https://app.intakeq.com/signin", { waitUntil: "domcontentloaded", timeout: 60000 });
-    await page.waitForTimeout(1000);
-    emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
-  }
+  // Check if signin form is visible (we navigate directly to /signin so it should be)
+  const emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
+  if (!(await emailInput.isVisible().catch(() => false))) return; // already logged in, redirected away
   const passwordInput = page.locator("input[type='password']").first();
-  if (await emailInput.isVisible().catch(() => false)) await emailInput.fill(email);
+  await emailInput.fill(email);
   if (await passwordInput.isVisible().catch(() => false)) await passwordInput.fill(password);
 
   const signIn = page
