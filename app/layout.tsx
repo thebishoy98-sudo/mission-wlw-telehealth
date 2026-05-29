@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { Footer } from "@/components/layout/Footer";
@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   title: "Mission Wellness & Weight Loss - Medical Weight Management",
   description:
     "GLP-1 medical weight loss programs with board-certified providers, FDA-regulated pharmacies, and free overnight shipping direct to your door.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
