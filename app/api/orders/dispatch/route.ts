@@ -10,6 +10,7 @@ import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
 import { generateId } from "@/lib/utils";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
+import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import type { Patient } from "@/types";
 
 function answerValue(practiceq: Awaited<ReturnType<typeof getPracticeQMirrorForOrder>> | null | undefined, pattern: RegExp): string {
@@ -103,10 +104,15 @@ export async function POST(req: NextRequest) {
       await resolvePatient(order).catch(() => null),
       submittedPatient
     ));
-    const product = productData ?? await dbServer.productDb.getById(order.productId).catch(() => null);
+    const product = normalizeProduct(
+      productData ??
+      (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
+      db.productDb.getById(order.productId) ??
+      tirzepatideProduct
+    );
     const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
     const packetDose = typeof packet?.packetData?.doseSelected === "string" ? packet.packetData.doseSelected : "";
-    const normalized = normalizeOrderForPharmacyDispatch(order, product, [packetDose]);
+    const normalized = normalizeOrderForPharmacyDispatch(order, product, [order.doseId, packetDose]);
     if (!normalized.normalizedOrder) {
       return NextResponse.json(
         {
