@@ -54,6 +54,12 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("PracticeQ admin Set as Completed failed");
   });
 
+  it("logs into PracticeQ admin from a clean browser before marking completion", () => {
+    expect(workerSource).toContain("https://intakeq.com/signin/");
+    expect(workerSource).toContain(".col-md-2.hidden-print");
+    expect(workerSource).toContain(".modal-dialog button");
+  });
+
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");

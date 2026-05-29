@@ -1242,6 +1242,7 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
   if (process.env.PRACTICEQ_ADMIN_SET_COMPLETED !== "true") return false;
 
   const storageState = getPracticeQAdminStorageState();
+  const intakeUrl = `https://intakeq.com/#/history/${encodeURIComponent(intakeId)}`;
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_ADMIN_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
@@ -1251,18 +1252,25 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
   page.setDefaultTimeout(12000);
 
   try {
-    await page.goto(`https://intakeq.com/#/history/${encodeURIComponent(intakeId)}`, {
+    await page.goto(intakeUrl, {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
     await completePracticeQAdminLoginIfNeeded(page);
+    if (!page.url().includes(`#/history/${intakeId}`)) {
+      await page.goto(intakeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    }
     await page.waitForTimeout(3000);
 
     const more = page
+      .locator(".col-md-2.hidden-print .dropdown-toggle")
+      .filter({ hasText: /more/i })
+      .last()
+      .or(page
       .getByRole("button", { name: /more/i })
       .or(page.getByRole("link", { name: /more/i }))
       .or(page.locator("button, a, [role='button']").filter({ hasText: /more/i }))
-      .first();
+      .first());
     if (await more.isVisible().catch(() => false)) {
       await more.click({ timeout: 8000 }).catch(async () => {
         await more.click({ force: true, timeout: 5000 }).catch(() => {});
@@ -1273,16 +1281,26 @@ async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boo
 
     await page.waitForTimeout(1000);
     const setCompleted = page
-      .getByText(/set\s+as\s+completed/i)
+      .locator(".col-md-2.hidden-print a")
+      .filter({ hasText: /set\s+as\s+completed/i })
+      .first()
+      .or(page.getByText(/set\s+as\s+completed/i)
       .or(page.locator("button, a, li, div, span").filter({ hasText: /set\s+as\s+completed/i }))
-      .first();
+      .first());
     if (!(await setCompleted.isVisible().catch(() => false))) return false;
 
     await setCompleted.click({ timeout: 8000 }).catch(async () => {
       await setCompleted.click({ force: true, timeout: 5000 }).catch(() => {});
     });
     await page.waitForTimeout(1000);
-    await clickPracticeQControlByText(page, /confirm|yes|ok|set\s+as\s+completed/i).catch(() => false);
+    const modalYes = page.locator(".modal-dialog button").filter({ hasText: /^\s*yes\s*$/i }).first();
+    if (await modalYes.isVisible().catch(() => false)) {
+      await modalYes.click({ timeout: 8000 }).catch(async () => {
+        await modalYes.click({ force: true, timeout: 5000 }).catch(() => {});
+      });
+    } else {
+      await clickPracticeQControlByText(page, /confirm|yes|ok|set\s+as\s+completed/i).catch(() => false);
+    }
     await page.waitForTimeout(3000);
     return true;
   } finally {
@@ -1307,7 +1325,12 @@ async function completePracticeQAdminLoginIfNeeded(page: Page): Promise<void> {
   const password = process.env.PRACTICEQ_ADMIN_PASSWORD ?? "";
   if (!email || !password) return;
 
-  const emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
+  let emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
+  if (!(await emailInput.isVisible().catch(() => false))) {
+    await page.goto("https://intakeq.com/signin/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(1000);
+    emailInput = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first();
+  }
   const passwordInput = page.locator("input[type='password']").first();
   if (await emailInput.isVisible().catch(() => false)) await emailInput.fill(email);
   if (await passwordInput.isVisible().catch(() => false)) await passwordInput.fill(password);
