@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server-auth";
+import { appSettingDb } from "@/lib/db.server";
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -100,13 +101,14 @@ export async function GET(req: NextRequest) {
   }
 
   const tokens = await tokenRes.json();
+  await appSettingDb.set("quickbooks_refresh_token", tokens.refresh_token).catch(() => null);
 
   const successHtml = `<!DOCTYPE html>
 <html>
 <head><title>QuickBooks OAuth Success</title></head>
 <body style="font-family:monospace;padding:2rem;background:#f0fdf4;color:#14532d">
 <h2>✅ QuickBooks Connected!</h2>
-<p>Add these to your <strong>Vercel environment variables</strong>:</p>
+<p>Add these to your <strong>Render environment variables</strong> if they are not already set:</p>
 <pre style="background:#fff;border:1px solid #86efac;padding:1.5rem;border-radius:8px;font-size:14px">
 QB_REALM_ID=${escapeHtml(realmId)}
 QB_REFRESH_TOKEN=${escapeHtml(tokens.refresh_token)}
