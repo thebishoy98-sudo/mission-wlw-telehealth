@@ -18,10 +18,9 @@ describe("provider patient page", () => {
     expect(source).not.toContain("No manual action required");
   });
 
-  it("does not call pharmacy dispatch from approval until PracticeQ is ready", () => {
-    expect(source).toContain("canDispatchPharmacy");
-    expect(source).toContain('practiceQStatus === "completed"');
-    expect(source).toContain('practiceQStatus === "submitted"');
-    expect(source).toMatch(/if \(!canDispatchPharmacy\)/);
+  it("does not call pharmacy or identity dispatch from provider approval", () => {
+    expect(source).not.toContain("/api/orders/dispatch");
+    expect(source).not.toContain("/api/identity/approve");
+    expect(source).not.toContain("Review Identity");
   });
 });

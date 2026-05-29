@@ -15,7 +15,6 @@ const surfaces = [
   "app/start/confirmation/page.tsx",
   "app/provider/page.tsx",
   "app/provider/patients/[id]/page.tsx",
-  "app/provider/identity/[orderId]/page.tsx",
   "app/api/orders/dispatch/route.ts",
   "app/api/provider/practiceq-files/[fileId]/route.ts",
 ];

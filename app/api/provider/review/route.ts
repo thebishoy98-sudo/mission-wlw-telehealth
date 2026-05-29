@@ -4,9 +4,6 @@ import * as dbServer from "@/lib/db.server";
 import * as spruce from "@/services/spruce";
 import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
-import { getIdentityGate } from "@/lib/identity";
-import { shouldRetryPracticeQCompletionAfterIdentityApproval } from "@/lib/identity-approval";
-import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,7 +42,6 @@ export async function POST(req: NextRequest) {
       (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
       db.providerReviewDb.getByOrder(orderId);
     let providerReview = review;
-    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
 
     if (action === "approve") {
       const now = new Date().toISOString();
@@ -65,7 +61,6 @@ export async function POST(req: NextRequest) {
           chartViewedAt: now,
           chartViewedBy: reviewedBy,
           notes,
-          identityReviewRequired: false,
         } as const;
         db.providerReviewDb.update(review.id, reviewUpdate);
         const updatedReview = await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => null);
@@ -81,7 +76,6 @@ export async function POST(req: NextRequest) {
           chartViewedAt: now,
           chartViewedBy: reviewedBy,
           notes,
-          identityReviewRequired: false,
         };
         db.providerReviewDb.create(createdReview);
         await dbServer.providerReviewDb.create(createdReview).catch(() => {});
@@ -110,20 +104,6 @@ export async function POST(req: NextRequest) {
       };
       db.integrationLogDb.create(log);
       await dbServer.integrationLogDb.create(log).catch(() => {});
-
-      const dispatchOrder = updatedOrder ?? { ...order, ...orderUpdate };
-      if (
-        getIdentityGate(dispatchOrder).canDispatch &&
-        shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)
-      ) {
-        const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
-        if (job) {
-          practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
-            status: "pharmacy_error" as const,
-            error: error instanceof Error ? error.message : String(error),
-          }));
-        }
-      }
 
     } else if (action === "reject") {
       if (!rejectionReason) {
@@ -197,7 +177,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, action, orderId, review: providerReview, practiceQCompletion });
+    return NextResponse.json({ success: true, action, orderId, review: providerReview });
   } catch (err) {
     console.error("Provider review error:", err);
     return NextResponse.json(

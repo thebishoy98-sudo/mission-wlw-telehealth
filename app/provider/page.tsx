@@ -10,7 +10,6 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
 import { ClipboardCheck, Eye } from "lucide-react";
-import { getIdentityGate } from "@/lib/identity";
 
 type DashboardData = {
   orders: Types.Order[];
@@ -60,30 +59,8 @@ function ProviderDashboardContent() {
 
   useEffect(() => { void reload(); }, []);
 
-  const canBulkDispatch = (order: Types.Order) => {
-    const patient = patients[order.patientId];
-    const product = products[order.productId];
-    const dose = product?.doses.find((item) => item.id === order.doseId);
-    const shipping = patient?.shippingAddress;
-    return Boolean(
-      patient &&
-      product &&
-      dose &&
-      shipping?.street1 &&
-      shipping?.city &&
-      shipping?.state &&
-      shipping?.zipCode
-    );
-  };
-
-  const pendingReview = orders.filter(
-    (o) => o.status === "pending_review" || (o.status === "approved" && (o.pharmacyStatus === "draft" || o.pharmacyStatus === "error"))
-  );
-  const bulkApprovalTargets = orders.filter(
-    (o) =>
-      (o.status === "pending_review" || (o.status === "approved" && (o.pharmacyStatus === "draft" || o.pharmacyStatus === "error"))) &&
-      canBulkDispatch(o)
-  );
+  const pendingReview = orders.filter((o) => o.status === "pending_review");
+  const bulkApprovalTargets = pendingReview;
   const approved = orders.filter((o) => o.status === "approved" || o.status === "sent_to_pharmacy");
   const fulfilled = orders.filter((o) => o.status === "fulfilled" || o.status === "delivered");
 
@@ -92,53 +69,19 @@ function ProviderDashboardContent() {
     setError("");
     try {
       for (const order of bulkApprovalTargets) {
-        const patient = patients[order.patientId];
-
-        if (!getIdentityGate(order).canDispatch) {
-          const identityRes = await fetch("/api/identity/approve", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: order.id,
-              reviewedBy: "Dr. Provider",
-              notes: "Identity manually approved by provider",
-            }),
-          });
-          if (!identityRes.ok) {
-            const message = await identityRes.text();
-            throw new Error(message || `Identity approval failed for order ${order.id.slice(-6)}`);
-          }
-        }
-
-        if (order.status === "pending_review") {
-          const reviewRes = await fetch("/api/provider/review", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: order.id,
-              action: "approve",
-              notes: "Bulk approved by provider",
-              reviewedBy: "Dr. Provider",
-            }),
-          });
-          if (!reviewRes.ok) {
-            const message = await reviewRes.text();
-            throw new Error(message || `Provider approval failed for order ${order.id.slice(-6)}`);
-          }
-        }
-
-        const dispatchRes = await fetch("/api/orders/dispatch", {
+        const reviewRes = await fetch("/api/provider/review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             orderId: order.id,
-            patientData: patient ?? null,
-            productData: products[order.productId] ?? null,
+            action: "approve",
+            notes: "Bulk approved by provider",
+            reviewedBy: "Dr. Provider",
           }),
         });
-        if (!dispatchRes.ok) {
-          const message = await dispatchRes.text();
-          throw new Error(message || `Pharmacy dispatch failed for order ${order.id.slice(-6)}`);
+        if (!reviewRes.ok) {
+          const message = await reviewRes.text();
+          throw new Error(message || `Provider approval failed for order ${order.id.slice(-6)}`);
         }
       }
       await reload();
@@ -233,27 +176,12 @@ function ProviderDashboardContent() {
                               Not yet reviewed
                             </span>
                           )}
-                          {!getIdentityGate(order).canDispatch && (
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
-                              Identity review
-                            </span>
-                          )}
-                          {order.status === "approved" && order.pharmacyStatus === "error" && (
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">
-                              Pharmacy retry
-                            </span>
-                          )}
                         </div>
                         <p className="text-sm text-gray-600 mt-0.5">
                           Order {order.id.slice(-6)} - {formatDateTime(order.createdAt)}
                         </p>
                       </div>
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                        {!getIdentityGate(order).canDispatch && (
-                          <Link href={`/provider/identity/${order.id}`}>
-                            <Button size="sm" variant="outline" className="w-full sm:w-auto">Review Identity</Button>
-                          </Link>
-                        )}
                         <Link href={`/provider/patients/${order.patientId}`}>
                           <Button size="sm" className="w-full sm:w-auto">Review Chart</Button>
                         </Link>

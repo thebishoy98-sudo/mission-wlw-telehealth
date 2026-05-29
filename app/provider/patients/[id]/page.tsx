@@ -81,14 +81,8 @@ export default function PatientDetail() {
     setActionError("");
     setApprovalMessage("");
     setApproving(true);
-    const canDispatchPharmacy =
-      chart.selectedOrder.practiceQStatus === "completed" ||
-      chart.selectedOrder.practiceQStatus === "submitted";
     setApprovalSteps([
       { label: "Recording provider approval", status: "running" },
-      canDispatchPharmacy
-        ? { label: "Sending to pharmacy", status: "pending" }
-        : { label: "Waiting for clinical consent completion", status: "pending" },
       { label: "Finalizing chart status", status: "pending" },
     ]);
 
@@ -119,33 +113,10 @@ export default function PatientDetail() {
           chartViewedBy: "Dr. Provider",
         } : prev.review),
       } : prev);
-      if (!canDispatchPharmacy) {
-        setApprovalSteps((prev) => prev.map((step, index) => index <= 1 ? { ...step, status: "done" } : index === 2 ? { ...step, status: "running" } : step));
-        await stepDelay(300);
-        setApprovalSteps((prev) => prev.map((step, index) => index === 2 ? { ...step, status: "done" } : step));
-        setApprovalMessage("Chart approved. Pharmacy dispatch will wait for clinical consent completion.");
-        setApproved(true);
-        return;
-      }
       setApprovalSteps((prev) => prev.map((step, index) => index === 0 ? { ...step, status: "done" } : index === 1 ? { ...step, status: "running" } : step));
-
-      await stepDelay(500);
-      const dispatchRes = await fetch("/api/orders/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: chart.selectedOrder.id,
-          patientData: chart.patient,
-          productData: chart.product,
-        }),
-      });
-      if (!dispatchRes.ok) throw new Error((await dispatchRes.json()).error ?? "Pharmacy dispatch failed");
-      setSelectedOrderPatch({ status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
-      setApprovalSteps((prev) => prev.map((step, index) => index === 1 ? { ...step, status: "done" } : index === 2 ? { ...step, status: "running" } : step));
-
       await stepDelay(300);
-      setApprovalSteps((prev) => prev.map((step, index) => index === 2 ? { ...step, status: "done" } : step));
-      setApprovalMessage("Order approved and sent to pharmacy.");
+      setApprovalSteps((prev) => prev.map((step, index) => index === 1 ? { ...step, status: "done" } : step));
+      setApprovalMessage("Chart approved.");
       setApproved(true);
     } catch (error) {
       setActionError((error as Error).message);
@@ -435,7 +406,7 @@ export default function PatientDetail() {
 
             {(selectedOrder.status === "pending_review" || selectedOrder.status === "approved" || (selectedOrder.status === "sent_to_pharmacy" && selectedOrder.pharmacyStatus !== "submitted")) && !approving && !approved && (
               <div className="space-y-3">
-                <Button fullWidth onClick={handleApprove}>Approve &amp; Process Order</Button>
+                <Button fullWidth onClick={handleApprove}>Approve Order</Button>
                 <Button fullWidth variant="outline" onClick={handleReject}>Reject Order</Button>
               </div>
             )}
