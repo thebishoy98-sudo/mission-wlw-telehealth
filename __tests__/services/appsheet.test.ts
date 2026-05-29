@@ -142,6 +142,7 @@ describe("appsheet pharmacy integration", () => {
           Client: order.id,
           Status: "Order",
           Pharmacy: "1stChoiceRx",
+          Package: "1stChoiceRx TIRZEPATIDE 40mg",
         }),
       ]),
     });

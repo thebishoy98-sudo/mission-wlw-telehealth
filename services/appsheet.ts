@@ -237,8 +237,12 @@ function formatAppSheetDateTime(date = new Date()) {
 }
 
 function buildPackageName(product: Types.Product, dose: Types.DoseOption) {
-  const productName = isTirzepatide(product) ? "TIRZEPATIDE" : product.name.toUpperCase();
-  const strength = dose.strength || dose.label;
+  if (isTirzepatide(product)) {
+    const packageMg = `${dose.label} ${dose.strength}`.match(/(\d+(?:\.\d+)?)\s*mg/i)?.[1];
+    return `1stChoiceRx TIRZEPATIDE ${packageMg ?? parseWeeklyDoseMg(dose)}mg`.trim();
+  }
+  const productName = product.name.toUpperCase();
+  const strength = (dose.strength || dose.label).replace(/\s+vial\b/i, "");
   return `1stChoiceRx ${productName} ${strength}`.trim();
 }
 
