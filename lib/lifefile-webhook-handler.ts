@@ -3,6 +3,7 @@ import crypto from "crypto";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
+import { sendAdminNotification } from "@/services/admin-notifications";
 import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { normalizeLifeFileWebhookPayload } from "@/lib/lifefile-webhook";
@@ -121,6 +122,12 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
       if (patient) {
         spruceServer.sendMessage(patient, "order_shipped", { orderId, trackingNumber: trackingNumber ?? "" }).catch(() => {});
       }
+      sendAdminNotification("pharmacy_shipped", {
+        orderId,
+        patientId,
+        patientName: patient ? [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim() : undefined,
+        trackingNumber: trackingNumber ?? undefined,
+      }).catch(() => {});
       forwardTrackingToScript({
         event,
         lifeFileOrderId,

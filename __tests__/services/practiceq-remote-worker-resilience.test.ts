@@ -1,5 +1,28 @@
 import fs from "fs";
 import path from "path";
+import { waitForPracticeQCompletedStatus } from "@/services/practiceq-worker";
+
+jest.mock("playwright", () => ({
+  chromium: {
+    launch: jest.fn(),
+  },
+}));
+
+jest.mock("@/lib/db.server", () => ({
+  orderDb: {},
+  patientDb: {},
+  answerDb: {},
+  questionDb: {},
+  consentDb: {},
+  uploadDb: {},
+  practiceqAutomationJobDb: {},
+}));
+
+jest.mock("@/services/practiceq", () => ({
+  getIntakeById: jest.fn(),
+  getIntakeSummaryFeed: jest.fn(),
+  populateAndUpdatePracticeQIntake: jest.fn(),
+}));
 
 describe("PracticeQ remote worker resilience", () => {
   const workerSource = fs.readFileSync(path.join(process.cwd(), "services/practiceq-worker.ts"), "utf8");
@@ -63,5 +86,22 @@ describe("PracticeQ remote worker resilience", () => {
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
+  });
+
+  it("polls PracticeQ after admin Set as Completed before failing the job", async () => {
+    const fetchIntake = jest
+      .fn()
+      .mockResolvedValueOnce({ Status: "Draft" })
+      .mockResolvedValueOnce({ Status: "Completed" });
+
+    await expect(
+      waitForPracticeQCompletedStatus("intake_1", fetchIntake, {
+        attempts: 2,
+        delayMs: 1,
+      })
+    ).resolves.toBe(true);
+
+    expect(fetchIntake).toHaveBeenCalledTimes(2);
+    expect(fetchIntake).toHaveBeenCalledWith("intake_1");
   });
 });

@@ -24,6 +24,7 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
 import * as pharmacy from "@/services/pharmacy";
 import * as spruceServer from "@/services/spruce.server";
+import { sendAdminNotification } from "@/services/admin-notifications";
 import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 import { checkEligibility } from "@/lib/eligibility";
 import { seedQuestions } from "@/data/seed-data";
@@ -342,6 +343,19 @@ export async function POST(req: NextRequest) {
     };
     db.orderDb.update(orderId, orderUpdates);
     await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
+    const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+    sendAdminNotification("order_received", {
+      orderId,
+      patientId: patient.id,
+      patientName,
+    }).catch(() => {});
+    if (!dispatchGate.canDispatch) {
+      sendAdminNotification("identity_review_needed", {
+        orderId,
+        patientId: patient.id,
+        patientName,
+      }).catch(() => {});
+    }
 
     // Build updatedOrder from known persisted data (localStorage not available server-side).
     const orderForIntegrations = {

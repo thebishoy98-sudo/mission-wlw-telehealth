@@ -40,7 +40,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
       { label: "Dashboard", href: "/admin" },
       { label: "Orders", href: "/admin/orders" },
       { label: "Products", href: "/admin/products" },
-      { label: "Integrations", href: "/admin/integrations" },
+      { label: "Notifications", href: "/admin/notifications" },
     ],
   };
 

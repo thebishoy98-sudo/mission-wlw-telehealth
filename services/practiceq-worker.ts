@@ -48,6 +48,8 @@ const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
 const PRACTICEQ_CONSENT_TIMEOUT_MS = 60000;
 const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
 const PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS = 60000;
+const PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS = 6;
+const PRACTICEQ_ADMIN_STATUS_POLL_DELAY_MS = 5000;
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -1147,9 +1149,8 @@ async function verifyPracticeQSavedSubmission(
         `PracticeQ admin Set as Completed timed out for ${matchedIntake.id}.`
       ).catch(() => false);
       if (markedCompleted) {
-        const completedIntake = await getIntakeById(matchedIntake.id).catch(() => null);
-        status = String((completedIntake as any)?.Status ?? "Completed");
-        if (/completed/i.test(status)) {
+        const completed = await waitForPracticeQCompletedStatus(matchedIntake.id);
+        if (completed) {
           return { ...result, status: "completed", intakeId: matchedIntake.id };
         }
       }
@@ -1178,6 +1179,24 @@ async function verifyPracticeQSavedSubmission(
   }
 
   return { ...result, status: "completed", intakeId: matchedIntake.id };
+}
+
+export async function waitForPracticeQCompletedStatus(
+  intakeId: string,
+  fetchIntake: (id: string) => Promise<unknown | null> = getIntakeById,
+  options: { attempts?: number; delayMs?: number } = {}
+): Promise<boolean> {
+  const attempts = options.attempts ?? PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS;
+  const delayMs = options.delayMs ?? PRACTICEQ_ADMIN_STATUS_POLL_DELAY_MS;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const intake = await fetchIntake(intakeId).catch(() => null);
+    const status = String((intake as any)?.Status ?? "");
+    if (/completed/i.test(status)) return true;
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  return false;
 }
 
 async function findRecentPracticeQIntake(context: {

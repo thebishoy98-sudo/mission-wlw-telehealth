@@ -102,6 +102,10 @@ async function sendViaSpruceApi(phoneNumber: string, messageText: string, idempo
   return response.json().catch(() => ({}));
 }
 
+export async function sendTextToPhone(phoneNumber: string, messageText: string, idempotencyKey: string) {
+  return sendViaSpruceApi(phoneNumber, messageText, idempotencyKey);
+}
+
 export async function sendMessage(
   patient: Patient,
   templateKey: string,

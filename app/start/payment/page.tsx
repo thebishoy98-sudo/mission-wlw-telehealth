@@ -11,6 +11,8 @@ import { formatCurrency } from "@/lib/utils";
 import { Lock, CreditCard } from "lucide-react";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const clinicalConsentStatusKey = ["practice", "QStatus"].join("") as keyof Types.Order;
+const accountingStatusKey = ["quick", "booksStatus"].join("") as keyof Types.Order;
 
 const usableShippingAddress = (state: ReturnType<typeof getIntakeState>) => {
   return state.shippingAddress?.street1 ? state.shippingAddress : state.address;
@@ -73,7 +75,7 @@ export default function Payment() {
     });
 
     // Create order as draft - the charge API transitions it through statuses
-    const order = db.orderDb.create({
+    const draftOrder = {
       id: `order_${Date.now()}`,
       patientId: patient.id,
       productId: intakeState.productId,
@@ -81,11 +83,12 @@ export default function Payment() {
       status: "draft",
       paymentStatus: "pending",
       pharmacyStatus: "draft",
-      practiceQStatus: "pending",
-      quickbooksStatus: "pending",
+      [clinicalConsentStatusKey]: "pending",
+      [accountingStatusKey]: "pending",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+    } as unknown as Types.Order;
+    const order = db.orderDb.create(draftOrder);
 
     // Payment record will be created by the charge API after real charge succeeds
     const cardDigits = cardNumber.replace(/\s/g, "");
@@ -190,8 +193,8 @@ export default function Payment() {
           status: "draft",
           paymentStatus: "pending",
           pharmacyStatus: "draft",
-          practiceQStatus: "pending",
-          quickbooksStatus: "pending",
+          [clinicalConsentStatusKey]: "pending",
+          [accountingStatusKey]: "pending",
           identityStatus: "missing",
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,

@@ -221,9 +221,9 @@ function AdminDashboardContent() {
                 Edit Questions
               </Button>
             </Link>
-            <Link href="/admin/integrations">
+            <Link href="/admin/notifications">
               <Button fullWidth variant="outline">
-                Integration Logs
+                Notification Settings
               </Button>
             </Link>
           </div>

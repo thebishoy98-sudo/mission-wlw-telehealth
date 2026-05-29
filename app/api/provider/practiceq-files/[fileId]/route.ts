@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, { params }: { params: { fileId: stri
 
   const file = await downloadPracticeQFile(params.fileId).catch(() => null);
   if (!file) {
-    return NextResponse.json({ error: "PracticeQ file not found" }, { status: 404 });
+    return NextResponse.json({ error: "Clinical file not found" }, { status: 404 });
   }
 
   return new NextResponse(new Uint8Array(file.body), {

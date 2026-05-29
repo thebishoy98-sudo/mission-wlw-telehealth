@@ -387,6 +387,16 @@ export interface IntegrationLog {
   error?: string;
 }
 
+export type AdminNotificationEvent =
+  | "identity_review_needed"
+  | "order_received"
+  | "pharmacy_shipped";
+
+export interface AdminNotificationSettings {
+  phones: string[];
+  events: Record<AdminNotificationEvent, boolean>;
+}
+
 // CMS and Content
 export interface CMSContent {
   landing: {

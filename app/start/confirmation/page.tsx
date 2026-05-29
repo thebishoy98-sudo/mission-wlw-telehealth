@@ -7,7 +7,7 @@ import * as db from "@/lib/db";
 import { getIntakeState } from "@/lib/intake-store";
 import { CheckCircle, Package, ArrowRight } from "lucide-react";
 
-type PracticeQAutomationStatus = {
+type ConsentAutomationStatus = {
   available: boolean;
   status?: string;
   handoffUrl?: string;
@@ -18,7 +18,7 @@ export default function Confirmation() {
   const intakeState = getIntakeState();
   const [order, setOrder] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
-  const [practiceQAutomation, setPracticeQAutomation] = useState<PracticeQAutomationStatus | null>(null);
+  const [consentAutomation, setConsentAutomation] = useState<ConsentAutomationStatus | null>(null);
 
   useEffect(() => {
     if (intakeState.orderId && intakeState.patientId) {
@@ -33,10 +33,10 @@ export default function Confirmation() {
 
     let cancelled = false;
     const loadStatus = async () => {
-      const response = await fetch(`/api/practiceq/automation/${encodeURIComponent(orderId)}`);
+      const response = await fetch(`/api/clinical-consent/automation/${encodeURIComponent(orderId)}`);
       if (!response.ok || cancelled) return;
       const payload = await response.json();
-      setPracticeQAutomation(payload);
+      setConsentAutomation(payload);
     };
 
     loadStatus();
@@ -109,15 +109,15 @@ export default function Confirmation() {
           <ul className="space-y-2 text-sm text-gray-600">
             <li className="flex items-start gap-2">
               <span className="text-teal-500 mt-0.5 font-bold">1.</span>
-              {practiceQAutomation?.handoffUrl
-                ? "Complete the final PracticeQ consent/signature step"
+              {consentAutomation?.handoffUrl
+                ? "Complete the final clinical consent/signature step"
                 : isSentToPharmacy
                   ? "Our pharmacy will prepare and package your medication"
-                  : "We are preparing your PracticeQ consent session"}
+                  : "We are preparing your clinical consent session"}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-teal-500 mt-0.5 font-bold">2.</span>
-              {isSentToPharmacy ? "You'll receive a tracking number via SMS once it ships" : "Provider review starts after PracticeQ consent is submitted"}
+              {isSentToPharmacy ? "You'll receive a tracking number via text once it ships" : "Provider review starts after your consent is submitted"}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-teal-500 mt-0.5 font-bold">3.</span>
@@ -131,21 +131,21 @@ export default function Confirmation() {
         </p>
 
         <div className="flex flex-col gap-3">
-          {practiceQAutomation?.handoffUrl && (
-            <a href={practiceQAutomation.handoffUrl} target="_blank" rel="noopener noreferrer">
+          {consentAutomation?.handoffUrl && (
+            <a href={consentAutomation.handoffUrl} target="_blank" rel="noopener noreferrer">
               <Button fullWidth>
-                Finish PracticeQ Consent <ArrowRight className="ml-2 w-4 h-4" />
+                Finish Consent <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </a>
           )}
-          {practiceQAutomation?.status === "running" && (
+          {consentAutomation?.status === "running" && (
             <div className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-              Preparing your PracticeQ consent session. This page will update automatically.
+              Preparing your consent session. This page will update automatically.
             </div>
           )}
-          {practiceQAutomation?.status === "failed" && (
+          {consentAutomation?.status === "failed" && (
             <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-              We could not prepare PracticeQ automatically. Our team will contact you to finish consent.
+              We could not prepare your consent automatically. Our team will contact you to finish it.
             </div>
           )}
           <Link href="/status">

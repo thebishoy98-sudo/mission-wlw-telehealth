@@ -102,6 +102,24 @@ async function sql(strings: TemplateStringsArray, ...values: any[]) {
   }
 }
 
+export const appSettingDb = {
+  async get<T = unknown>(key: string): Promise<T | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT value FROM cms_content WHERE key = ${key} LIMIT 1`;
+    return rows[0]?.value ?? null;
+  },
+
+  async set<T = unknown>(key: string, value: T): Promise<T> {
+    if (!isDbAvailable()) return value;
+    await sql`
+      INSERT INTO cms_content (key, value, updated_at)
+      VALUES (${key}, ${JSON.stringify(value)}::jsonb, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `;
+    return value;
+  },
+};
+
 // ── Patients ──────────────────────────────────────────────────────────────────
 
 export const patientDb = {
