@@ -845,6 +845,34 @@ async function enterFieldValue(field: ReturnType<Page["locator"]>, value: string
     await field.press(process.platform === "darwin" ? "Meta+A" : "Control+A", { timeout: 3000 }).catch(() => {});
     await field.type(value, { delay: 5, timeout: 5000 }).catch(() => {});
   });
+  await field.evaluate((el, value) => {
+    const input = el as HTMLInputElement | HTMLTextAreaElement;
+    const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    setter?.call(input, value);
+    input.value = value;
+
+    const angular = (window as any).angular;
+    const ngModel = angular?.element(input).controller?.("ngModel");
+    ngModel?.$setViewValue?.(value);
+    ngModel?.$render?.();
+
+    const scope = angular?.element(input).scope?.();
+    const model = input.getAttribute("ng-model");
+    if (model) {
+      const parts = model.split(".");
+      let target = scope;
+      for (let i = 0; target && i < parts.length - 1; i += 1) target = target[parts[i]];
+      if (target && parts[parts.length - 1]) target[parts[parts.length - 1]] = value;
+    }
+    scope?.textChanged?.();
+    scope?.changed?.();
+    scope?.$applyAsync?.();
+
+    for (const eventName of ["input", "change", "blur"]) {
+      input.dispatchEvent(new Event(eventName, { bubbles: true }));
+    }
+  }, value).catch(() => {});
   await field.press("Tab", { timeout: 2000 }).catch(() => {});
 }
 
