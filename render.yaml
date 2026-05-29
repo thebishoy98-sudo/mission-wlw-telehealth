@@ -8,7 +8,7 @@ services:
   - type: web
     name: mission-wlw-web
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm run build
     preDeployCommand: npm run db:migrate
     startCommand: npm start
@@ -59,9 +59,15 @@ services:
       - key: BYPASS_QB_PAYMENTS
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
-        value: true
+        value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
         value: sandbox
+      - key: NEXT_PUBLIC_PAYMENT_CHARGE_AMOUNT_OVERRIDE
+        value: 0.01
+      - key: PAYMENT_CHARGE_AMOUNT_OVERRIDE
+        value: 0.01
+      - key: QB_ALLOW_RAW_CARD_CHARGES
+        value: true
       - key: QB_CLIENT_ID
         sync: false
       - key: QB_CLIENT_SECRET
@@ -119,7 +125,7 @@ services:
 
       # PracticeQ, Spruce, identity, and AI integrations.
       - key: USE_REAL_PRACTICEQ
-        value: true
+        value: false
       - key: PRACTICEQ_API_KEY
         sync: false
       - key: PRACTICEQ_BASE_URL
@@ -137,7 +143,7 @@ services:
       - key: PRACTICEQ_REMOTE_PUBLIC_URL
         sync: false
       - key: USE_REAL_SPRUCE
-        value: true
+        value: false
       - key: SPRUCE_AUTH_TOKEN
         sync: false
       - key: SPRUCE_INTERNAL_ENDPOINT_ID
@@ -155,70 +161,4 @@ services:
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY
-        sync: false
-
-  - type: worker
-    name: mission-wlw-practiceq-worker
-    runtime: node
-    plan: starter
-    buildCommand: npm ci && npx playwright install chromium
-    startCommand: npm run practiceq:remote
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: NODE_ENV
-        value: production
-      - key: POSTGRES_URL
-        fromDatabase:
-          name: mission-wlw-postgres
-          property: connectionString
-      - key: POSTGRES_URL_NON_POOLING
-        fromDatabase:
-          name: mission-wlw-postgres
-          property: connectionString
-      - key: USE_REAL_PRACTICEQ
-        value: true
-      - key: PRACTICEQ_API_KEY
-        sync: false
-      - key: PRACTICEQ_BASE_URL
-        value: https://intakeq.com/api/v1
-      - key: PRACTICEQ_QUESTIONNAIRE_ID
-        sync: false
-      - key: PRACTICEQ_ADMIN_EMAIL
-        sync: false
-      - key: PRACTICEQ_ADMIN_PASSWORD
-        sync: false
-      - key: PRACTICEQ_ADMIN_SET_COMPLETED
-        value: true
-      - key: PRACTICEQ_REMOTE_PUBLIC_URL
-        sync: false
-      - key: PRACTICEQ_REMOTE_HEADLESS
-        value: true
-      - key: PRACTICEQ_REMOTE_POLL_MS
-        value: 5000
-
-  - type: cron
-    name: mission-wlw-identity-reminders
-    runtime: node
-    plan: starter
-    schedule: "0 13 * * *"
-    buildCommand: npm ci
-    startCommand: 'curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/identity-reminders"'
-    envVars:
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-pharmacy-tracking-sync
-    runtime: node
-    plan: starter
-    schedule: "30 13 * * *"
-    buildCommand: npm ci
-    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_BASE_URL/api/cron/pharmacy-tracking-sync"'
-    envVars:
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
         sync: false
