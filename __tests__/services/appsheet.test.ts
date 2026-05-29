@@ -119,17 +119,39 @@ describe("appsheet pharmacy integration", () => {
 
     await appsheet.createPharmacyOrder(order);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0];
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/v2/apps/app_123/tables/Client/Action");
+    expect(String(fetchSpy.mock.calls[1][0])).toContain("/api/v2/apps/app_123/tables/PharmacyOrder/Action");
+    const [url, init] = fetchSpy.mock.calls[2];
     expect(String(url)).toContain("/api/v2/apps/app_123/tables/OrderItems/Action");
     expect(String(url)).toContain("applicationAccessKey=");
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+      Action: "Add",
+      Rows: expect.arrayContaining([
+        expect.objectContaining({
+          ID: order.id,
+          Client_Order_Status: "New",
+        }),
+      ]),
+    });
+    expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toMatchObject({
+      Action: "Add",
+      Rows: expect.arrayContaining([
+        expect.objectContaining({
+          ID: `AS_${order.id}`,
+          Client: order.id,
+          Status: "New",
+          Pharmacy: "1stChoiceRx",
+        }),
+      ]),
+    });
     expect(JSON.parse(String(init?.body))).toMatchObject({
       Action: "Add",
       Properties: { Locale: "en-US", Timezone: "America/New_York" },
       Rows: expect.arrayContaining([
         expect.objectContaining({
           "Client Order ID": order.id,
-          "Pharmacy Order Id": order.id,
+          "Pharmacy Order Id": `AS_${order.id}`,
           lfProductID: "8279096",
           lfProduct_ID: "8279096",
           drugName: "TIRZEPATIDE/PYRIDOXINE",

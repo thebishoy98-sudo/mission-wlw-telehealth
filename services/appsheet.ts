@@ -75,6 +75,8 @@ function cfg() {
     apiKey: process.env.APPSHEET_API_KEY ?? "",
     baseUrl: process.env.APPSHEET_BASE_URL ?? "https://www.appsheet.com",
     orderTable: process.env.APPSHEET_ORDER_TABLE ?? "OrderItems",
+    pharmacyOrderTable: process.env.APPSHEET_PHARMACY_ORDER_TABLE ?? "PharmacyOrder",
+    clientTable: process.env.APPSHEET_CLIENT_TABLE ?? "Client",
     timezone: process.env.APPSHEET_TIMEZONE ?? "America/New_York",
     pharmacyName: process.env.APPSHEET_PHARMACY_NAME ?? "1stChoiceRx",
   };
@@ -186,13 +188,14 @@ function buildAppSheetRows(
   patient: Types.Patient,
   product: Types.Product,
   dose: Types.DoseOption,
-  lines: AppSheetOrderLine[]
+  lines: AppSheetOrderLine[],
+  pharmacyOrderId: string
 ) {
   const config = cfg();
   return lines.map((line, index) => ({
     ID: `${order.id}_${line.itemId}_${index + 1}`.slice(0, 80),
     "Client Order ID": order.id,
-    "Pharmacy Order Id": order.id,
+    "Pharmacy Order Id": pharmacyOrderId,
     lfProductID: line.itemId,
     lfProduct_ID: line.itemId,
     drugName: line.drugName,
@@ -220,13 +223,73 @@ function buildAppSheetRows(
   }));
 }
 
-async function postAppSheetRows(rows: Record<string, unknown>[]) {
+function formatAppSheetDate(date = new Date()) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}/${date.getFullYear()}`;
+}
+
+function formatAppSheetDateTime(date = new Date()) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${formatAppSheetDate(date)} ${hours}:${minutes}:${seconds}`;
+}
+
+function buildPackageName(product: Types.Product, dose: Types.DoseOption) {
+  const productName = isTirzepatide(product) ? "TIRZEPATIDE" : product.name.toUpperCase();
+  const strength = dose.strength || dose.label;
+  return `1stChoiceRx ${productName} ${strength}`.trim();
+}
+
+function buildAppSheetClientRow(order: Types.Order, patient: Types.Patient, packageName: string) {
+  const address = patient.shippingAddress ?? patient.address;
+  return {
+    ID: order.id,
+    ClientId: order.patientId,
+    Email: patient.email,
+    FirstName: patient.firstName,
+    LastName: patient.lastName,
+    DateOfBirth: patient.dateOfBirth,
+    Gender: patient.gender,
+    Address: formatPatientAddress(address),
+    StreetAddress: address.street1,
+    City: address.city,
+    State: address.state,
+    PostalCode: address.zipCode,
+    Phone: patient.phone,
+    Accept: "Y",
+    Package: packageName,
+    "Selected Package": packageName,
+    Client_Order_Status: "New",
+    Date: formatAppSheetDate(),
+  };
+}
+
+function buildAppSheetPharmacyOrderRow(order: Types.Order, patient: Types.Patient, packageName: string, pharmacyOrderId: string) {
+  const now = new Date();
+  return {
+    ID: pharmacyOrderId,
+    Client: order.id,
+    Status: "New",
+    Pharmacy: cfg().pharmacyName,
+    Package: packageName,
+    Note: `Mission WLW order ${order.id} for ${patient.firstName} ${patient.lastName}`.trim(),
+    "Pharmacy Order ID": order.id,
+    "Pharmacy Order Date": formatAppSheetDate(now),
+    TS_PharmacyOrder: formatAppSheetDateTime(now),
+    WebhookType: "Mission WLW",
+    "Date Created": formatAppSheetDate(now),
+  };
+}
+
+async function postAppSheetTableRows(table: string, rows: Record<string, unknown>[]) {
   const config = cfg();
-  if (!config.appId || !config.apiKey || !config.orderTable) {
-    throw new Error("AppSheet is missing APPSHEET_ID, APPSHEET_API_KEY, or APPSHEET_ORDER_TABLE");
+  if (!config.appId || !config.apiKey || !table) {
+    throw new Error("AppSheet is missing APPSHEET_ID, APPSHEET_API_KEY, or a table name");
   }
 
-  const url = `${config.baseUrl.replace(/\/$/, "")}/api/v2/apps/${encodeURIComponent(config.appId)}/tables/${encodeURIComponent(config.orderTable)}/Action?applicationAccessKey=${encodeURIComponent(config.apiKey)}`;
+  const url = `${config.baseUrl.replace(/\/$/, "")}/api/v2/apps/${encodeURIComponent(config.appId)}/tables/${encodeURIComponent(table)}/Action?applicationAccessKey=${encodeURIComponent(config.apiKey)}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -244,6 +307,10 @@ async function postAppSheetRows(rows: Record<string, unknown>[]) {
     throw new Error(`AppSheet API ${response.status}: ${JSON.stringify(body)}`);
   }
   return body;
+}
+
+async function postAppSheetRows(rows: Record<string, unknown>[]) {
+  return postAppSheetTableRows(cfg().orderTable, rows);
 }
 
 export const createPharmacyOrder = async (
@@ -267,15 +334,20 @@ export const createPharmacyOrder = async (
 
   const config = cfg();
   const lines = buildAppSheetOrderLines(product, dose);
-  const rows = buildAppSheetRows(order, patient, product, dose, lines);
-  let appSheetOrderId = `AS_MOCK_${generateId()}`;
+  const packageName = buildPackageName(product, dose);
+  let appSheetOrderId = config.useMock ? `AS_MOCK_${generateId()}` : `AS_${order.id}`;
+  const clientRow = buildAppSheetClientRow(order, patient, packageName);
+  const pharmacyOrderRow = buildAppSheetPharmacyOrderRow(order, patient, packageName, appSheetOrderId);
+  const rows = buildAppSheetRows(order, patient, product, dose, lines, appSheetOrderId);
   let lastError: string | undefined;
 
   if (!config.useMock) {
     try {
-      const body = await postAppSheetRows(rows);
-      const returned = body?.Rows?.[0]?.["Order ID"] ?? body?.Rows?.[0]?.ID ?? body?.Rows?.[0]?._RowNumber;
-      appSheetOrderId = String(returned || `AS_${order.id}`);
+      await postAppSheetTableRows(config.clientTable, [clientRow]);
+      const parentBody = await postAppSheetTableRows(config.pharmacyOrderTable, [pharmacyOrderRow]);
+      await postAppSheetRows(rows);
+      const returned = parentBody?.Rows?.[0]?.["Pharmacy Order ID"] ?? parentBody?.Rows?.[0]?.ID ?? appSheetOrderId;
+      appSheetOrderId = String(returned || appSheetOrderId);
     } catch (error) {
       lastError = (error as Error).message;
       const failedOrder: Types.PharmacyOrder = {
@@ -297,7 +369,7 @@ export const createPharmacyOrder = async (
         orderId: order.id,
         patientId: order.patientId,
         status: "error",
-        details: { mock: false, table: config.orderTable },
+        details: { mock: false, table: config.pharmacyOrderTable, itemTable: config.orderTable },
         error: lastError,
       });
       throw error;
@@ -332,7 +404,11 @@ export const createPharmacyOrder = async (
           dateWritten: new Date().toISOString().slice(0, 10),
         })),
         appSheet: {
+          clientTable: config.clientTable,
+          pharmacyOrderTable: config.pharmacyOrderTable,
           table: config.orderTable,
+          clientRow,
+          pharmacyOrderRow,
           rows,
           mock: config.useMock,
         },
@@ -354,6 +430,7 @@ export const createPharmacyOrder = async (
     status: "success",
     details: {
       appSheetOrderId,
+      pharmacyOrderTable: config.pharmacyOrderTable,
       table: config.orderTable,
       mock: config.useMock,
       itemIds: lines.map((line) => line.itemId),
