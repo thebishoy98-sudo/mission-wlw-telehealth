@@ -211,10 +211,12 @@ export async function fillPracticeQQuestionPages(
   fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
   uploadFile: PracticeQUploadFile | null = null,
 ): Promise<FillOutcome> {
+  let noProgressCount = 0;
   for (let step = 0; step < 40; step += 1) {
     await page.waitForTimeout(750);
     await waitForPracticeQPageText(page);
     const bodyText = await page.locator("body").innerText().catch(() => "");
+    const beforeSignature = practiceQPageSignature(page.url(), bodyText);
     if (await resolvePracticeQResumePrompt(page, bodyText)) continue;
     if (await resolvePracticeQIntroPage(page, bodyText)) continue;
     if (requiresUnhandledPatientConsent(bodyText, fillPlan)) return { stoppedForPatientConsent: true };
@@ -246,10 +248,25 @@ export async function fillPracticeQQuestionPages(
     await assertVisiblePracticeQFieldsFilled(page, fillPlan);
 
     const moved = await clickContinue(page).catch(() => false);
-    if (moved) await waitForPracticeQPageText(page);
+    if (moved) {
+      await waitForPracticeQPageText(page);
+      await page.waitForTimeout(500);
+      const afterText = await page.locator("body").innerText().catch(() => "");
+      const afterSignature = practiceQPageSignature(page.url(), afterText);
+      if (afterSignature === beforeSignature) {
+        noProgressCount += 1;
+        if (filled === 0 || noProgressCount >= 2) return { stoppedForPatientConsent: false };
+      } else {
+        noProgressCount = 0;
+      }
+    }
     if (!moved && filled === 0) return { stoppedForPatientConsent: false };
   }
   return { stoppedForPatientConsent: false };
+}
+
+function practiceQPageSignature(url: string, text: string) {
+  return `${url}::${text.replace(/\s+/g, " ").trim().slice(0, 1200)}`;
 }
 
 function selectPracticeQUploadFile(
