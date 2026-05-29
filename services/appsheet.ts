@@ -194,8 +194,8 @@ function buildAppSheetRows(
   const config = cfg();
   return lines.map((line, index) => ({
     ID: `${order.id}_${line.itemId}_${index + 1}`.slice(0, 80),
-    "Client Order ID": order.id,
-    "Pharmacy Order Id": pharmacyOrderId,
+    "Client Order ID": pharmacyOrderId,
+    "Pharmacy Order Id": order.id,
     lfProductID: line.itemId,
     lfProduct_ID: line.itemId,
     drugName: line.drugName,
@@ -271,7 +271,7 @@ function buildAppSheetPharmacyOrderRow(order: Types.Order, patient: Types.Patien
   return {
     ID: pharmacyOrderId,
     Client: order.id,
-    Status: "New",
+    Status: "Order",
     Pharmacy: cfg().pharmacyName,
     Package: packageName,
     Note: `Mission WLW order ${order.id} for ${patient.firstName} ${patient.lastName}`.trim(),

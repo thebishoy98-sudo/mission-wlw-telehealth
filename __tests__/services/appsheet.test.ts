@@ -140,7 +140,7 @@ describe("appsheet pharmacy integration", () => {
         expect.objectContaining({
           ID: `AS_${order.id}`,
           Client: order.id,
-          Status: "New",
+          Status: "Order",
           Pharmacy: "1stChoiceRx",
         }),
       ]),
@@ -150,8 +150,8 @@ describe("appsheet pharmacy integration", () => {
       Properties: { Locale: "en-US", Timezone: "America/New_York" },
       Rows: expect.arrayContaining([
         expect.objectContaining({
-          "Client Order ID": order.id,
-          "Pharmacy Order Id": `AS_${order.id}`,
+          "Client Order ID": `AS_${order.id}`,
+          "Pharmacy Order Id": order.id,
           lfProductID: "8279096",
           lfProduct_ID: "8279096",
           drugName: "TIRZEPATIDE/PYRIDOXINE",
