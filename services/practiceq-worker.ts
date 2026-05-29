@@ -456,7 +456,12 @@ export async function submitPracticeQInBackground(
     };
   }
 
-  await page.waitForTimeout(1500);
+  // PracticeQ shows a confirmation modal ("Once you submit this form, you won't be able to change it.
+  // Are you sure you want to proceed?") after clicking the Submit Form button.
+  // We must confirm it before the form is actually submitted.
+  await confirmPracticeQSubmitModal(page);
+
+  await page.waitForTimeout(2000);
   const postSubmitText = await page.locator("body").innerText().catch(() => "");
   if (looksSubmitted(postSubmitText)) {
     return {
@@ -472,11 +477,67 @@ export async function submitPracticeQInBackground(
     };
   }
 
+  // If the confirmation modal dismissal re-opened the same page, try one more time
+  if (/once you submit|are you sure/i.test(postSubmitText)) {
+    await confirmPracticeQSubmitModal(page);
+    await page.waitForTimeout(2000);
+    const retryText = await page.locator("body").innerText().catch(() => "");
+    if (looksSubmitted(retryText)) {
+      return { status: "completed", handoffUrl: undefined, intakeId: extractPracticeQIntakeId(page.url()) };
+    }
+  }
+
   return {
     status: "completed",
     handoffUrl: undefined,
     intakeId: extractPracticeQIntakeId(page.url()),
   };
+}
+
+/**
+ * After clicking "Submit Form", PracticeQ shows a confirmation panel:
+ *   "Once you submit this form, you won't be able to change it. Are you sure you want to proceed?"
+ * with Cancel and Submit buttons. This function detects and confirms so the form is actually sent.
+ */
+async function confirmPracticeQSubmitModal(page: Page) {
+  // Wait for Angular ng-if to render the confirmation panel
+  await page.waitForTimeout(1200);
+  const confirmText = await page.locator("body").innerText().catch(() => "");
+  if (!/once you submit|are you sure/i.test(confirmText)) return;
+
+  // Playwright locators — use force:true so headless viewport clipping doesn't block clicks
+  const confirmBtn = page
+    .getByRole("button", { name: /^\s*submit\s*$/i })
+    .or(page.locator("button, input[type='submit'], a").filter({ hasText: /^\s*submit\s*$/i }))
+    .first();
+  if (await confirmBtn.count().then((c) => c > 0).catch(() => false)) {
+    await confirmBtn.scrollIntoViewIfNeeded().catch(() => {});
+    await confirmBtn.click({ force: true, timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    return;
+  }
+
+  // DOM fallback — fire native events and also trigger Angular's event delegation
+  await page.evaluate(() => {
+    const textFor = (el: Element) => [
+      (el as HTMLElement).innerText,
+      el.getAttribute("value"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const candidates = Array.from(document.querySelectorAll(
+      "button, a, input[type='button'], input[type='submit'], [role='button'], .btn, span"
+    ));
+    const target = candidates.find((el) => /^\s*submit\s*$/i.test(textFor(el)));
+    if (!target) return;
+    const node = target as HTMLElement;
+    node.scrollIntoView({ block: "center" });
+    node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    node.click();
+  }).catch(() => {});
+  await page.waitForTimeout(500);
 }
 
 async function fillVisibleFields(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>): Promise<number> {
