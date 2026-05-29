@@ -1,41 +1,44 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-function hasSecret(req: NextRequest, cookieName: string, envName = "ADMIN_SECRET") {
+function readCookie(req: Request, name: string) {
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
+function hasSecret(req: Request, cookieName: string, envName = "ADMIN_SECRET") {
   const secret = process.env[envName] ?? process.env.ADMIN_SECRET;
   if (!secret) return process.env.VERCEL_ENV !== "production";
 
   const provided =
     req.headers.get(envName === "PROVIDER_SECRET" ? "x-provider-secret" : "x-admin-secret") ??
-    req.cookies.get(cookieName)?.value ??
-    req.cookies.get("admin_secret")?.value;
+    readCookie(req, cookieName) ??
+    readCookie(req, "admin_secret");
 
   return provided === secret;
 }
 
-export function isAdminRequest(req: NextRequest) {
+export function isAdminRequest(req: Request) {
   return hasSecret(req, "admin_secret");
 }
 
-export function isProviderRequest(req: NextRequest) {
+export function isProviderRequest(req: Request) {
   return hasSecret(req, "provider_secret", "PROVIDER_SECRET");
 }
 
-function toNextRequest(req: NextRequest | Request): NextRequest {
-  return req instanceof NextRequest ? req : new NextRequest(req);
-}
-
-export function requireAdmin(req: NextRequest | Request) {
-  const nextReq = toNextRequest(req);
-  if (isAdminRequest(nextReq)) return null;
+export function requireAdmin(req: Request) {
+  if (isAdminRequest(req)) return null;
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-export function requireProvider(req: NextRequest | Request) {
-  const nextReq = toNextRequest(req);
-  if (isProviderRequest(nextReq) || isAdminRequest(nextReq)) return null;
+export function requireProvider(req: Request) {
+  if (isProviderRequest(req) || isAdminRequest(req)) return null;
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-export function requireProviderOrAdmin(req: NextRequest | Request) {
+export function requireProviderOrAdmin(req: Request) {
   return requireProvider(req);
 }
