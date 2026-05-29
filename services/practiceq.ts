@@ -326,7 +326,7 @@ export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | nu
     return _pqQuestionnaireCache.questions;
   }
   // Fetch the most recent intake for this questionnaire to get the question structure
-  const summaryRes = await fetch(
+  const summaryRes = await fetchPracticeQWithRetry(
     `${pqBase()}/intakes/summary?questionnaireId=${encodeURIComponent(serviceConfig.practiceq.questionnaireId)}&page=1`,
     { headers: pqHeaders() }
   );
@@ -337,7 +337,7 @@ export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | nu
     : undefined;
   if (!latestIntakeId) return null;
 
-  const intakeRes = await fetch(`${pqBase()}/intakes/${encodeURIComponent(latestIntakeId)}`, { headers: pqHeaders() });
+  const intakeRes = await fetchPracticeQWithRetry(`${pqBase()}/intakes/${encodeURIComponent(latestIntakeId)}`, { headers: pqHeaders() });
   if (!intakeRes.ok) return null;
   const intake = await intakeRes.json().catch(() => null) as Record<string, unknown> | null;
   const rawQuestions = Array.isArray(intake?.Questions) ? intake.Questions as unknown[] : [];
@@ -348,7 +348,7 @@ export async function getPracticeQQuestionnaire(): Promise<Types.Question[] | nu
 
 export async function getIntakeById(intakeId: string): Promise<PracticeQIntake | null> {
   if (!serviceConfig.practiceq.apiKey) return null;
-  const response = await fetch(`${pqBase()}/intakes/${encodeURIComponent(intakeId)}`, {
+  const response = await fetchPracticeQWithRetry(`${pqBase()}/intakes/${encodeURIComponent(intakeId)}`, {
     headers: pqHeaders(),
   });
   if (!response.ok) return null;
@@ -475,7 +475,7 @@ export async function getIntakeSummaryFeed(options: {
   if (options.endDate?.trim()) params.set("endDate", options.endDate.trim());
   if (options.updatedSince?.trim()) params.set("updatedSince", options.updatedSince.trim());
 
-  const response = await fetch(`${pqBase()}/intakes/summary?${params.toString()}`, {
+  const response = await fetchPracticeQWithRetry(`${pqBase()}/intakes/summary?${params.toString()}`, {
     headers: pqHeaders(),
   });
   if (!response.ok) {
@@ -964,7 +964,7 @@ export async function populateAndUpdatePracticeQIntake(
 
   if (!changed) return null;
 
-  const response = await fetch(`${pqBase()}/intakes`, {
+  const response = await fetchPracticeQWithRetry(`${pqBase()}/intakes`, {
     method: "POST",
     headers: pqHeaders(),
     body: JSON.stringify(fullIntake),
@@ -996,7 +996,7 @@ export async function markPracticeQIntakeCompletedViaApi(
     Status: "Completed",
   };
 
-  const response = await fetch(`${pqBase()}/intakes`, {
+  const response = await fetchPracticeQWithRetry(`${pqBase()}/intakes`, {
     method: "POST",
     headers: pqHeaders(),
     body: JSON.stringify(payload),
@@ -1297,6 +1297,39 @@ function pqHeaders() {
 }
 
 const pqBase = () => serviceConfig.practiceq.baseUrl.replace(/\/$/, "");
+
+async function fetchPracticeQWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  const attempts = Math.max(1, Number(process.env.PRACTICEQ_API_RETRY_ATTEMPTS ?? 3));
+  let response: Response | null = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    response = await fetch(input, init);
+    if (!shouldRetryPracticeQResponse(response) || attempt === attempts - 1) return response;
+    await wait(retryDelayMs(response, attempt));
+  }
+
+  return response as Response;
+}
+
+function shouldRetryPracticeQResponse(response: Response) {
+  return response.status === 429 || response.status >= 500;
+}
+
+function retryDelayMs(response: Response, attempt: number) {
+  const retryAfter = response.headers?.get?.("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const dateMs = Date.parse(retryAfter);
+    if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
+  }
+  const base = Math.max(1, Number(process.env.PRACTICEQ_API_RETRY_DELAY_MS ?? 1000));
+  return base * Math.max(1, attempt + 1);
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function pqAuthHeaders() {
   return {

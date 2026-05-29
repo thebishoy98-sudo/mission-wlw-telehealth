@@ -187,6 +187,7 @@ describe("PracticeQ answer mapping contract", () => {
 describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
   const originalConfig = { ...serviceConfig.practiceq };
   const originalFetch = global.fetch;
+  const originalRetryDelay = process.env.PRACTICEQ_API_RETRY_DELAY_MS;
 
   beforeEach(() => {
     Object.assign(serviceConfig.practiceq, {
@@ -204,6 +205,11 @@ describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
   afterEach(() => {
     Object.assign(serviceConfig.practiceq, originalConfig);
     global.fetch = originalFetch;
+    if (originalRetryDelay === undefined) {
+      delete process.env.PRACTICEQ_API_RETRY_DELAY_MS;
+    } else {
+      process.env.PRACTICEQ_API_RETRY_DELAY_MS = originalRetryDelay;
+    }
   });
 
   it("posts the full intake with Status Completed without requiring answer changes", async () => {
@@ -225,5 +231,52 @@ describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
         }),
       })
     );
+  });
+});
+
+describe("practiceq API retry handling", () => {
+  const originalConfig = { ...serviceConfig.practiceq };
+  const originalFetch = global.fetch;
+  const originalRetryDelay = process.env.PRACTICEQ_API_RETRY_DELAY_MS;
+
+  beforeEach(() => {
+    Object.assign(serviceConfig.practiceq, {
+      ...originalConfig,
+      apiKey: "test-practiceq-key",
+      baseUrl: "https://intakeq.test/api/v1",
+    });
+    process.env.PRACTICEQ_API_RETRY_DELAY_MS = "1";
+  });
+
+  afterEach(() => {
+    Object.assign(serviceConfig.practiceq, originalConfig);
+    global.fetch = originalFetch;
+    if (originalRetryDelay === undefined) {
+      delete process.env.PRACTICEQ_API_RETRY_DELAY_MS;
+    } else {
+      process.env.PRACTICEQ_API_RETRY_DELAY_MS = originalRetryDelay;
+    }
+  });
+
+  it("retries temporary PracticeQ 429 responses before reading an intake", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: () => null },
+        text: async () => "",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ Id: "intake_1", Status: "Completed" }),
+      }) as jest.Mock;
+
+    const intake = await practiceq.getIntakeById("intake_1");
+
+    expect(intake?.Status).toBe("Completed");
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
