@@ -1,4 +1,8 @@
-type PaymentBypassEnv = Pick<NodeJS.ProcessEnv, "BYPASS_QB_PAYMENTS" | "NEXT_PUBLIC_QB_PAYMENTS_ENABLED">;
+type PaymentBypassEnv = {
+  [key: string]: string | undefined;
+  BYPASS_QB_PAYMENTS?: string;
+  NEXT_PUBLIC_QB_PAYMENTS_ENABLED?: string;
+};
 
 function readBoolean(value: string | undefined) {
   if (value === "true") return true;
