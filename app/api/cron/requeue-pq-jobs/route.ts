@@ -13,10 +13,32 @@ import * as dbServer from "@/lib/db.server";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+function isAuthorized(req: NextRequest): boolean {
   const provided = req.headers.get("x-practiceq-api-key") ?? "";
   const expected = process.env.PRACTICEQ_API_KEY ?? "";
-  if (!expected || provided !== expected) {
+  return !!(expected && provided === expected);
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const [summary, recent] = await Promise.all([
+    dbServer.practiceqAutomationJobDb.getStatusSummary(),
+    dbServer.practiceqAutomationJobDb.getRecent(5),
+  ]);
+  return NextResponse.json({
+    summary,
+    recent: recent.map((j) => ({
+      id: j.id, status: j.status, attempts: j.attempts,
+      intakeId: j.intakeId ?? null, lastError: j.lastError ?? null,
+      updatedAt: j.updatedAt,
+    })),
+  });
+}
+
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

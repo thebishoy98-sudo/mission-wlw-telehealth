@@ -726,6 +726,27 @@ export const practiceqAutomationJobDb = {
     await this.create(updated);
     return updated;
   },
+
+  async getStatusSummary(): Promise<{ status: string; count: number; lastError?: string | null }[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT status, COUNT(*)::int AS count, MAX(last_error) AS last_error
+      FROM practiceq_automation_jobs
+      GROUP BY status
+      ORDER BY status
+    `;
+    return rows.map((r) => ({ status: r.status, count: r.count, lastError: r.last_error ?? null }));
+  },
+
+  async getRecent(limit = 10): Promise<PracticeQAutomationJob[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs
+      ORDER BY updated_at DESC
+      LIMIT ${limit}
+    `;
+    return rows.map(rowToPracticeQAutomationJob);
+  },
 };
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
