@@ -1,19 +1,15 @@
 import { buildIdentityUploads, loadIdentityMedia } from "@/services/identity-storage";
-import { serviceConfig } from "@/lib/service-config";
 
 const originalEnv = process.env;
-const originalConfig = { ...serviceConfig.practiceq };
 
 describe("identity-storage", () => {
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
-    Object.assign(serviceConfig.practiceq, originalConfig);
   });
 
   afterAll(() => {
     process.env = originalEnv;
-    Object.assign(serviceConfig.practiceq, originalConfig);
   });
 
   afterEach(() => {
@@ -21,22 +17,29 @@ describe("identity-storage", () => {
     jest.restoreAllMocks();
   });
 
-  it("rejects PracticeQ media storage in production when no PracticeQ client is linked", async () => {
+  function configureS3Storage() {
     process.env.VERCEL_ENV = "production";
-    serviceConfig.practiceq.apiKey = "test-api-key";
-    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+    process.env.IDENTITY_STORAGE_PROVIDER = "s3";
+    process.env.IDENTITY_STORAGE_BUCKET = "mission-identity";
+    process.env.IDENTITY_STORAGE_REGION = "us-east-1";
+    process.env.IDENTITY_STORAGE_ACCESS_KEY_ID = "access-key";
+    process.env.IDENTITY_STORAGE_SECRET_ACCESS_KEY = "secret-key";
+    process.env.IDENTITY_STORAGE_ENDPOINT = "https://storage.test";
+    process.env.IDENTITY_STORAGE_FORCE_PATH_STYLE = "true";
+  }
+
+  it("rejects production identity media storage when no storage provider is configured", async () => {
+    process.env.VERCEL_ENV = "production";
 
     await expect(buildIdentityUploads({
       orderId: "order_1",
       idImageData: "data:image/jpeg;base64,aGVsbG8=",
       selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
-    })).rejects.toThrow("PracticeQ client id is required");
+    })).rejects.toThrow("IDENTITY_STORAGE_PROVIDER is required");
   });
 
-  it("uploads identity media to PracticeQ in production and stores only file references locally", async () => {
-    process.env.VERCEL_ENV = "production";
-    serviceConfig.practiceq.apiKey = "test-api-key";
-    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+  it("uploads identity media to S3 in production and stores only object references locally", async () => {
+    configureS3Storage();
 
     const fetchMock = jest
       .fn()
@@ -54,7 +57,6 @@ describe("identity-storage", () => {
 
     const result = await buildIdentityUploads({
       orderId: "order_1",
-      practiceqClientId: "12345",
       idImageData: "data:image/jpeg;base64,aGVsbG8=",
       selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
       identityVideoData: "data:video/webm;base64,aGVsbG8=",
@@ -62,28 +64,18 @@ describe("identity-storage", () => {
 
     expect(result.uploads).toHaveLength(2);
     expect(result.uploads.every((upload) => upload.base64Data === "")).toBe(true);
-    expect(result.uploads.map((upload) => upload.storageUrl)).toEqual([
-      "practiceq://files/file_license",
-      "practiceq://files/file_video",
-    ]);
-    expect(result.uploads.map((upload) => upload.storageKey)).toEqual(["file_license", "file_video"]);
+    expect(result.uploads.every((upload) => upload.storageUrl?.startsWith("s3://mission-identity/identity/order_1/"))).toBe(true);
+    expect(result.uploads.every((upload) => upload.storageKey?.startsWith("identity/order_1/"))).toBe(true);
     expect(result.aiUploads.every((upload) => upload.base64Data.startsWith("data:image/jpeg;base64,"))).toBe(true);
     expect(result.aiUploads[1].base64Data).toBe("data:image/jpeg;base64,aGVsbG8=");
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "https://intakeq.com/api/v1/files/12345",
-      expect.objectContaining({
-        method: "POST",
-        headers: { "X-Auth-Key": "test-api-key" },
-      })
-    );
+    expect(fetchMock.mock.calls[0][0]).toContain("https://storage.test/mission-identity/identity/order_1/driver_license/");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: "PUT" }));
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toContain("AWS4-HMAC-SHA256");
   });
 
   it("accepts browser video data URLs that include codec parameters", async () => {
-    process.env.VERCEL_ENV = "production";
-    serviceConfig.practiceq.apiKey = "test-api-key";
-    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+    configureS3Storage();
 
     global.fetch = jest
       .fn()
@@ -100,19 +92,17 @@ describe("identity-storage", () => {
 
     const result = await buildIdentityUploads({
       orderId: "order_1",
-      practiceqClientId: "12345",
       idImageData: "data:image/jpeg;base64,aGVsbG8=",
       selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
       identityVideoData: "data:video/webm;codecs=vp8;base64,aGVsbG8=",
     });
 
     expect(result.uploads[1].mimeType).toBe("video/webm");
-    expect(result.uploads[1].storageUrl).toBe("practiceq://files/file_video");
+    expect(result.uploads[1].storageUrl).toMatch(/^s3:\/\/mission-identity\/identity\/order_1\/selfie_video\//);
   });
 
-  it("loads PracticeQ-backed identity media through the Files API", async () => {
-    serviceConfig.practiceq.apiKey = "test-api-key";
-    serviceConfig.practiceq.baseUrl = "https://intakeq.com/api/v1";
+  it("loads S3-backed identity media through signed object storage reads", async () => {
+    configureS3Storage();
     const bytes = Buffer.from("hello");
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -128,8 +118,8 @@ describe("identity-storage", () => {
       filename: "identity-document.jpg",
       fileSize: 5,
       mimeType: "image/jpeg",
-      storageUrl: "practiceq://files/file_license",
-      storageKey: "file_license",
+      storageUrl: "s3://mission-identity/identity/order_1/driver_license/file_license.jpg",
+      storageKey: "identity/order_1/driver_license/file_license.jpg",
       base64Data: "",
       uploadedAt: new Date().toISOString(),
       status: "uploaded",
@@ -137,8 +127,7 @@ describe("identity-storage", () => {
 
     expect(media?.contentType).toBe("image/jpeg");
     expect(media?.body.toString("utf8")).toBe("hello");
-    expect(fetchMock).toHaveBeenCalledWith("https://intakeq.com/api/v1/files/file_license", {
-      headers: { "X-Auth-Key": "test-api-key" },
-    });
+    expect(fetchMock.mock.calls[0][0]).toBe("https://storage.test/mission-identity/identity/order_1/driver_license/file_license.jpg");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toContain("AWS4-HMAC-SHA256");
   });
 });

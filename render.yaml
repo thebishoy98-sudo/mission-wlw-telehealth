@@ -85,9 +85,9 @@ services:
       - key: NEXT_PUBLIC_QB_PAYMENTS_APP_KEY
         sync: false
 
-      # Pharmacy is intentionally wired to LifeFile sandbox for Render testing.
+      # Pharmacy dispatch is routed through AppSheet for the PracticeQ completion flow.
       - key: PHARMACY_PROVIDER
-        value: lifefile
+        value: appsheet
       - key: USE_REAL_LIFEFILE
         value: true
       - key: LIFEFILE_BASE_URL
@@ -119,7 +119,7 @@ services:
       - key: LIFEFILE_PRESCRIBER_EMAIL
         sync: false
       - key: LIFEFILE_SHIPPING_SERVICE_ID
-        value: 999
+        value: 6230
       - key: LIFEFILE_WEBHOOK_SECRET
         sync: false
 
@@ -159,7 +159,7 @@ services:
 
       # Optional AppSheet mirror/tracking support.
       - key: USE_REAL_APPSHEET
-        value: false
+        value: "true"
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY
@@ -206,6 +206,14 @@ services:
       - key: PRACTICEQ_ADMIN_SET_COMPLETED
         value: true
       - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
+        sync: false
+      - key: PHARMACY_PROVIDER
+        value: appsheet
+      - key: USE_REAL_APPSHEET
+        value: "true"
+      - key: APPSHEET_ID
+        sync: false
+      - key: APPSHEET_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false

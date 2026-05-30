@@ -30,8 +30,8 @@ const LF_PRODUCT_MAP: Record<string, number> = {
   acarbose: 305492220,
 };
 
-// Default sandbox shipping service: 999 = Delivery
-const DEFAULT_SHIPPING_SERVICE_ID = 999;
+// 1stChoiceRx sandbox service id.
+const DEFAULT_SHIPPING_SERVICE_ID = 6230;
 
 // Sandbox order status codes
 export const LF_STATUS_CODES = {

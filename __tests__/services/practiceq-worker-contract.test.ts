@@ -22,6 +22,25 @@ describe("PracticeQ worker background submission contract", () => {
     expect(source).toContain("back\\s+to\\s+questionnaire");
   });
 
+  it("updates IntakeQ checkbox choices through ngModel and the repeated option scope", () => {
+    expect(source).toContain("ngModel.$setViewValue(true)");
+    expect(source).toContain("optionScope.o.Checked = true");
+    expect(source).toContain("question.QuestionOptions");
+    expect(source).toContain('selected.join(", ")');
+  });
+
+  it("submits consent with typed signatures instead of drawing on the signature canvas", () => {
+    expect(source).toContain("question.signature.Typed");
+    expect(source).toContain("clickPracticeQControlByText(page, /type\\s+it/i)");
+    expect(source).not.toContain("canvas.pad");
+    expect(source).not.toContain("page.mouse.down()");
+  });
+
+  it("clicks visible PracticeQ controls by text or input value before hidden templates", () => {
+    expect(source).toContain("isVisible(el) && matcher.test(textFor(el))");
+    expect(source).toContain('el.getAttribute("value")');
+  });
+
   it("reads PracticeQ question text from the Angular repeat block around answer fields", () => {
     expect(source).toContain('el.closest("[ng-repeat], .question, .panel, fieldset")');
   });

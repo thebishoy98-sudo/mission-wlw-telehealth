@@ -27,6 +27,11 @@ type DecodedDataUrl = {
   buffer: Buffer;
 };
 
+type LoadedIdentityMedia = {
+  contentType: string;
+  body: Buffer;
+};
+
 const MAX_IDENTITY_MEDIA_BYTES = 50 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "video/webm", "video/mp4"]);
 
@@ -73,6 +78,28 @@ export function assertIdentityStorageReady() {
     requireEnv("IDENTITY_STORAGE_ACCESS_KEY_ID");
     requireEnv("IDENTITY_STORAGE_SECRET_ACCESS_KEY");
   }
+}
+
+export async function loadIdentityMedia(upload: Upload): Promise<LoadedIdentityMedia | null> {
+  if (upload.base64Data) {
+    const decoded = decodeDataUrl(upload.base64Data);
+    return { contentType: decoded.mimeType, body: decoded.buffer };
+  }
+
+  if (!upload.storageUrl && !upload.storageKey) return null;
+
+  const storageUrl = upload.storageUrl;
+  const storageKey = upload.storageKey;
+
+  if (storageUrl?.startsWith("practiceq://files/") || storageKey?.startsWith("file_")) {
+    return loadPracticeQFile(storageKey ?? storageUrl?.replace("practiceq://files/", "") ?? "");
+  }
+
+  if (storageUrl?.startsWith("s3://") || storageKey) {
+    return loadS3Object(upload);
+  }
+
+  return null;
 }
 
 async function storeIdentityMedia(input: IdentityMediaInput): Promise<Upload> {
@@ -135,7 +162,7 @@ function getStorageProvider(): "database" | "s3" {
 }
 
 function decodeDataUrl(dataUrl: string): DecodedDataUrl {
-  const match = dataUrl.match(/^data:([a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\r\n]+)$/);
+  const match = dataUrl.match(/^data:([a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+)(?:;[^,]*)*;base64,([a-zA-Z0-9+/=\r\n]+)$/);
   if (!match) {
     throw new Error("Identity media must be submitted as a base64 data URL");
   }
@@ -190,6 +217,47 @@ async function putS3Object(input: IdentityMediaInput, decoded: DecodedDataUrl) {
   }
 
   return { storageUrl: `s3://${bucket}/${key}`, storageKey: key };
+}
+
+async function loadS3Object(upload: Upload): Promise<LoadedIdentityMedia | null> {
+  const bucket = requireEnv("IDENTITY_STORAGE_BUCKET");
+  const region = requireEnv("IDENTITY_STORAGE_REGION");
+  const accessKeyId = requireEnv("IDENTITY_STORAGE_ACCESS_KEY_ID");
+  const secretAccessKey = requireEnv("IDENTITY_STORAGE_SECRET_ACCESS_KEY");
+  const endpoint = process.env.IDENTITY_STORAGE_ENDPOINT;
+  const forcePathStyle = process.env.IDENTITY_STORAGE_FORCE_PATH_STYLE === "true";
+  const key = upload.storageKey ?? upload.storageUrl?.replace(/^s3:\/\/[^/]+\//, "");
+  if (!key) return null;
+
+  const url = buildS3Url({ bucket, region, key, endpoint, forcePathStyle });
+  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const headers = signS3Get({ url, region, accessKeyId, secretAccessKey, amzDate, dateStamp });
+  const response = await fetch(url, { headers });
+  if (!response.ok) return null;
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    contentType: response.headers.get("content-type") ?? upload.mimeType,
+    body: Buffer.from(arrayBuffer),
+  };
+}
+
+async function loadPracticeQFile(fileId: string): Promise<LoadedIdentityMedia | null> {
+  const apiKey = process.env.PRACTICEQ_API_KEY?.trim();
+  const baseUrl = process.env.PRACTICEQ_BASE_URL?.trim() || "https://intakeq.com/api/v1";
+  if (!apiKey) return null;
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/files/${encodeURIComponent(fileId)}`, {
+    headers: { "X-Auth-Key": apiKey },
+  });
+  if (!response.ok) return null;
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    contentType: response.headers.get("content-type") ?? "application/octet-stream",
+    body: Buffer.from(arrayBuffer),
+  };
 }
 
 function buildStorageKey(orderId: string, type: Upload["type"], filename: string) {
@@ -268,6 +336,54 @@ function signS3Put({
   return {
     "Content-Type": contentType,
     "X-Amz-Content-Sha256": payloadHash,
+    "X-Amz-Date": amzDate,
+    Authorization:
+      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
+      `SignedHeaders=${signedHeaders}, Signature=${signature}`,
+  };
+}
+
+function signS3Get({
+  url,
+  region,
+  accessKeyId,
+  secretAccessKey,
+  amzDate,
+  dateStamp,
+}: {
+  url: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  amzDate: string;
+  dateStamp: string;
+}) {
+  const parsed = new URL(url);
+  const canonicalUri = parsed.pathname || "/";
+  const canonicalQueryString = "";
+  const canonicalHeaders =
+    `host:${parsed.host}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-date";
+  const canonicalRequest = [
+    "GET",
+    canonicalUri,
+    canonicalQueryString,
+    canonicalHeaders,
+    signedHeaders,
+    "UNSIGNED-PAYLOAD",
+  ].join("\n");
+  const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join("\n");
+  const signingKey = getSignatureKey(secretAccessKey, dateStamp, region, "s3");
+  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+
+  return {
     "X-Amz-Date": amzDate,
     Authorization:
       `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +

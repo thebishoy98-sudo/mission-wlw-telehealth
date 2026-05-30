@@ -988,20 +988,19 @@ async function completeVisibleConsentDocument(page: Page, fillPlan: ReturnType<t
     await checkPracticeQCheckbox(checkbox);
   }
 
-  const submitSignature = page.getByRole("button", { name: /submit signature|click to sign/i }).first();
+  const typedSignature = page.locator("input[ng-model='question.signature.Typed'], input.name").first();
+  if (await typedSignature.isVisible().catch(() => false)) {
+    await enterFieldValue(typedSignature, signedName, "Signature");
+  }
+
+  const submitSignature = page
+    .getByRole("button", { name: /submit signature|click to sign/i })
+    .or(page.getByRole("link", { name: /submit signature|click to sign/i }))
+    .or(page.locator("button, a, input[type='button'], input[type='submit']").filter({ hasText: /submit signature|click to sign/i }))
+    .or(page.locator("input[value*='Submit Signature'], input[value*='Click to Sign']"))
+    .first();
   if (await submitSignature.isVisible().catch(() => false)) {
     await submitSignature.scrollIntoViewIfNeeded().catch(() => {});
-    const canvas = page.locator("canvas.pad, canvas").first();
-    if (await canvas.isVisible().catch(() => false)) {
-      const box = await canvas.boundingBox().catch(() => null);
-      if (box) {
-        await page.mouse.move(box.x + 30, box.y + 55);
-        await page.mouse.down();
-        await page.mouse.move(box.x + 105, box.y + 35);
-        await page.mouse.move(box.x + 180, box.y + 60);
-        await page.mouse.up();
-      }
-    }
     await submitSignature.click({ timeout: 8000 }).catch(async () => {
       await submitSignature.click({ force: true, timeout: 5000 }).catch(async () => {
         await clickPracticeQControlByText(page, /submit\s+signature|click\s+to\s+sign/i);
@@ -1255,22 +1254,68 @@ function escapeRegExp(value: string) {
 }
 
 async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {
-  await input.evaluate((el) => {
+  await input.evaluate(function (el) {
     const input = el as HTMLInputElement;
+    const angular = (window as any).angular;
+    const normalize = (value: unknown) => String(value ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const labelText = normalize(input.closest("label")?.textContent ?? input.parentElement?.textContent ?? input.value);
+    const scope = angular?.element(input)?.scope?.();
+    const ngModel = angular?.element(input)?.controller?.("ngModel");
+    const scopes: any[] = [];
+    for (let current = scope, depth = 0; current && depth < 8; current = current.$parent, depth += 1) {
+      scopes.push(current);
+    }
+    const optionScope = scopes.find((candidate) => normalize(candidate?.o?.Text) === labelText)
+      ?? scopes.find((candidate) => candidate?.o);
+    const questionScope = scopes.find((candidate) => candidate?.question)
+      ?? optionScope?.$parent
+      ?? scope;
+    const question = questionScope?.question;
+
+    if (ngModel?.$setViewValue) {
+      ngModel.$setViewValue(true);
+      ngModel.$render?.();
+    }
+    if (optionScope?.o) {
+      optionScope.o.Checked = true;
+      optionScope.o.Answer = optionScope.o.Text ?? input.value;
+    }
+    if (question) {
+      question.isanswered = true;
+      if (Array.isArray(question.QuestionOptions)) {
+        for (const option of question.QuestionOptions) {
+          if (normalize(option?.Text) === labelText) {
+            option.Checked = true;
+            option.Answer = option.Text;
+          }
+        }
+        const selected = question.QuestionOptions
+          .filter((option: any) => option?.Checked)
+          .map((option: any) => option?.Text)
+          .filter(Boolean);
+        if (selected.length) question.Answer = selected.join(", ");
+      } else {
+        question.Answer = input.value || question.Answer || true;
+      }
+      questionScope?.changed?.(question);
+      questionScope?.onblur?.(question, question.Answer, optionScope?.o);
+      questionScope?.textChanged?.();
+    }
     input.checked = true;
     input.setAttribute("checked", "checked");
-    const angular = (window as any).angular;
-    const scope = angular?.element(el).scope?.();
-    if (scope?.question) {
-      scope.question.Answer = input.value || scope.question.Answer || true;
-      scope.changed?.(scope.question);
-      scope.textChanged?.();
-      scope.$applyAsync?.();
-    }
-    input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("blur", { bubbles: true }));
+    scope?.$applyAsync?.();
+    optionScope?.$applyAsync?.();
+    questionScope?.$applyAsync?.();
   }).catch(() => {});
+  if (await input.isChecked().catch(() => false)) return;
   await input.click({ timeout: 5000 }).catch(async () => {
     await input.evaluate((el) => {
       const target = el.parentElement?.querySelector("ins.iCheck-helper")
@@ -1324,7 +1369,12 @@ async function setPracticeQAngularChoice(page: Page, questionContext: string, la
           if (normalize(option?.Text) === normalizedLabel) {
             option.Checked = true;
             option.Answer = option.Text;
-            question.Answer = option.Text;
+            question.isanswered = true;
+            const selected = question.QuestionOptions
+              .filter((candidate: any) => candidate?.Checked)
+              .map((candidate: any) => candidate?.Text)
+              .filter(Boolean);
+            if (selected.length) question.Answer = selected.join(", ");
             intakeScope?.onblur?.(question, question.Answer, option);
             changed = true;
           }
@@ -1334,7 +1384,6 @@ async function setPracticeQAngularChoice(page: Page, questionContext: string, la
     if (changed) {
       intakeScope?.changed?.();
       intakeScope?.textChanged?.();
-      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
       intakeScope?.$applyAsync?.();
     }
   }, { questionContext, labelText }).catch(() => {});
@@ -1366,10 +1415,13 @@ async function clickContinue(page: Page): Promise<boolean> {
 async function clickFinalSubmit(page: Page): Promise<boolean> {
   await waitForPracticeQReady(page);
 
+  const visibleClicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
+  if (visibleClicked) return true;
+
   // Use count() > 0 instead of isVisible() — headless getBoundingClientRect() returns zeros.
   // force:true bypasses viewport/visibility checks that always fail in headless mode.
   const direct = page
-    .locator("button, input[type='submit'], input[type='button']")
+    .locator("button, a, input[type='submit'], input[type='button']")
     .filter({ hasText: /submit(?: form)?|finish|done|complete/i })
     .or(page.locator("input[value*='Submit'], input[value*='submit'], input[value*='Finish'], input[value*='Done']"))
     .first();
@@ -1380,51 +1432,46 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     return true;
   }
 
-  // DOM fallback — fire native events without any visibility filter
-  const clicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
-  return clicked;
+  return false;
 }
 
 async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise<boolean> {
-  const clicked = await page.evaluate(({ source, flags }) => {
-    const matcher = new RegExp(source, flags.includes("i") ? flags : `${flags}i`);
-    const isVisible = (el: Element) => {
-      const node = el as HTMLElement;
-      const style = window.getComputedStyle(node);
-      const rect = node.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
-    };
-    const textFor = (el: Element) => [
-      el.textContent,
-      el.getAttribute("value"),
-      el.getAttribute("aria-label"),
-      el.getAttribute("title"),
-    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-    const selector = [
-      "button",
-      "a",
-      "input[type='button']",
-      "input[type='submit']",
-      "[role='button']",
-      ".btn",
-      ".btn-primary",
-      "span",
-      "div",
-    ].join(",");
-    const candidates = Array.from(document.querySelectorAll(selector));
-    const match = candidates.find((el) => isVisible(el) && matcher.test(textFor(el)));
-    const target = match?.closest("button,a,input[type='button'],input[type='submit'],[role='button'],.btn,.btn-primary") ?? match;
-    if (!target) return false;
-    const node = target as HTMLElement;
+  const flags = pattern.flags.includes("i") ? pattern.flags : `${pattern.flags}i`;
+  const clicked = await page.evaluate(`
+(() => {
+  const matcher = new RegExp(${JSON.stringify(pattern.source)}, ${JSON.stringify(flags)});
+  const isVisible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+  };
+  const textFor = (el) => [
+    el.textContent,
+    el.getAttribute("value"),
+    el.getAttribute("aria-label"),
+    el.getAttribute("title"),
+  ].filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
+  const clickNode = (node) => {
     node.scrollIntoView({ block: "center", inline: "center" });
     node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
     node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     node.click();
     return true;
-  }, { source: pattern.source, flags: pattern.flags }).catch(() => false);
+  };
+  const controls = Array.from(document.querySelectorAll("button,a,input[type='button'],input[type='submit'],[role='button']"));
+  const match = controls.find((el) => isVisible(el) && matcher.test(textFor(el)));
+  if (match) return clickNode(match);
+  const containers = Array.from(document.querySelectorAll("span,div,label"));
+  const container = containers.find((el) => isVisible(el) && matcher.test(textFor(el)));
+  const target = container?.closest("button,a,input[type='button'],input[type='submit'],[role='button'],.btn,.btn-primary");
+  if (!target || !isVisible(target)) return false;
+  return clickNode(target);
+})()
+`).catch(() => false);
   if (clicked) await page.waitForTimeout(1000);
-  return clicked;
+  return Boolean(clicked);
 }
 
 async function waitForPracticeQReady(page: Page) {

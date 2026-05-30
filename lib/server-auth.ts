@@ -42,7 +42,7 @@ export function requireAdmin(req: Request) {
 
 export function requireProvider(req: Request) {
   if (isProviderRequest(req) || isAdminRequest(req)) return null;
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return NextResponse.json({ error: "Provider authorization required" }, { status: 401 });
 }
 
 export function requireProviderOrAdmin(req: Request) {
