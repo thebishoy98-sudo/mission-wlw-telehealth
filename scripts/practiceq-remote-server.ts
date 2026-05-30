@@ -48,6 +48,32 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV, startedAt });
     }
 
+    if (url.pathname === "/seed-answers" && req.method === "POST") {
+      const apiKey = (req.headers["x-practiceq-api-key"] ?? "") as string;
+      if (!apiKey || apiKey !== process.env.PRACTICEQ_API_KEY) {
+        return sendJson(res, 401, { error: "Unauthorized" });
+      }
+      const body = await readJson(req);
+      const { orderId, answers } = body as { orderId: string; answers: Record<string, string> };
+      if (!orderId || typeof answers !== "object") {
+        return sendJson(res, 400, { error: "orderId and answers required" });
+      }
+      const modules = await loadRemoteServerModules();
+      const saved: string[] = [];
+      for (const [questionId, answer] of Object.entries(answers)) {
+        if (!answer.trim()) continue;
+        await modules.dbServer.answerDb.create({
+          id: `answer_${orderId}_${questionId}`,
+          orderId,
+          questionId,
+          answer: String(answer).trim(),
+          createdAt: new Date().toISOString(),
+        }).catch((err: Error) => console.error("seed-answers save error:", err.message));
+        saved.push(questionId);
+      }
+      return sendJson(res, 200, { saved, orderId });
+    }
+
     if (url.pathname === "/jobs") {
       const apiKey = (url.searchParams.get("key") ?? req.headers["x-practiceq-api-key"] ?? "") as string;
       if (!apiKey || apiKey !== process.env.PRACTICEQ_API_KEY) {

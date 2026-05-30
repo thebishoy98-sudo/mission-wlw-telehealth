@@ -67,6 +67,14 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain('querySelector?.("h1,h2,h3,h4,h5,h6,label")');
   });
 
+  it("fails fast with a clear message when required patient vitals are missing from the DB", () => {
+    expect(workerSource).toContain("missingVitals");
+    expect(workerSource).toContain("Missing required patient vitals for IntakeQ");
+    expect(workerSource).toContain("Re-seed answers for orderId=");
+    expect(workerSource).toContain("findPracticeQAnswerForPrompt(\"What is your height?\"");
+    expect(workerSource).toContain("findPracticeQAnswerForPrompt(\"What is your current body weight?\"");
+  });
+
   it("trusts the browser submit when PRACTICEQ_API_KEY is absent rather than failing the job", () => {
     expect(workerSource).toContain("PRACTICEQ_API_KEY not set — skipping API verification, trusting browser submit.");
     expect(workerSource).toContain("process.env.PRACTICEQ_API_KEY");

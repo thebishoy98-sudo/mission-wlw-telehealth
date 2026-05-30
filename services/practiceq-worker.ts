@@ -145,6 +145,21 @@ export async function startPracticeQRemoteSession(
   if (!patient) return { status: "failed", error: "Patient not found" };
 
   const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
+
+  // Pre-check: IntakeQ requires height/weight — fail fast instead of burning attempts
+  // before PracticeQ rejects the background submit with "unanswered required questions".
+  const missingVitals: string[] = [];
+  if (!findPracticeQAnswerForPrompt("What is your height?", fillPlan)) missingVitals.push("height");
+  if (!findPracticeQAnswerForPrompt("What is your current body weight?", fillPlan)) missingVitals.push("current body weight");
+  if (!findPracticeQAnswerForPrompt("What is your ideal body weight?", fillPlan)) missingVitals.push("ideal body weight");
+  if (missingVitals.length > 0) {
+    return {
+      status: "failed",
+      error: `Missing required patient vitals for IntakeQ: ${missingVitals.join(", ")}. ` +
+        `Re-seed answers for orderId=${job.orderId} then requeue.`,
+    };
+  }
+
   const uploadFile = selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
@@ -1609,7 +1624,7 @@ function extractPracticeQIntakeId(url: string): string | undefined {
 }
 
 function looksSubmitted(text: string): boolean {
-  return /thank you|submitted|received your form|form is complete|successfully submitted/i.test(text);
+  return /thank you|submitted|received your form|intake has been received|form is complete|successfully submitted/i.test(text);
 }
 
 async function setPracticeQIntakeCompletedInAdmin(intakeId: string): Promise<boolean> {
