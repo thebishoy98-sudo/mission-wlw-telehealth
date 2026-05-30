@@ -372,6 +372,27 @@ export const questionDb = {
       displayOrder: r.display_order, disqualifying: r.disqualifying ?? undefined,
     }));
   },
+
+  async upsert(question: Question): Promise<Question> {
+    if (!isDbAvailable()) return question;
+    await sql`
+      INSERT INTO questions (id, category, text, type, options, required, display_order, disqualifying)
+      VALUES (
+        ${question.id}, ${question.category}, ${question.text}, ${question.type},
+        ${JSON.stringify(question.options ?? [])}::jsonb, ${question.required},
+        ${question.displayOrder}, ${question.disqualifying ?? null}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        category = EXCLUDED.category,
+        text = EXCLUDED.text,
+        type = EXCLUDED.type,
+        options = EXCLUDED.options,
+        required = EXCLUDED.required,
+        display_order = EXCLUDED.display_order,
+        disqualifying = EXCLUDED.disqualifying
+    `;
+    return question;
+  },
 };
 
 // ── Provider Reviews ──────────────────────────────────────────────────────────

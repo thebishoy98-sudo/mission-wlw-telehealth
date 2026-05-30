@@ -149,7 +149,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Server-side eligibility re-check
-    // Persist submitted answers to Postgres so provider chart can read them
+    const questions = await dbServer.questionDb.getAll().catch(() => []);
+    const localQuestions = db.questionDb.getAll();
+    const fallbackQuestions = ensurePracticeQRequiredQuestions(questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions));
+    const questionById = new Map(fallbackQuestions.map((question) => [question.id, question]));
+
+    // Persist submitted answers to Postgres so provider chart and PracticeQ worker can read them.
+    // PracticeQ-required questions can come from the seed catalog even when the live DB catalog is stale,
+    // so upsert those question rows before inserting answers under the FK.
     const submittedAnswerRows = questionnaireAnswers && typeof questionnaireAnswers === "object"
       ? Object.entries(questionnaireAnswers as Record<string, string>)
           .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
@@ -162,6 +169,12 @@ export async function POST(req: NextRequest) {
           }))
       : [];
     if (submittedAnswerRows.length) {
+      const submittedQuestions = submittedAnswerRows
+        .flatMap((answer) => {
+          const question = questionById.get(answer.questionId);
+          return question ? [question] : [];
+        });
+      await Promise.all(submittedQuestions.map((question) => dbServer.questionDb.upsert(question).catch(() => question))).catch(() => {});
       await Promise.all(submittedAnswerRows.map((a) => dbServer.answerDb.create(a).catch(() => {}))).catch(() => {});
     }
     if (consentData?.signedName) {
@@ -177,9 +190,6 @@ export async function POST(req: NextRequest) {
 
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
-    const questions = await dbServer.questionDb.getAll().catch(() => []);
-    const localQuestions = db.questionDb.getAll();
-    const fallbackQuestions = ensurePracticeQRequiredQuestions(questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions));
     const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
     if (!questionnaire.complete) {
       return NextResponse.json(
