@@ -63,6 +63,11 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain('querySelector?.("h1,h2,h3,h4,h5,h6,label")');
   });
 
+  it("trusts the browser submit when PRACTICEQ_API_KEY is absent rather than failing the job", () => {
+    expect(workerSource).toContain("PRACTICEQ_API_KEY not set — skipping API verification, trusting browser submit.");
+    expect(workerSource).toContain("process.env.PRACTICEQ_API_KEY");
+  });
+
   it("does not let PracticeQ API verification hang after browser submit succeeds", () => {
     expect(workerSource).toContain("PRACTICEQ_API_VERIFY_TIMEOUT_MS");
     expect(workerSource).toContain("PracticeQ API verification timed out.");

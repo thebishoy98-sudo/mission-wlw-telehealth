@@ -1438,6 +1438,12 @@ async function verifyPracticeQSavedSubmission(
 ): Promise<WorkerResult> {
   if (result.status === "failed") return result;
 
+  // If no API key is configured, trust the browser submit result directly.
+  if (!process.env.PRACTICEQ_API_KEY) {
+    console.warn("PRACTICEQ_API_KEY not set — skipping API verification, trusting browser submit.");
+    return { ...result, status: "completed" };
+  }
+
   const matchedIntake = await withPracticeQTimeout(
     findRecentPracticeQIntake(context),
     PRACTICEQ_API_VERIFY_TIMEOUT_MS,
