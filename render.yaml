@@ -57,7 +57,7 @@ services:
       - key: USE_REAL_QUICKBOOKS
         value: true
       - key: BYPASS_QB_PAYMENTS
-        value: false
+        value: true
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
@@ -163,4 +163,49 @@ services:
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY
+        sync: false
+
+  - type: web
+    name: mission-wlw-practiceq-remote
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev
+    startCommand: node -r tsconfig-paths/register -r ts-node/register/transpile-only scripts/practiceq-remote-server.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: POSTGRES_URL_NON_POOLING
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mission-wlw-postgres
+          property: connectionString
+      - key: PRACTICEQ_REMOTE_PUBLIC_URL
+        value: https://mission-wlw-practiceq-remote.onrender.com
+      - key: USE_REAL_PRACTICEQ
+        value: true
+      - key: PRACTICEQ_API_KEY
+        sync: false
+      - key: PRACTICEQ_BASE_URL
+        value: https://intakeq.com/api/v1
+      - key: PRACTICEQ_QUESTIONNAIRE_ID
+        sync: false
+      - key: PRACTICEQ_ADMIN_EMAIL
+        sync: false
+      - key: PRACTICEQ_ADMIN_PASSWORD
+        sync: false
+      - key: PRACTICEQ_ADMIN_SET_COMPLETED
+        value: true
+      - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false
