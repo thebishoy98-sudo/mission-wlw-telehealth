@@ -1415,15 +1415,11 @@ async function clickContinue(page: Page): Promise<boolean> {
 async function clickFinalSubmit(page: Page): Promise<boolean> {
   await waitForPracticeQReady(page);
 
-  const visibleClicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
-  if (visibleClicked) return true;
-
-  // Use count() > 0 instead of isVisible() — headless getBoundingClientRect() returns zeros.
-  // force:true bypasses viewport/visibility checks that always fail in headless mode.
   const direct = page
-    .locator("button, a, input[type='submit'], input[type='button']")
-    .filter({ hasText: /submit(?: form)?|finish|done|complete/i })
-    .or(page.locator("input[value*='Submit'], input[value*='submit'], input[value*='Finish'], input[value*='Done']"))
+    .getByRole("button", { name: /^\s*submit\s*form\s*$/i })
+    .or(page.getByRole("link", { name: /^\s*submit\s*form\s*$/i }))
+    .or(page.locator("button, a, input[type='submit'], input[type='button']").filter({ hasText: /^\s*submit\s*form\s*$/i }))
+    .or(page.locator("input[value='Submit Form'], input[value='submit form'], input[value='Submit']"))
     .first();
 
   if (await direct.count().then((c) => c > 0).catch(() => false)) {
@@ -1432,7 +1428,35 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     return true;
   }
 
-  return false;
+  const clicked = await page.evaluate(() => {
+    const textFor = (el: Element) => [
+      el.textContent,
+      el.getAttribute("value"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const isVisible = (el: Element) => {
+      const style = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const controls = Array.from(document.querySelectorAll("button,a,input[type='button'],input[type='submit'],[role='button']"));
+    const target = controls.find((el) => {
+      const text = textFor(el);
+      if (/respond\s+offline|fill\s+this\s+out\s+by\s+hand|print\s+blank\s+form/i.test(text)) return false;
+      return /^\s*(submit\s*form|submit|finish|done)\s*$/i.test(text) && isVisible(el);
+    });
+    if (!target) return false;
+    const node = target as HTMLElement;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    node.click();
+    return true;
+  }).catch(() => false);
+  if (clicked) await page.waitForTimeout(1000);
+  return Boolean(clicked);
 }
 
 async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise<boolean> {
@@ -1559,8 +1583,8 @@ async function verifyPracticeQSavedSubmission(
         PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS,
         `PracticeQ admin Set as Completed timed out for ${matchedIntake.id}.`
       ).catch(() => false);
-      if (markedCompleted) {
-        await waitForPracticeQCompletedStatus(matchedIntake.id).catch(() => false);
+      const apiCompletedAfterAdmin = await waitForPracticeQCompletedStatus(matchedIntake.id).catch(() => false);
+      if (markedCompleted || apiCompletedAfterAdmin) {
         return { ...result, status: "completed", intakeId: matchedIntake.id };
       }
       return {
@@ -1609,6 +1633,9 @@ export async function waitForPracticeQCompletedStatus(
 }
 
 export async function completePracticeQIntakeInAdmin(intakeId: string): Promise<boolean> {
+  if (await waitForPracticeQCompletedStatus(intakeId, getIntakeById, { attempts: 1, delayMs: 1 }).catch(() => false)) {
+    return true;
+  }
   return setPracticeQIntakeCompletedInAdmin(intakeId);
 }
 

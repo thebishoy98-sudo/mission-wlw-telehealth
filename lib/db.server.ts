@@ -684,9 +684,15 @@ export const practiceqAutomationJobDb = {
     const { rows } = await sql`
       SELECT * FROM practiceq_automation_jobs
       WHERE status = 'queued'
-         OR (status = 'running' AND locked_at < NOW() - INTERVAL '10 minutes')
+         OR (status = 'running' AND attempts < 10 AND locked_at < NOW() - INTERVAL '10 minutes')
          OR (status = 'failed' AND intake_id IS NULL AND attempts < 10)
-      ORDER BY created_at ASC
+      ORDER BY
+        CASE
+          WHEN status = 'queued' THEN 0
+          WHEN status = 'running' THEN 1
+          ELSE 2
+        END,
+        created_at ASC
       LIMIT ${limit}
     `;
     return rows.map(rowToPracticeQAutomationJob);

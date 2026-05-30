@@ -40,11 +40,16 @@ describe("PracticeQ remote worker resilience", () => {
 
   it("requeues stale running jobs after a Render restart or SIGTERM", () => {
     expect(dbSource).toContain("locked_at < NOW() - INTERVAL '10 minutes'");
-    expect(dbSource).toContain("status = 'running'");
+    expect(dbSource).toContain("status = 'running' AND attempts < 10");
   });
 
   it("automatically retries failed form-fill jobs that never submitted an intake", () => {
     expect(dbSource).toContain("status = 'failed' AND intake_id IS NULL AND attempts < 10");
+  });
+
+  it("prioritizes fresh queued PracticeQ jobs ahead of stale retry backlog", () => {
+    expect(dbSource).toContain("WHEN status = 'queued' THEN 0");
+    expect(dbSource).toContain("WHEN status = 'running' THEN 1");
   });
 
   it("lets the Render worker retry failed admin completion jobs with linked intakes", () => {
@@ -140,6 +145,11 @@ describe("PracticeQ remote worker resilience", () => {
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
     expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
+  });
+
+  it("does not use the offline-response control as the final PracticeQ submit button", () => {
+    expect(workerSource).toContain("respond\\s+offline|fill\\s+this\\s+out\\s+by\\s+hand|print\\s+blank\\s+form");
+    expect(workerSource).toContain("submit\\s*form|submit|finish|done");
   });
 
   it("polls PracticeQ status after admin Set as Completed", async () => {

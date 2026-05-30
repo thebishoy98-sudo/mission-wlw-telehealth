@@ -1,7 +1,8 @@
-import { chromium, type Locator, type Page } from "playwright";
+import { chromium, type BrowserContext, type Locator, type Page } from "playwright";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 type Product = {
   id: string;
@@ -32,6 +33,12 @@ const HEADLESS = process.env.E2E_HEADLESS !== "false";
 const ARTIFACT_ROOT =
   process.env.E2E_ARTIFACT_DIR ??
   path.join(os.tmpdir(), "mission-wlw-smoke", `customer-practiceq-${Date.now()}`);
+const ID_IMAGE_PATH =
+  process.env.E2E_ID_IMAGE_PATH ??
+  "C:\\Users\\BishoyKamel\\Downloads\\WhatsApp Image 2026-05-28 at 8.19.09 AM.jpeg";
+const ID_VIDEO_PATH =
+  process.env.E2E_ID_VIDEO_PATH ??
+  "C:\\Users\\BishoyKamel\\Downloads\\WhatsApp Video 2026-05-28 at 8.19.04 AM.mp4";
 
 const expectedAnswers = {
   pq_height: `5'10"`,
@@ -163,6 +170,68 @@ async function saveScreenshot(page: Page, name: string) {
   console.log(`Screenshot: ${file}`);
 }
 
+async function fileDataUrl(filePath: string, mimeType: string) {
+  const body = await fs.readFile(filePath);
+  return `data:${mimeType};base64,${body.toString("base64")}`;
+}
+
+async function videoFrameDataUrl(context: BrowserContext, videoPath: string) {
+  const page = await context.newPage();
+  try {
+    await page.setContent(`<video id="v" muted playsinline preload="auto"></video>`);
+    await page.evaluate((src) => {
+      const video = document.querySelector("video") as HTMLVideoElement;
+      video.src = src;
+      video.load();
+    }, pathToFileURL(videoPath).toString());
+    return await page.evaluate(async () => {
+      const video = document.querySelector("video") as HTMLVideoElement;
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("video metadata timed out")), 15_000);
+        video.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        video.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("video failed to load"));
+        };
+      });
+      video.currentTime = Math.min(1, Math.max(0, (video.duration || 2) / 2));
+      await new Promise<void>((resolve) => {
+        video.onseeked = () => resolve();
+        setTimeout(resolve, 2500);
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.82);
+    });
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
+async function seedIdentityCapture(page: Page, identity: {
+  licenseImageData: string;
+  selfieFrameData: string;
+  identityVideoData: string;
+}) {
+  await page.evaluate((payload) => {
+    const key = "tele_intake_form_state";
+    const current = JSON.parse(sessionStorage.getItem(key) || "{}");
+    sessionStorage.setItem(key, JSON.stringify({
+      ...current,
+      licenseUploaded: true,
+      selfieUploaded: true,
+      licenseImageData: payload.licenseImageData,
+      selfieFrameData: payload.selfieFrameData,
+      identityVideoData: payload.identityVideoData,
+    }));
+  }, identity);
+}
+
 async function clearBrowserDraftState(page: Page) {
   await page.evaluate(() => {
     for (const store of [window.sessionStorage, window.localStorage]) {
@@ -195,6 +264,8 @@ function requirePracticeQAnswers(practiceq: PracticeQMirror) {
 async function main() {
   console.log(`Customer PracticeQ smoke starting against ${BASE_URL}`);
   await fs.mkdir(ARTIFACT_ROOT, { recursive: true });
+  await fs.access(ID_IMAGE_PATH);
+  await fs.access(ID_VIDEO_PATH);
 
   const [{ products }, { questions }] = await Promise.all([
     fetchJson<{ products: Product[] }>(`${BASE_URL}/api/products`),
@@ -229,6 +300,11 @@ async function main() {
   const browser = await chromium.launch({ headless: HEADLESS, slowMo: HEADLESS ? 0 : 80 });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  const [licenseImageData, identityVideoData, selfieFrameData] = await Promise.all([
+    fileDataUrl(ID_IMAGE_PATH, "image/jpeg"),
+    fileDataUrl(ID_VIDEO_PATH, "video/mp4"),
+    videoFrameDataUrl(context, ID_VIDEO_PATH).catch(async () => fileDataUrl(ID_IMAGE_PATH, "image/jpeg")),
+  ]);
 
   let orderId = "";
   let patientId = "";
@@ -277,8 +353,9 @@ async function main() {
     await page.getByRole("button", { name: /^Continue$/ }).click();
     await page.waitForURL(/\/start\/uploads/, { timeout: 30_000 });
 
-    console.log("Step 4: uploads skipped for smoke");
-    await page.getByRole("button", { name: /Skip for Now|Continue/ }).last().click();
+    console.log("Step 4: seed identity upload media");
+    await seedIdentityCapture(page, { licenseImageData, selfieFrameData, identityVideoData });
+    await page.goto(`${BASE_URL}/start/payment`, { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/start\/payment/, { timeout: 30_000 });
 
     console.log("Step 5: payment with QB bypass");
