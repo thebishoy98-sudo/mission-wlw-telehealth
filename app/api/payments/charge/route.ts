@@ -37,6 +37,7 @@ import { resolvePersistedDose } from "@/lib/product-dose";
 import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
+import { shouldBypassQuickBooksPayment } from "@/lib/payment-bypass";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import type { Payment, Upload } from "@/types";
 
@@ -54,10 +55,6 @@ async function wakePracticeQRemoteWorker() {
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function shouldBypassQuickBooksPayment() {
-  return process.env.BYPASS_QB_PAYMENTS === "true";
 }
 
 export async function POST(req: NextRequest) {
