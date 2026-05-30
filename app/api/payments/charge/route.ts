@@ -35,6 +35,7 @@ import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { resolvePersistedDose } from "@/lib/product-dose";
 import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
+import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import type { Payment, Upload } from "@/types";
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest) {
     const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
-    const fallbackQuestions = questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions);
+    const fallbackQuestions = ensurePracticeQRequiredQuestions(questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions));
     const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
     if (!questionnaire.complete) {
       return NextResponse.json(

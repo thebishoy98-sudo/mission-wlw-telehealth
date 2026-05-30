@@ -42,6 +42,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const body = await req.json().catch(() => null) as {
+    orderId?: string;
+    answers?: Record<string, unknown>;
+  } | null;
+
+  if (body?.orderId) {
+    const seeded: string[] = [];
+    for (const [questionId, answer] of Object.entries(body.answers ?? {})) {
+      const cleanAnswer = String(answer ?? "").trim();
+      if (!questionId || !cleanAnswer) continue;
+      await dbServer.answerDb.create({
+        id: `answer_${body.orderId}_${questionId}`,
+        orderId: body.orderId,
+        questionId,
+        answer: cleanAnswer,
+        createdAt: new Date().toISOString(),
+      }).catch(() => null);
+      seeded.push(questionId);
+    }
+
+    const job = await dbServer.practiceqAutomationJobDb.getByOrder(body.orderId).catch(() => null);
+    if (!job) return NextResponse.json({ error: "PracticeQ job not found" }, { status: 404 });
+
+    await dbServer.practiceqAutomationJobDb.update(job.id, {
+      status: "queued",
+      attempts: 0,
+      lastError: undefined,
+      lockedAt: undefined,
+    });
+
+    return NextResponse.json({ requeued: 1, jobs: [job.id], seeded });
+  }
+
   // Find all failed jobs that never submitted an intake
   const failedJobs = await dbServer.practiceqAutomationJobDb.getFailedWithNoIntake();
   const requeued: string[] = [];
