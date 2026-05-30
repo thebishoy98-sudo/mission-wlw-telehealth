@@ -44,7 +44,7 @@ describe("PracticeQ remote worker resilience", () => {
   });
 
   it("automatically retries failed form-fill jobs that never submitted an intake", () => {
-    expect(dbSource).toContain("status = 'failed' AND intake_id IS NULL AND attempts < 5");
+    expect(dbSource).toContain("status = 'failed' AND intake_id IS NULL AND attempts < 10");
   });
 
   it("lets the Render worker retry failed admin completion jobs with linked intakes", () => {
