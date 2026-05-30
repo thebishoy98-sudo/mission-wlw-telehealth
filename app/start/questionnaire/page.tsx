@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -67,6 +67,7 @@ export default function Questionnaire() {
   const router = useRouter();
   const [questions, setQuestions] = useState<Types.Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const answersRef = useRef<Record<string, string>>({});
   const [ineligibleQuestion, setIneligibleQuestion] = useState<Types.Question | null>(null);
   const [missingRequired, setMissingRequired] = useState<string[]>([]);
 
@@ -78,36 +79,43 @@ export default function Questionnaire() {
         setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
       })
       .catch(() => setQuestions([]));
-    setAnswers(getIntakeState().questionnaireAnswers || {});
+    const savedAnswers = getIntakeState().questionnaireAnswers || {};
+    answersRef.current = savedAnswers;
+    setAnswers(savedAnswers);
   }, []);
 
   const setAnswer = (id: string, val: string) => {
-    setAnswers((prev) => ({ ...prev, [id]: val }));
+    const next = { ...answersRef.current, [id]: val };
+    answersRef.current = next;
+    setAnswers(next);
+    saveIntakeState({ questionnaireAnswers: next });
     // Clear ineligibility if answer changes
     setIneligibleQuestion(null);
     setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
   };
 
   const toggleMultiAnswer = (id: string, option: string, checked: boolean) => {
-    setAnswers((prev) => {
-      const current = (prev[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
-      if (isNoneOption(option)) {
-        return { ...prev, [id]: checked ? option : "" };
-      }
-      const next = checked
-        ? Array.from(new Set([...current.filter((item) => !isNoneOption(item)), option]))
-        : current.filter((item) => item !== option);
-      return { ...prev, [id]: next.join(", ") };
-    });
+    const current = (answersRef.current[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
+    const answer = isNoneOption(option)
+      ? (checked ? option : "")
+      : (checked
+          ? Array.from(new Set([...current.filter((item) => !isNoneOption(item)), option]))
+          : current.filter((item) => item !== option)
+        ).join(", ");
+    const next = { ...answersRef.current, [id]: answer };
+    answersRef.current = next;
+    setAnswers(next);
+    saveIntakeState({ questionnaireAnswers: next });
     setIneligibleQuestion(null);
     setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const currentAnswers = answersRef.current;
 
     const missing = questions
-      .filter((question) => question.required && !answers[question.id]?.trim())
+      .filter((question) => question.required && !currentAnswers[question.id]?.trim())
       .map((question) => question.id);
 
     if (missing.length) {
@@ -116,7 +124,7 @@ export default function Questionnaire() {
       return;
     }
 
-    const submittedAnswers = Object.entries(answers).map(([questionId, answer]) => ({
+    const submittedAnswers = Object.entries(currentAnswers).map(([questionId, answer]) => ({
       id: `answer_${questionId}`,
       orderId: "pending",
       questionId,
@@ -135,7 +143,7 @@ export default function Questionnaire() {
       return;
     }
 
-    saveIntakeState({ questionnaireAnswers: answers });
+    saveIntakeState({ questionnaireAnswers: currentAnswers });
     router.push("/start/consent");
   };
 

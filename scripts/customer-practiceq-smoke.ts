@@ -232,6 +232,17 @@ async function seedIdentityCapture(page: Page, identity: {
   }, identity);
 }
 
+async function waitForMissionQuestionnairePersistence(page: Page) {
+  await page.waitForFunction((expected) => {
+    const raw = sessionStorage.getItem("tele_intake_form_state");
+    if (!raw) return false;
+    const answers = JSON.parse(raw).questionnaireAnswers ?? {};
+    return answers.pq_height === expected.pq_height &&
+      answers.pq_current_weight === expected.pq_current_weight &&
+      answers.pq_ideal_weight === expected.pq_ideal_weight;
+  }, expectedAnswers, { timeout: 30_000 });
+}
+
 async function clearBrowserDraftState(page: Page) {
   await page.evaluate(() => {
     for (const store of [window.sessionStorage, window.localStorage]) {
@@ -344,6 +355,7 @@ async function main() {
         await fillQuestion(page, question);
       }
     }
+    await waitForMissionQuestionnairePersistence(page);
     await page.getByRole("button", { name: /^Continue$/ }).click();
     await page.waitForURL(/\/start\/consent/, { timeout: 30_000 });
 
