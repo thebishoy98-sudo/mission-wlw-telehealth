@@ -48,6 +48,27 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV, startedAt });
     }
 
+    if (url.pathname === "/jobs") {
+      const apiKey = (url.searchParams.get("key") ?? req.headers["x-practiceq-api-key"] ?? "") as string;
+      if (!apiKey || apiKey !== process.env.PRACTICEQ_API_KEY) {
+        return sendJson(res, 401, { error: "Unauthorized" });
+      }
+      const modules = await loadRemoteServerModules();
+      const [summary, recent] = await Promise.all([
+        modules.dbServer.practiceqAutomationJobDb.getStatusSummary(),
+        modules.dbServer.practiceqAutomationJobDb.getRecent(5),
+      ]);
+      return sendJson(res, 200, {
+        polling,
+        summary,
+        recent: recent.map((j) => ({
+          id: j.id, status: j.status, attempts: j.attempts,
+          intakeId: (j as any).intakeId ?? null, lastError: (j as any).lastError ?? null,
+          updatedAt: j.updatedAt,
+        })),
+      });
+    }
+
     const match = url.pathname.match(/^\/session\/([^/]+)(?:\/([^/]+))?$/);
     if (!match) return sendText(res, 404, "Not found");
 
@@ -75,7 +96,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (action === "type" && req.method === "POST") {
       const body = await readJson(req);
-      await session.page.keyboard.type(String(body.text ?? ""));
+      await session.page.keyboard.insertText(String(body.text ?? ""));
       return sendJson(res, 200, { ok: true });
     }
     if (action === "key" && req.method === "POST") {
@@ -260,4 +281,3 @@ function sendHtml(res: http.ServerResponse, body: string) {
   });
   res.end(body);
 }
-
