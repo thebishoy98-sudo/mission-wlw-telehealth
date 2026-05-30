@@ -1350,44 +1350,24 @@ async function clickContinue(page: Page): Promise<boolean> {
 
 async function clickFinalSubmit(page: Page): Promise<boolean> {
   await waitForPracticeQReady(page);
+
+  // Use count() > 0 instead of isVisible() — headless getBoundingClientRect() returns zeros.
+  // force:true bypasses viewport/visibility checks that always fail in headless mode.
   const direct = page
-    .getByRole("button", { name: /submit(?: form)?|finish|done|complete/i })
-    .or(page.locator("input[type='submit'], input[type='button'], button").filter({ hasText: /submit(?: form)?|finish|done|complete/i }))
-    .or(page.locator("input[value*='Submit'], input[value*='submit']"))
+    .locator("button, input[type='submit'], input[type='button']")
+    .filter({ hasText: /submit(?: form)?|finish|done|complete/i })
+    .or(page.locator("input[value*='Submit'], input[value*='submit'], input[value*='Finish'], input[value*='Done']"))
     .first();
-  if (await direct.isVisible().catch(() => false)) {
+
+  if (await direct.count().then((c) => c > 0).catch(() => false)) {
     await direct.scrollIntoViewIfNeeded().catch(() => {});
-    await direct.click({ timeout: 8000 }).catch(async () => {
-      await waitForPracticeQReady(page);
-      await direct.click({ force: true, timeout: 5000 }).catch(async () => {
-        await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
-      });
-    });
+    await direct.click({ force: true, timeout: 8000 }).catch(() => {});
     return true;
   }
 
-  const candidates = page.locator("button, input[type='button'], input[type='submit'], a");
-  const count = await candidates.count();
-  for (let i = 0; i < count; i += 1) {
-    const candidate = candidates.nth(i);
-    if (!(await candidate.isVisible().catch(() => false))) continue;
-    const label = await candidate.evaluate((el) =>
-      [
-        el.textContent,
-        el.getAttribute("value"),
-        el.getAttribute("aria-label"),
-        el.getAttribute("title"),
-      ].filter(Boolean).join(" ")
-    ).catch(() => "");
-    if (!/submit|finish|done|complete/i.test(label)) continue;
-    await candidate.click();
-    return true;
-  }
-
+  // DOM fallback — fire native events without any visibility filter
   const clicked = await clickPracticeQControlByText(page, /submit\s*form|submit|finish|done|complete/i);
-  if (clicked) return true;
-
-  return false;
+  return clicked;
 }
 
 async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise<boolean> {
