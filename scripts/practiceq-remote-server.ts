@@ -41,7 +41,11 @@ function loadRemoteServerModules(): Promise<RemoteServerModules> {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", publicBaseUrl);
-    if (url.pathname === "/health") return sendJson(res, 200, { ok: true });
+    if (url.pathname === "/health") {
+      const dbOk = !!process.env.POSTGRES_URL && !!process.env.DATABASE_URL;
+      const apiKeyOk = !!process.env.PRACTICEQ_API_KEY;
+      return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV });
+    }
 
     const match = url.pathname.match(/^\/session\/([^/]+)(?:\/([^/]+))?$/);
     if (!match) return sendText(res, 404, "Not found");
