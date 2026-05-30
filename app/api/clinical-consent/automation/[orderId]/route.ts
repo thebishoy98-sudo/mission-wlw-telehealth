@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 
 const RETRYABLE_FAILED_ATTEMPTS = 10;
+const RETRYABLE_ADMIN_COMPLETION_ATTEMPTS = 15;
 
 export async function GET(
   request: Request,
@@ -20,7 +21,12 @@ export async function GET(
   if (!job) return NextResponse.json({ available: false });
 
   const retryableFailure = job.status === "failed" && !job.intakeId && job.attempts < RETRYABLE_FAILED_ATTEMPTS;
-  const status = retryableFailure ? "running" : job.status;
+  const retryableAdminCompletion =
+    job.status === "failed" &&
+    !!job.intakeId &&
+    job.attempts < RETRYABLE_ADMIN_COMPLETION_ATTEMPTS &&
+    /PracticeQ admin Set as Completed failed/i.test(job.lastError ?? "");
+  const status = retryableFailure || retryableAdminCompletion ? "running" : job.status;
 
   return NextResponse.json({
     available: true,

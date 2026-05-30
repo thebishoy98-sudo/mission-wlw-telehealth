@@ -97,4 +97,26 @@ describe("GET /api/clinical-consent/automation/[orderId]", () => {
       lastError: undefined,
     });
   });
+
+  it("reports retryable admin completion failures as still preparing", async () => {
+    (dbServer.orderDb.getById as jest.Mock).mockResolvedValue({ id: "order_1", patientId: "patient_1" });
+    (dbServer.practiceqAutomationJobDb.getByOrder as jest.Mock).mockResolvedValue({
+      id: "job_1",
+      status: "failed",
+      attempts: 10,
+      intakeId: "intake_1",
+      lastError: "PracticeQ admin Set as Completed failed for intake_1.",
+    });
+
+    const response = await GET(request("patient_1"), {
+      params: Promise.resolve({ orderId: "order_1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      available: true,
+      status: "running",
+      handoffUrl: undefined,
+      lastError: undefined,
+    });
+  });
 });
