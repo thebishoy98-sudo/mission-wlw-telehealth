@@ -58,19 +58,18 @@ const server = http.createServer(async (req, res) => {
         modules.dbServer.practiceqAutomationJobDb.getStatusSummary(),
         modules.dbServer.practiceqAutomationJobDb.getRecent(5),
       ]);
-      const diagJob = recent.find((j) => j.status !== "completed");
-      const diagAnswers = diagJob
-        ? await modules.dbServer.answerDb.getByOrder(diagJob.orderId).catch(() => [])
+      const queuedJob = recent.find((j) => j.status === "queued") ?? recent[recent.length - 1];
+      const diagAnswers = queuedJob
+        ? await modules.dbServer.answerDb.getByOrder(queuedJob.orderId).catch(() => [])
         : [];
       return sendJson(res, 200, {
-        polling,
-        summary,
+        polling, summary,
         recent: recent.map((j) => ({
           id: j.id, orderId: j.orderId, status: j.status, attempts: j.attempts,
           intakeId: (j as any).intakeId ?? null, lastError: (j as any).lastError ?? null,
           updatedAt: j.updatedAt,
         })),
-        diagOrderId: diagJob?.orderId ?? null,
+        diagOrderId: queuedJob?.orderId ?? null,
         diagAnswers: diagAnswers.map((a: any) => ({ questionId: a.questionId, answer: a.answer })),
       });
     }
