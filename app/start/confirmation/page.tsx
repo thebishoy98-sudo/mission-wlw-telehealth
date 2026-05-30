@@ -30,11 +30,13 @@ export default function Confirmation() {
   }, [orderId, patientId]);
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId || !patientId) return;
 
     let cancelled = false;
     const loadStatus = async () => {
-      const response = await fetch(`/api/clinical-consent/automation/${encodeURIComponent(orderId)}`);
+      const response = await fetch(
+        `/api/clinical-consent/automation/${encodeURIComponent(orderId)}?patientId=${encodeURIComponent(patientId)}`
+      );
       if (!response.ok || cancelled) return;
       const payload = await response.json();
       setConsentAutomation(payload);
@@ -46,7 +48,7 @@ export default function Confirmation() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [orderId]);
+  }, [orderId, patientId]);
 
   if (!order || !patient) {
     return (
