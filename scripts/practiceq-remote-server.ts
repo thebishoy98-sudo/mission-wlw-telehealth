@@ -5,6 +5,7 @@ import { URL } from "url";
 loadEnvConfig(process.cwd(), false, { info: () => {}, error: console.error });
 
 const port = Number(process.env.PORT ?? 3033);
+const startedAt = new Date().toISOString();
 const publicBaseUrl = process.env.PRACTICEQ_REMOTE_PUBLIC_URL ?? `http://localhost:${port}`;
 const pollMs = Number(process.env.PRACTICEQ_REMOTE_POLL_MS ?? 5000);
 let polling = false;
@@ -44,7 +45,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/health") {
       const dbOk = !!process.env.POSTGRES_URL && !!process.env.DATABASE_URL;
       const apiKeyOk = !!process.env.PRACTICEQ_API_KEY;
-      return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV });
+      return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV, startedAt });
     }
 
     const match = url.pathname.match(/^\/session\/([^/]+)(?:\/([^/]+))?$/);
