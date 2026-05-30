@@ -55,6 +55,7 @@ describe("PracticeQ remote worker resilience", () => {
   it("lets the Render worker retry failed admin completion jobs with linked intakes", () => {
     expect(dbSource).toContain("getAdminCompletionRetryCandidates");
     expect(dbSource).toContain("last_error LIKE 'PracticeQ admin Set as Completed failed%'");
+    expect(dbSource).toContain("attempts < 15");
     expect(remoteServerSource).toContain("retryFailedAdminCompletionJobs");
     expect(remoteServerSource).toContain("completePracticeQIntakeInAdmin(job.intakeId)");
     expect(remoteServerSource).toContain("completePracticeQSession(job.id)");
@@ -167,6 +168,11 @@ describe("PracticeQ remote worker resilience", () => {
 
     expect(fetchIntake).toHaveBeenCalledTimes(2);
     expect(fetchIntake).toHaveBeenCalledWith("intake_1");
+  });
+
+  it("waits long enough for delayed PracticeQ admin completion to settle", () => {
+    expect(workerSource).toContain("PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS = 24");
+    expect(workerSource).toContain("waitForPracticeQCompletedStatus(matchedIntake.id)");
   });
 
   it("trusts the admin browser when the PracticeQ page visibly shows completed", () => {

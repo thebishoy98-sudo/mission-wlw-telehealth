@@ -736,7 +736,7 @@ export const practiceqAutomationJobDb = {
       SELECT * FROM practiceq_automation_jobs
       WHERE status = 'failed'
         AND intake_id IS NOT NULL
-        AND attempts < 5
+        AND attempts < 15
         AND last_error LIKE 'PracticeQ admin Set as Completed failed%'
       ORDER BY updated_at ASC
       LIMIT ${limit}

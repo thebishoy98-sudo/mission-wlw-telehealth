@@ -14,10 +14,20 @@ jest.mock("@/lib/db.server", () => ({
   answerDb: {
     create: jest.fn(),
   },
+  questionDb: {
+    getAll: jest.fn(),
+    upsert: jest.fn(),
+  },
   practiceqAutomationJobDb: {
     getByOrder: jest.fn(),
     getFailedWithNoIntake: jest.fn(),
     update: jest.fn(),
+  },
+}));
+
+jest.mock("@/lib/db", () => ({
+  questionDb: {
+    getAll: jest.fn(() => []),
   },
 }));
 
@@ -37,6 +47,8 @@ describe("POST /api/cron/requeue-pq-jobs", () => {
     jest.clearAllMocks();
     process.env.PRACTICEQ_API_KEY = "test-key";
     (dbServer.answerDb.create as jest.Mock).mockResolvedValue({});
+    (dbServer.questionDb.getAll as jest.Mock).mockResolvedValue([]);
+    (dbServer.questionDb.upsert as jest.Mock).mockResolvedValue({});
   });
 
   it("can seed missing PracticeQ vitals and requeue a specific running job", async () => {
@@ -64,6 +76,7 @@ describe("POST /api/cron/requeue-pq-jobs", () => {
       seeded: ["pq_height", "pq_current_weight", "pq_ideal_weight"],
     });
     expect(dbServer.answerDb.create).toHaveBeenCalledTimes(3);
+    expect(dbServer.questionDb.upsert).toHaveBeenCalledTimes(3);
     expect(dbServer.practiceqAutomationJobDb.update).toHaveBeenCalledWith("job_1", {
       status: "queued",
       attempts: 0,

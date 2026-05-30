@@ -10,6 +10,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
+import * as db from "@/lib/db";
+import { seedQuestions } from "@/data/seed-data";
+import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -48,10 +51,16 @@ export async function POST(req: NextRequest) {
   } | null;
 
   if (body?.orderId) {
+    const questions = await dbServer.questionDb.getAll().catch(() => []);
+    const localQuestions = db.questionDb.getAll();
+    const fallbackQuestions = ensurePracticeQRequiredQuestions(questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions));
+    const questionById = new Map(fallbackQuestions.map((question) => [question.id, question]));
     const seeded: string[] = [];
     for (const [questionId, answer] of Object.entries(body.answers ?? {})) {
       const cleanAnswer = String(answer ?? "").trim();
       if (!questionId || !cleanAnswer) continue;
+      const question = questionById.get(questionId);
+      if (question) await dbServer.questionDb.upsert(question).catch(() => question);
       await dbServer.answerDb.create({
         id: `answer_${body.orderId}_${questionId}`,
         orderId: body.orderId,
