@@ -692,6 +692,17 @@ export const practiceqAutomationJobDb = {
     return rows.map(rowToPracticeQAutomationJob);
   },
 
+  async getFailedWithNoIntake(): Promise<PracticeQAutomationJob[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs
+      WHERE status = 'failed'
+        AND intake_id IS NULL
+      ORDER BY created_at ASC
+    `;
+    return rows.map(rowToPracticeQAutomationJob);
+  },
+
   async getAdminCompletionRetryCandidates(limit = 5): Promise<PracticeQAutomationJob[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`

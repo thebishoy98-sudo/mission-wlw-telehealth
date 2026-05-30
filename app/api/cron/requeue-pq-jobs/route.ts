@@ -20,17 +20,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { rows } = await dbServer.sql`
-    UPDATE practiceq_automation_jobs
-    SET status = 'queued',
-        attempts = 0,
-        last_error = NULL,
-        locked_at = NULL,
-        updated_at = NOW()
-    WHERE status = 'failed'
-      AND intake_id IS NULL
-    RETURNING id, order_id
-  `;
+  // Find all failed jobs that never submitted an intake
+  const failedJobs = await dbServer.practiceqAutomationJobDb.getFailedWithNoIntake();
+  const requeued: string[] = [];
+  for (const job of failedJobs) {
+    await dbServer.practiceqAutomationJobDb.update(job.id, {
+      status: "queued",
+      attempts: 0,
+      lastError: undefined,
+      lockedAt: undefined,
+    });
+    requeued.push(job.id);
+  }
 
-  return NextResponse.json({ requeued: rows.length, jobs: rows.map((r: any) => r.id) });
+  return NextResponse.json({ requeued: requeued.length, jobs: requeued });
 }
