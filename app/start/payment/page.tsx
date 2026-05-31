@@ -93,6 +93,13 @@ export default function Payment() {
     }
   }, [productId, doseId]);
 
+  useEffect(() => {
+    fetch("/api/practiceq/wake", {
+      method: "POST",
+      cache: "no-store",
+    }).catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const digits = cardNumber.replace(/\s/g, "");
