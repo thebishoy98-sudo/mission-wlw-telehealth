@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const PROVIDER_EMAIL = process.env.PROVIDER_EMAIL ?? process.env.E2E_PROVIDER_EMAIL ?? "provider@example.com";
+const PROVIDER_PASSWORD = process.env.PROVIDER_PASSWORD ?? process.env.E2E_PROVIDER_PASSWORD ?? "provider123";
+const PROVIDER_SECRET = process.env.PROVIDER_SECRET ?? "local-provider-secret";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -33,6 +36,13 @@ export default defineConfig({
     : {
         command: "npm run dev",
         url: BASE_URL,
+        env: {
+          ...process.env,
+          PROVIDER_EMAIL,
+          PROVIDER_PASSWORD,
+          PROVIDER_SECRET,
+          PROVIDER_NAME: process.env.PROVIDER_NAME ?? "Dotson, Karen",
+        },
         reuseExistingServer: true,
         timeout: 60000,
       },

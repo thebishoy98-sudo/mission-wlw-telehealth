@@ -8,8 +8,6 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Textarea } from "@/components/ui/Textarea";
-import { useAuth } from "@/lib/auth";
 import { buildConsentCertificate } from "@/lib/consent";
 import { formatDateTime, getStatusColor, getStatusLabel } from "@/lib/utils";
 import type {
@@ -40,16 +38,10 @@ interface ChartState {
 export default function PatientDetail() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [chart, setChart] = useState<ChartState | null>(null);
-  const [providerNotes, setProviderNotes] = useState("");
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-  const [approvalMessage, setApprovalMessage] = useState("");
   const [chartReviewing, setChartReviewing] = useState(false);
-  const [approvalSteps, setApprovalSteps] = useState<{ label: string; status: "pending" | "done" | "running" }[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
@@ -76,85 +68,6 @@ export default function PatientDetail() {
     };
   }, [patientId]);
 
-  const stepDelay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const setSelectedOrderPatch = (data: Partial<Order>) => {
-    setChart((prev) => prev ? { ...prev, selectedOrder: { ...prev.selectedOrder, ...data } } : prev);
-  };
-
-  const handleApprove = async () => {
-    if (!chart) return;
-    setActionError("");
-    setApprovalMessage("");
-    setApproving(true);
-    setApprovalSteps([
-      { label: "Recording provider approval", status: "running" },
-      { label: "Finalizing chart status", status: "pending" },
-    ]);
-
-    await stepDelay(500);
-    try {
-      const reviewedAt = new Date().toISOString();
-      const reviewRes = await fetch("/api/provider/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: chart.selectedOrder.id,
-          action: "approve",
-          notes: providerNotes,
-          reviewedBy: user?.name ?? "Dotson, Karen",
-        }),
-      });
-      const reviewData = await reviewRes.json().catch(() => ({}));
-      if (!reviewRes.ok) throw new Error(reviewData.error ?? "Provider approval failed");
-      setChart((prev) => prev ? {
-        ...prev,
-        selectedOrder: { ...prev.selectedOrder, status: "approved", approvedAt: reviewedAt },
-        review: reviewData.review ?? (prev.review ? {
-          ...prev.review,
-          status: "approved",
-          reviewedAt,
-          reviewedBy: user?.name ?? "Dotson, Karen",
-          chartViewedAt: reviewedAt,
-          chartViewedBy: user?.name ?? "Dotson, Karen",
-        } : prev.review),
-      } : prev);
-      setApprovalSteps((prev) => prev.map((step, index) => index === 0 ? { ...step, status: "done" } : index === 1 ? { ...step, status: "running" } : step));
-      await stepDelay(300);
-      setApprovalSteps((prev) => prev.map((step, index) => index === 1 ? { ...step, status: "done" } : step));
-      setApprovalMessage("Chart approved.");
-      setApproved(true);
-    } catch (error) {
-      setActionError((error as Error).message);
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!chart) return;
-    setActionError("");
-    const reason = providerNotes || "Not eligible at this time.";
-    const res = await fetch("/api/provider/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderId: chart.selectedOrder.id,
-        action: "reject",
-        notes: reason,
-        rejectionReason: reason,
-        reviewedBy: user?.name ?? "Dotson, Karen",
-      }),
-    });
-
-    if (!res.ok) {
-      setActionError((await res.json()).error ?? "Could not reject order.");
-      return;
-    }
-
-    setSelectedOrderPatch({ status: "rejected", rejectionReason: reason });
-  };
-
   const handleMarkChartReviewed = async () => {
     if (!chart || !patientId) return;
     setActionError("");
@@ -167,7 +80,7 @@ export default function PatientDetail() {
         body: JSON.stringify({
           orderId: chart.selectedOrder.id,
           action: "mark_chart_viewed",
-          reviewedBy: user?.name ?? "Dotson, Karen",
+          reviewedBy: "Dotson, Karen",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -402,43 +315,6 @@ export default function PatientDetail() {
               </CardContent>
             </Card>
 
-            {selectedOrder.status === "pending_review" || selectedOrder.status === "approved" ? (
-              <Card>
-                <CardContent className="p-5 sm:p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-3">Provider Notes</h3>
-                  <Textarea
-                    value={providerNotes}
-                    onChange={(e) => setProviderNotes(e.target.value)}
-                    placeholder="Optional notes for your records or rejection reason..."
-                    rows={3}
-                  />
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {approvalSteps.length > 0 && (
-              <Card>
-                <CardContent className="p-5 sm:p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">Processing Order...</h3>
-                  <div className="space-y-3">
-                    {approvalSteps.map((step) => (
-                      <div key={step.label} className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${step.status === "done" ? "bg-green-100" : step.status === "running" ? "bg-blue-50" : "bg-gray-100"}`}>
-                          {step.status === "done" ? <CheckCircle className="w-4 h-4 text-green-500" /> : <div className="w-2 h-2 bg-gray-300 rounded-full" />}
-                        </div>
-                        <span className={`text-sm ${step.status === "running" ? "text-blue-600 font-medium" : "text-gray-700"}`}>{step.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {approved && (
-                    <div className="mt-5 p-4 bg-green-50 rounded-xl border border-green-100 text-center">
-                      <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                      <p className="font-semibold text-green-800">{approvalMessage || "Order approved."}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           <div className="space-y-5">
@@ -496,13 +372,6 @@ export default function PatientDetail() {
                 </div>
               </CardContent>
             </Card>
-
-            {(selectedOrder.status === "pending_review" || selectedOrder.status === "approved" || (selectedOrder.status === "sent_to_pharmacy" && selectedOrder.pharmacyStatus !== "submitted")) && !approving && !approved && (
-              <div className="space-y-3">
-                <Button fullWidth onClick={handleApprove}>Approve Order</Button>
-                <Button fullWidth variant="outline" onClick={handleReject}>Reject Order</Button>
-              </div>
-            )}
           </div>
         </div>
       </div>

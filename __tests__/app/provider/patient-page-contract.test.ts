@@ -18,9 +18,13 @@ describe("provider patient page", () => {
     expect(source).not.toContain("No manual action required");
   });
 
-  it("does not call pharmacy or identity dispatch from provider approval", () => {
+  it("does not let providers approve, reject, dispatch, or review identity", () => {
     expect(source).not.toContain("/api/orders/dispatch");
     expect(source).not.toContain("/api/identity/approve");
     expect(source).not.toContain("Review Identity");
+    expect(source).not.toContain("Approve Order");
+    expect(source).not.toContain("Reject Order");
+    expect(source).not.toContain("handleApprove");
+    expect(source).not.toContain("handleReject");
   });
 });

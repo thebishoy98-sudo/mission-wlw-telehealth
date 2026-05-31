@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-const PROVIDER_EMAIL = process.env.E2E_PROVIDER_EMAIL ?? "dr.johnson@telehealth.com";
-const PROVIDER_PASSWORD = process.env.E2E_PROVIDER_PASSWORD ?? "provider123";
+const PROVIDER_EMAIL = process.env.E2E_PROVIDER_EMAIL ?? process.env.PROVIDER_EMAIL ?? "provider@example.com";
+const PROVIDER_PASSWORD = process.env.E2E_PROVIDER_PASSWORD ?? process.env.PROVIDER_PASSWORD ?? "provider123";
 
 async function loginAsProvider(page: Page) {
   await page.goto(`${BASE}/login/provider`);
@@ -24,8 +24,8 @@ test.describe("Provider dashboard", () => {
 
   test("provider dashboard renders review and order sections", async ({ page }) => {
     await loginAsProvider(page);
-    await expect(page.getByText(/Orders Requiring Review|No orders awaiting review/i).first()).toBeVisible();
     await expect(page.getByText(/All Orders/i)).toBeVisible();
+    await expect(page.getByText(/Needs Chart Review/i)).toBeVisible();
   });
 
   test("provider can open a patient chart without mutating order status", async ({ page }) => {

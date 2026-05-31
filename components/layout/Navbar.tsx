@@ -45,6 +45,10 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
   };
 
   const navLinks = links[variant];
+  const displayName =
+    variant === "provider" && user?.role === "provider"
+      ? "Dotson, Karen"
+      : user?.name;
 
   return (
     <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
@@ -98,7 +102,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
                   <User size={14} className="text-gray-400" />
                   <span className="text-sm font-medium text-gray-700 max-w-[140px] truncate">
-                    {user.name}
+                    {displayName}
                   </span>
                 </div>
                 <button
@@ -156,7 +160,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
           )}
           {user && (
             <div className="mt-2 pt-2 border-t border-gray-100">
-              <p className="px-3 py-1 text-xs text-gray-400 font-medium">{user.name}</p>
+              <p className="px-3 py-1 text-xs text-gray-400 font-medium">{displayName}</p>
               <button
                 onClick={() => { setOpen(false); handleLogout(); }}
                 className="flex items-center gap-2 w-full px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"

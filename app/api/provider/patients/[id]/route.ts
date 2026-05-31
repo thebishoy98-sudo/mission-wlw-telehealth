@@ -3,6 +3,7 @@ import * as dbServer from "@/lib/db.server";
 import { loadProviderPatientChart } from "@/lib/provider-chart";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { requireProviderOrAdmin } from "@/lib/server-auth";
+import { generateId } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -61,16 +62,38 @@ export async function PATCH(
       return NextResponse.json({ error: "orderId and action=mark_chart_viewed required" }, { status: 400 });
     }
 
+    const now = new Date().toISOString();
     const review = await dbServer.providerReviewDb.getByOrder(orderId);
-    if (!review || review.patientId !== id) {
-      return NextResponse.json({ error: "Review not found" }, { status: 404 });
+    let updated;
+    if (review) {
+      if (review.patientId !== id) {
+        return NextResponse.json({ error: "Review not found" }, { status: 404 });
+      }
+      updated = await dbServer.providerReviewDb.update(review.id, {
+        chartViewedAt: now,
+        chartViewedBy: reviewedBy,
+      });
+    } else {
+      const order = await dbServer.orderDb.getById(orderId);
+      if (!order || order.patientId !== id) {
+        return NextResponse.json({ error: "Review not found" }, { status: 404 });
+      }
+      updated = {
+        id: generateId(),
+        orderId,
+        patientId: id,
+        status: "pending" as const,
+        chartViewedAt: now,
+        chartViewedBy: reviewedBy,
+      };
+      await dbServer.providerReviewDb.create(updated);
     }
 
-    const now = new Date().toISOString();
-    const updated = await dbServer.providerReviewDb.update(review.id, {
+    const responseReview = updated ?? {
+      ...review,
       chartViewedAt: now,
       chartViewedBy: reviewedBy,
-    });
+    };
 
     await dbServer.integrationLogDb.create({
       id: `log_chartview_${Date.now()}`,
@@ -83,7 +106,7 @@ export async function PATCH(
       details: { action: "chart_reviewed", reviewedBy },
     }).catch(() => {});
 
-    return NextResponse.json({ success: true, review: updated ?? { ...review, chartViewedAt: now, chartViewedBy: reviewedBy } });
+    return NextResponse.json({ success: true, review: responseReview });
   } catch (error) {
     console.error("Provider chart update error:", error);
     return NextResponse.json({ error: "Provider chart update failed" }, { status: 500 });

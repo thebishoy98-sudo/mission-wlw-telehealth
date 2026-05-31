@@ -11,8 +11,19 @@ describe("provider dashboard permissions", () => {
     expect(fs.existsSync(path.join(process.cwd(), "app/provider/identity/[orderId]/page.tsx"))).toBe(false);
   });
 
-  it("approve all only records provider chart approval and does not dispatch pharmacy", () => {
-    expect(source).toContain("/api/provider/review");
+  it("only lets providers mark charts reviewed, not approve or deny orders", () => {
+    expect(source).toContain("Mark All Reviewed");
+    expect(source).toContain("mark_chart_viewed");
+    expect(source).not.toContain("Approve All");
+    expect(source).not.toContain("approve");
+    expect(source).not.toContain("reject");
     expect(source).not.toContain("/api/orders/dispatch");
+  });
+
+  it("shows provider as Karen instead of the legacy demo doctor", () => {
+    const navbarSource = fs.readFileSync(path.join(process.cwd(), "components/layout/Navbar.tsx"), "utf8");
+
+    expect(navbarSource).toContain("Karen");
+    expect(navbarSource).not.toContain("Sarah Johnson");
   });
 });

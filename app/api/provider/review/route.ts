@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import * as spruce from "@/services/spruce";
-import * as spruceServer from "@/services/spruce.server";
 import { generateId } from "@/lib/utils";
 import { requireProviderOrAdmin } from "@/lib/server-auth";
 
@@ -12,7 +10,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { orderId, action, notes, rejectionReason, reviewedBy } = body;
+    const { orderId, action, reviewedBy } = body;
 
     if (!orderId || !action || !reviewedBy) {
       return NextResponse.json(
@@ -21,9 +19,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!["approve", "reject", "needs_more_info"].includes(action)) {
+    if (action !== "mark_chart_viewed") {
       return NextResponse.json(
-        { error: "action must be approve | reject | needs_more_info" },
+        { error: "action must be mark_chart_viewed" },
         { status: 400 }
       );
     }
@@ -35,151 +33,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    if (order.status !== "pending_review" && order.status !== "approved") {
-      return NextResponse.json(
-        { error: `Cannot review order in status: ${order.status}` },
-        { status: 409 }
-      );
-    }
-
     const review =
       (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
       db.providerReviewDb.getByOrder(orderId);
-    let providerReview = review;
 
-    if (action === "approve") {
-      const now = new Date().toISOString();
-      const orderUpdate = {
-        status: "approved" as const,
-        approvedAt: now,
-        providerNotes: notes,
-      };
-      db.orderDb.update(orderId, orderUpdate);
-      const updatedOrder = await dbServer.orderDb.update(orderId, orderUpdate).catch(() => null);
-
-      if (review) {
-        const reviewUpdate = {
-          status: "approved",
-          reviewedAt: now,
-          reviewedBy,
-          chartViewedAt: now,
-          chartViewedBy: reviewedBy,
-          notes,
-        } as const;
-        db.providerReviewDb.update(review.id, reviewUpdate);
-        const updatedReview = await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => null);
-        providerReview = updatedReview ?? { ...review, ...reviewUpdate };
-      } else {
-        const createdReview = {
-          id: generateId(),
-          orderId,
-          patientId: order.patientId,
-          status: "approved" as const,
-          reviewedAt: now,
-          reviewedBy,
-          chartViewedAt: now,
-          chartViewedBy: reviewedBy,
-          notes,
-        };
-        db.providerReviewDb.create(createdReview);
-        await dbServer.providerReviewDb.create(createdReview).catch(() => {});
-        providerReview = createdReview;
-      }
-
-      // Send approval SMS
-      try {
-        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
-        if (patient) {
-          await spruceServer.sendMessage(patient, "approved", { orderId });
-        } else {
-          spruce.sendMessage(order.patientId, "approved", { orderId });
-        }
-      } catch { /* non-fatal */ }
-
-      const log = {
-        id: generateId(),
-        timestamp: new Date().toISOString(),
-        integrationName: "system" as const,
-        action: "Provider approved order",
-        orderId,
-        patientId: order.patientId,
-        status: "success" as const,
-        details: { reviewedBy, notes },
-      };
-      db.integrationLogDb.create(log);
-      await dbServer.integrationLogDb.create(log).catch(() => {});
-
-    } else if (action === "reject") {
-      if (!rejectionReason) {
-        return NextResponse.json(
-          { error: "rejectionReason required for reject action" },
-          { status: 400 }
-        );
-      }
-
-      const orderUpdate = {
-        status: "rejected" as const,
-        rejectionReason,
-        providerNotes: notes,
-      };
-      db.orderDb.update(orderId, orderUpdate);
-      await dbServer.orderDb.update(orderId, orderUpdate).catch(() => {});
-
-      if (review) {
-        const reviewUpdate = {
-          status: "rejected" as const,
-          reviewedAt: new Date().toISOString(),
-          reviewedBy,
-          rejectionReason,
-          notes,
-        };
-        db.providerReviewDb.update(review.id, reviewUpdate);
-        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
-      }
-
-      // Send rejection SMS
-      try {
-        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
-        if (patient) {
-          await spruceServer.sendMessage(patient, "rejected", { orderId });
-        } else {
-          spruce.sendMessage(order.patientId, "rejected", { orderId });
-        }
-      } catch { /* non-fatal */ }
-
-      const log = {
-        id: generateId(),
-        timestamp: new Date().toISOString(),
-        integrationName: "system" as const,
-        action: "Provider rejected order",
-        orderId,
-        patientId: order.patientId,
-        status: "success" as const,
-        details: { reviewedBy, rejectionReason, notes },
-      };
-      db.integrationLogDb.create(log);
-      await dbServer.integrationLogDb.create(log).catch(() => {});
-
+    const now = new Date().toISOString();
+    const viewUpdate = {
+      chartViewedAt: now,
+      chartViewedBy: reviewedBy,
+    };
+    let providerReview;
+    if (review) {
+      db.providerReviewDb.update(review.id, viewUpdate);
+      const updatedReview = await dbServer.providerReviewDb.update(review.id, viewUpdate).catch(() => null);
+      providerReview = updatedReview ?? { ...review, ...viewUpdate };
     } else {
-      // needs_more_info
-      const orderUpdate = {
-        status: "pending_review" as const,
-        providerNotes: notes,
+      const createdReview = {
+        id: generateId(),
+        orderId,
+        patientId: order.patientId,
+        status: "pending" as const,
+        chartViewedAt: now,
+        chartViewedBy: reviewedBy,
       };
-      db.orderDb.update(orderId, orderUpdate);
-      await dbServer.orderDb.update(orderId, orderUpdate).catch(() => {});
-
-      if (review) {
-        const reviewUpdate = {
-          status: "needs_more_info" as const,
-          reviewedAt: new Date().toISOString(),
-          reviewedBy,
-          notes,
-        };
-        db.providerReviewDb.update(review.id, reviewUpdate);
-        await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
-      }
+      db.providerReviewDb.create(createdReview);
+      await dbServer.providerReviewDb.create(createdReview).catch(() => {});
+      providerReview = createdReview;
     }
+
+    const log = {
+      id: generateId(),
+      timestamp: now,
+      integrationName: "system" as const,
+      action: "Provider marked chart reviewed",
+      orderId,
+      patientId: order.patientId,
+      status: "success" as const,
+      details: { reviewedBy },
+    };
+    db.integrationLogDb.create(log);
+    await dbServer.integrationLogDb.create(log).catch(() => {});
 
     return NextResponse.json({ success: true, action, orderId, review: providerReview });
   } catch (err) {
