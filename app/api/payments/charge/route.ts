@@ -45,11 +45,17 @@ async function wakePracticeQRemoteWorker() {
   const remoteBase = process.env.PRACTICEQ_REMOTE_PUBLIC_URL;
   if (!remoteBase) return;
 
+  const wakeUrl = new URL(process.env.PRACTICEQ_API_KEY ? "/wake" : "/health", remoteBase).toString();
+  const timeoutMs = Number(process.env.PRACTICEQ_REMOTE_WAKE_TIMEOUT_MS ?? 90000);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    await fetch(new URL("/health", remoteBase).toString(), {
+    await fetch(wakeUrl, {
       cache: "no-store",
+      method: process.env.PRACTICEQ_API_KEY ? "POST" : "GET",
+      headers: process.env.PRACTICEQ_API_KEY
+        ? { "x-practiceq-api-key": process.env.PRACTICEQ_API_KEY }
+        : undefined,
       signal: controller.signal,
     });
   } finally {

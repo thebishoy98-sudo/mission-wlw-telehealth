@@ -19,6 +19,9 @@ describe("payment to PracticeQ automation contract", () => {
   it("wakes the remote PracticeQ worker immediately after queueing the job", () => {
     expect(source).toContain("wakePracticeQRemoteWorker");
     expect(source).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
+    expect(source).toContain('new URL(process.env.PRACTICEQ_API_KEY ? "/wake" : "/health"');
+    expect(source).toContain("PRACTICEQ_REMOTE_WAKE_TIMEOUT_MS ?? 90000");
+    expect(source).toContain('"x-practiceq-api-key": process.env.PRACTICEQ_API_KEY');
   });
 
   it("temporarily bypasses live QuickBooks payment and accounting while the intake automation is tested", () => {

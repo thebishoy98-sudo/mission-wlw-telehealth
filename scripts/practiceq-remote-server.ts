@@ -48,6 +48,17 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, db: dbOk, apiKey: apiKeyOk, env: process.env.NODE_ENV, startedAt });
     }
 
+    if (url.pathname === "/wake" && (req.method === "POST" || req.method === "GET")) {
+      const apiKey = (url.searchParams.get("key") ?? req.headers["x-practiceq-api-key"] ?? "") as string;
+      if (!apiKey || apiKey !== process.env.PRACTICEQ_API_KEY) {
+        return sendJson(res, 401, { error: "Unauthorized" });
+      }
+      setTimeout(() => {
+        pollQueuedJobs().catch((error) => console.error("Wake poll failed:", error.message));
+      }, 0);
+      return sendJson(res, 202, { ok: true, triggered: true, polling, startedAt });
+    }
+
     if (url.pathname === "/seed-answers" && req.method === "POST") {
       const apiKey = (req.headers["x-practiceq-api-key"] ?? "") as string;
       if (!apiKey || apiKey !== process.env.PRACTICEQ_API_KEY) {

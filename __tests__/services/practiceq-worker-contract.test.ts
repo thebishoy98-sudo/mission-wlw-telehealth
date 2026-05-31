@@ -37,7 +37,7 @@ describe("PracticeQ worker background submission contract", () => {
   });
 
   it("clicks visible PracticeQ controls by text or input value before hidden templates", () => {
-    expect(source).toContain("isVisible(el) && matcher.test(textFor(el))");
+    expect(source).toContain("isVisible(el) && !isOfflineControl(el) && matcher.test(textFor(el))");
     expect(source).toContain('el.getAttribute("value")');
   });
 

@@ -445,7 +445,11 @@ export async function submitPracticeQInBackground(
   fillPlan: ReturnType<typeof buildPracticeQFillPlan> = []
 ): Promise<WorkerResult> {
   await waitForPracticeQPageText(page);
-  const bodyText = await page.locator("body").innerText().catch(() => "");
+  let bodyText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQOfflinePrompt(bodyText)) {
+    await dismissPracticeQOfflinePrompt(page);
+    bodyText = await page.locator("body").innerText().catch(() => "");
+  }
   if (isPracticeQResumePrompt(bodyText)) {
     return {
       status: "failed",
@@ -484,6 +488,13 @@ export async function submitPracticeQInBackground(
 
   await page.waitForTimeout(2000);
   const postSubmitText = await page.locator("body").innerText().catch(() => "");
+  if (isPracticeQOfflinePrompt(postSubmitText)) {
+    await dismissPracticeQOfflinePrompt(page);
+    return {
+      status: "failed",
+      error: `PracticeQ opened the offline response prompt instead of submitting the intake. Visible page text: ${postSubmitText.slice(0, 500)}`,
+    };
+  }
   if (looksSubmitted(postSubmitText)) {
     return {
       status: "completed",
@@ -906,7 +917,7 @@ async function resolvePracticeQIntroPage(page: Page, bodyText?: string): Promise
   const text = bodyText ?? await page.locator("body").innerText().catch(() => "");
   if (!/fill this out by hand/i.test(text) || !/0\s*%\s*Complete/i.test(text)) return false;
 
-  const clicked = await clickPracticeQControlByText(page, /fill\s+this\s+out\s+by\s+hand/i);
+  const clicked = await clickPracticeQControlByText(page, /start\s+(new\s+)?(intake\s+)?form|next\s+page|continue|begin/i);
   if (!clicked) return false;
 
   await page.waitForTimeout(1500);
@@ -1429,9 +1440,11 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     .first();
 
   if (await direct.count().then((c) => c > 0).catch(() => false)) {
-    await direct.scrollIntoViewIfNeeded().catch(() => {});
-    await direct.click({ force: true, timeout: 8000 }).catch(() => {});
-    return true;
+    if (await direct.isVisible().catch(() => false)) {
+      await direct.scrollIntoViewIfNeeded().catch(() => {});
+      await direct.click({ force: true, timeout: 8000 }).catch(() => {});
+      return true;
+    }
   }
 
   const clicked = await page.evaluate(() => {
@@ -1450,6 +1463,8 @@ async function clickFinalSubmit(page: Page): Promise<boolean> {
     const target = controls.find((el) => {
       const text = textFor(el);
       if (/respond\s+offline|fill\s+this\s+out\s+by\s+hand|print\s+blank\s+form/i.test(text)) return false;
+      const modalText = el.closest(".modal,.modal-dialog,[role='dialog']")?.textContent ?? "";
+      if (/respond\s+offline|fill\s+this\s+out\s+by\s+hand|print\s+blank\s+form/i.test(modalText)) return false;
       return /^\s*(submit\s*form|submit|finish|done)\s*$/i.test(text) && isVisible(el);
     });
     if (!target) return false;
@@ -1491,17 +1506,40 @@ async function clickPracticeQControlByText(page: Page, pattern: RegExp): Promise
     return true;
   };
   const controls = Array.from(document.querySelectorAll("button,a,input[type='button'],input[type='submit'],[role='button']"));
-  const match = controls.find((el) => isVisible(el) && matcher.test(textFor(el)));
+  const isOfflineControl = (el) => /respond\\s+offline|fill\\s+this\\s+out\\s+by\\s+hand|print\\s+blank\\s+form/i.test(textFor(el));
+  const match = controls.find((el) => isVisible(el) && !isOfflineControl(el) && matcher.test(textFor(el)));
   if (match) return clickNode(match);
   const containers = Array.from(document.querySelectorAll("span,div,label"));
-  const container = containers.find((el) => isVisible(el) && matcher.test(textFor(el)));
+  const container = containers.find((el) => isVisible(el) && !isOfflineControl(el) && matcher.test(textFor(el)));
   const target = container?.closest("button,a,input[type='button'],input[type='submit'],[role='button'],.btn,.btn-primary");
-  if (!target || !isVisible(target)) return false;
+  if (!target || !isVisible(target) || isOfflineControl(target)) return false;
   return clickNode(target);
 })()
 `).catch(() => false);
   if (clicked) await page.waitForTimeout(1000);
   return Boolean(clicked);
+}
+
+function isPracticeQOfflinePrompt(text: string): boolean {
+  return /respond\s+offline/i.test(text) &&
+    /print\s+blank\s+form|respond\s+to\s+this\s+form\s+by\s+hand|i\s+will\s+respond\s+to\s+this\s+form\s+offline/i.test(text);
+}
+
+async function dismissPracticeQOfflinePrompt(page: Page): Promise<boolean> {
+  const cancel = page
+    .getByRole("button", { name: /^\s*cancel\s*$/i })
+    .or(page.getByRole("link", { name: /^\s*cancel\s*$/i }))
+    .or(page.locator("button, a, input[type='button']").filter({ hasText: /^\s*cancel\s*$/i }))
+    .first();
+  if (await cancel.isVisible().catch(() => false)) {
+    await cancel.click({ timeout: 5000 }).catch(async () => {
+      await cancel.click({ force: true, timeout: 3000 }).catch(() => {});
+    });
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  return clickPracticeQControlByText(page, /^cancel$/i);
 }
 
 async function waitForPracticeQReady(page: Page) {

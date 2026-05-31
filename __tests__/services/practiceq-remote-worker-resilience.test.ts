@@ -145,12 +145,21 @@ describe("PracticeQ remote worker resilience", () => {
 
   it("enters the IntakeQ intro page before filling questions", () => {
     expect(workerSource).toContain("resolvePracticeQIntroPage");
-    expect(workerSource).toContain("fill\\s+this\\s+out\\s+by\\s+hand");
+    expect(workerSource).toContain("start\\s+(new\\s+)?(intake\\s+)?form|next\\s+page|continue|begin");
+    expect(workerSource).not.toContain("clickPracticeQControlByText(page, /fill\\s+this\\s+out\\s+by\\s+hand/i)");
   });
 
   it("does not use the offline-response control as the final PracticeQ submit button", () => {
     expect(workerSource).toContain("respond\\s+offline|fill\\s+this\\s+out\\s+by\\s+hand|print\\s+blank\\s+form");
+    expect(workerSource).toContain("isPracticeQOfflinePrompt");
+    expect(workerSource).toContain("dismissPracticeQOfflinePrompt");
     expect(workerSource).toContain("submit\\s*form|submit|finish|done");
+  });
+
+  it("exposes an authenticated wake endpoint so cold Render workers start queued jobs immediately", () => {
+    expect(remoteServerSource).toContain('url.pathname === "/wake"');
+    expect(remoteServerSource).toContain('req.headers["x-practiceq-api-key"]');
+    expect(remoteServerSource).toContain("pollQueuedJobs().catch");
   });
 
   it("polls PracticeQ status after admin Set as Completed", async () => {
