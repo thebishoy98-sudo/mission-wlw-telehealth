@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { saveIntakeState } from "@/lib/intake-store";
 import { getStatusLabel, getStatusColor, formatDateTime, formatCurrency } from "@/lib/utils";
 import { Package, Clock, CheckCircle2 } from "lucide-react";
 
@@ -100,47 +99,7 @@ function PatientPortalContent() {
   );
 
   const handleReorder = (order: Types.Order) => {
-    const sourcePatient = patient;
-    saveIntakeState({
-      patientId: sourcePatient?.id,
-      firstName: sourcePatient?.firstName ?? "",
-      lastName: sourcePatient?.lastName ?? "",
-      dateOfBirth: sourcePatient?.dateOfBirth ?? "",
-      gender: sourcePatient?.gender ?? "",
-      phone: sourcePatient?.phone ?? "",
-      email: sourcePatient?.email ?? "",
-      address: sourcePatient?.address ?? {
-        street1: "",
-        city: "",
-        state: "",
-        zipCode: "",
-        country: "USA",
-      },
-      shippingAddress: sourcePatient?.shippingAddress ?? sourcePatient?.address ?? {
-        street1: "",
-        city: "",
-        state: "",
-        zipCode: "",
-        country: "USA",
-      },
-      productId: order.productId,
-      doseId: order.doseId,
-      questionnaireAnswers: {},
-      consentAcknowledged: false,
-      signedName: "",
-      consented: false,
-      consentSignedAt: undefined,
-      licenseUploaded: false,
-      selfieUploaded: false,
-      licenseImageData: undefined,
-      selfieFrameData: undefined,
-      identityVideoData: undefined,
-      paymentProcessed: false,
-      orderId: undefined,
-      identityStatus: "missing",
-      identityAiResult: undefined,
-    });
-    router.push("/start/info?reorder=1");
+    router.push(`/patient/reorder?orderId=${encodeURIComponent(order.id)}`);
   };
 
   return (

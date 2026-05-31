@@ -151,11 +151,6 @@ export default function Confirmation() {
               We could not prepare your consent automatically. Our team will contact you to finish it.
             </div>
           )}
-          <Link href="/status">
-            <Button fullWidth>
-              Track My Order <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-          </Link>
           <Link href="/">
             <Button fullWidth variant="ghost">Back to Home</Button>
           </Link>

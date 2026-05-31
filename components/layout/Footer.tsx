@@ -31,7 +31,7 @@ export function Footer() {
           <div>
             <h4 className="font-semibold mb-4 text-sm uppercase tracking-widest text-gray-400">Support</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><Link href="/status" className="hover:text-white transition-colors">Track My Order</Link></li>
+              <li><Link href="/patient" className="hover:text-white transition-colors">My Orders</Link></li>
               <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Contact Us</a></li>
               <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Dosage Instructions</a></li>
             </ul>
