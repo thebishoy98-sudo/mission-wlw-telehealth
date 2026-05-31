@@ -50,7 +50,7 @@ describe("PracticeQ remote worker resilience", () => {
   });
 
   it("does not keep retrying PracticeQ jobs that are missing required patient vitals", () => {
-    expect(dbSource).toContain("Missing required patient vitals for IntakeQ:%");
+    expect((dbSource.match(/Missing required patient vitals for IntakeQ:%/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(dbSource).toContain("COALESCE(last_error, '') NOT LIKE");
   });
 

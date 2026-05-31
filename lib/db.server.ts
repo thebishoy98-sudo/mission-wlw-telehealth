@@ -730,6 +730,7 @@ export const practiceqAutomationJobDb = {
       SELECT * FROM practiceq_automation_jobs
       WHERE status = 'failed'
         AND intake_id IS NULL
+        AND COALESCE(last_error, '') NOT LIKE 'Missing required patient vitals for IntakeQ:%'
       ORDER BY created_at ASC
     `;
     return rows.map(rowToPracticeQAutomationJob);
