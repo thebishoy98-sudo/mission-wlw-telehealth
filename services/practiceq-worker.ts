@@ -82,6 +82,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await resolvePracticeQResumePrompt(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
+    await closeBrowserAfterPracticeQSubmit(browser);
 
     return verifyPracticeQSavedSubmission(submitResult, {
       patient,
@@ -163,7 +164,7 @@ export async function startPracticeQRemoteSession(
   const uploadFile = selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
-    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions", "--disable-background-networking"],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.setDefaultTimeout(8000);
@@ -181,6 +182,7 @@ export async function startPracticeQRemoteSession(
         await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: submitting intake form" }).catch(() => null);
         const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
         await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: verifying submitted intake" }).catch(() => null);
+        await closeBrowserAfterPracticeQSubmit(browser);
         return verifyPracticeQSavedSubmission(submitResult, {
           patient,
           answers,
@@ -204,6 +206,10 @@ export async function startPracticeQRemoteSession(
     await browser.close().catch(() => {});
     return { status: "failed", error: (error as Error).message };
   }
+}
+
+async function closeBrowserAfterPracticeQSubmit(browser: Browser) {
+  await browser.close().catch(() => {});
 }
 
 export function getPracticeQRemoteSession(jobId: string, token: string): RemoteSession | null {

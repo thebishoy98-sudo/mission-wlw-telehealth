@@ -175,6 +175,12 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("waitForPracticeQCompletedStatus(matchedIntake.id)");
   });
 
+  it("closes the form-fill browser before API/admin verification to reduce Render memory pressure", () => {
+    expect(workerSource).toContain("closeBrowserAfterPracticeQSubmit");
+    expect(workerSource).toContain("await closeBrowserAfterPracticeQSubmit(browser);");
+    expect(workerSource).toContain("--disable-background-networking");
+  });
+
   it("trusts the admin browser when the PracticeQ page visibly shows completed", () => {
     expect(workerSource).toContain("practiceQAdminPageShowsCompleted");
     expect(workerSource).toContain("await waitForPracticeQCompletedStatus(matchedIntake.id).catch(() => false);");
