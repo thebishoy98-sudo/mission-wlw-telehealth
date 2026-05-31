@@ -28,6 +28,16 @@ function fallbackResult(summary: string, flags: string[]): IdentityAiResult {
   };
 }
 
+function isSandboxAutoVerifyEnabled() {
+  return (
+    process.env.IDENTITY_SANDBOX_AUTO_VERIFY === "true" &&
+    (
+      process.env.BYPASS_QB_PAYMENTS === "true" ||
+      process.env.NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT === "sandbox"
+    )
+  );
+}
+
 export function normalizeIdentityAiResult(result: IdentityAiResult): IdentityAiResult {
   const flags = result.flags.map((flag) => flag.toLowerCase());
   const summary = result.summary.toLowerCase();
@@ -105,6 +115,16 @@ export async function verifyIdentityUploads(
     return fallbackResult("Identity verification is missing either the ID photo or identity video.", [
       "missing_required_upload",
     ]);
+  }
+
+  if (isSandboxAutoVerifyEnabled()) {
+    return {
+      status: "verified",
+      confidence: 1,
+      summary: "Sandbox identity auto-verify is enabled for this environment.",
+      flags: ["sandbox_auto_verified"],
+      checkedAt: new Date().toISOString(),
+    };
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {

@@ -1,5 +1,7 @@
 /**
  * Sets required sync:false env vars on Render services using the Render API.
+ * Existing Render env vars are read first and preserved because Render PUT
+ * replaces the whole env-var set.
  *
  * Usage:
  *   RENDER_API_KEY=<your-key> npx ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/set-render-env.ts
@@ -53,6 +55,17 @@ async function listServices() {
   return (body as any[]).map((s: any) => ({ id: s.service?.id, name: s.service?.name }));
 }
 
+async function getEnvVars(serviceId: string) {
+  const { status, body } = await renderFetch(`/services/${serviceId}/env-vars`);
+  if (status !== 200) throw new Error(`List env vars failed (${status}): ${JSON.stringify(body)}`);
+
+  return Object.fromEntries(
+    (body as any[])
+      .map((item: any) => [item.envVar?.key, item.envVar?.value ?? ""])
+      .filter(([key]) => Boolean(key))
+  ) as Record<string, string>;
+}
+
 async function setEnvVars(serviceId: string, vars: Record<string, string>) {
   const envVars = Object.entries(vars)
     .filter(([, v]) => v !== "")
@@ -63,14 +76,20 @@ async function setEnvVars(serviceId: string, vars: Record<string, string>) {
     return;
   }
 
+  const existingEnvVars = await getEnvVars(serviceId);
+  const mergedEnvVars = Object.entries({
+    ...existingEnvVars,
+    ...Object.fromEntries(envVars.map(({ key, value }) => [key, value])),
+  }).map(([key, value]) => ({ key, value }));
+
   const { status, body } = await renderFetch(`/services/${serviceId}/env-vars`, {
     method: "PUT",
-    body: JSON.stringify(envVars),
+    body: JSON.stringify(mergedEnvVars),
   });
   if (status !== 200 && status !== 201) {
     console.error(`  Failed to set env vars (${status}):`, JSON.stringify(body));
   } else {
-    console.log(`  Set ${envVars.length} env vars (${status}).`);
+    console.log(`  Set ${envVars.length} env vars and preserved ${mergedEnvVars.length - envVars.length} existing vars (${status}).`);
   }
 }
 
