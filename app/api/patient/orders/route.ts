@@ -19,10 +19,19 @@ export async function GET(req: Request) {
       dbServer.productDb.getById(productId).catch(() => null)
     )
   );
+  const pharmacyOrders = await Promise.all(
+    orders.map((order) => dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null))
+  );
 
   return NextResponse.json({
     patient,
     orders,
     products: products.filter(Boolean),
+    pharmacyOrders: pharmacyOrders.filter(Boolean).map((pharmacyOrder) => ({
+      orderId: pharmacyOrder!.orderId,
+      status: pharmacyOrder!.status,
+      trackingNumber: pharmacyOrder!.trackingNumber,
+      shippedAt: pharmacyOrder!.shippedAt,
+    })),
   });
 }

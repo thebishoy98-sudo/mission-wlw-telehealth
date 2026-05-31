@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { getIntakeState, saveIntakeState, type IntakeFormState } from "@/lib/intake-store";
 import { buildTreatmentConsentText, doesSignatureMatchPatient, patientLegalName } from "@/lib/consent";
 import { Shield } from "lucide-react";
 
 export default function Consent() {
   const router = useRouter();
-  const [intakeState, setIntakeState] = useState(getIntakeState());
+  const [intakeState, setIntakeState] = useState<IntakeFormState | null>(null);
   const [signedName, setSignedName] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -23,10 +23,11 @@ export default function Consent() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const activeIntakeState = intakeState ?? getIntakeState();
     const newErrors: Record<string, string> = {};
     if (!signedName.trim()) newErrors.signedName = "Please type your full name to sign";
-    if (signedName.trim() && !doesSignatureMatchPatient(signedName, intakeState)) {
-      newErrors.signedName = `Signature must match the patient name: ${patientLegalName(intakeState)}`;
+    if (signedName.trim() && !doesSignatureMatchPatient(signedName, activeIntakeState)) {
+      newErrors.signedName = `Signature must match the patient name: ${patientLegalName(activeIntakeState)}`;
     }
     if (!acknowledged) newErrors.acknowledged = "You must agree to continue";
     setErrors(newErrors);
@@ -36,7 +37,7 @@ export default function Consent() {
     router.push("/start/uploads");
   };
 
-  const consentText = buildTreatmentConsentText(intakeState);
+  const consentText = buildTreatmentConsentText(intakeState ?? { firstName: "", lastName: "", dateOfBirth: "" });
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">

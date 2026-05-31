@@ -39,11 +39,18 @@ export default function PatientInfo() {
   useEffect(() => {
     if (formData.productId) {
       const product = products.find((item) => item.id === formData.productId);
-      if (product && product.doses.length > 0 && !selectedDose) {
-        setSelectedDose(product.doses[0].id);
+      if (product && product.doses.length > 0) {
+        const doseIds = product.doses.map((dose) => dose.id);
+        if (!selectedDose || !doseIds.includes(selectedDose)) {
+          if (formData.doseId && doseIds.includes(formData.doseId)) {
+            setSelectedDose(formData.doseId);
+          } else {
+            setSelectedDose(product.doses[0].id);
+          }
+        }
       }
     }
-  }, [formData.productId, products, selectedDose]);
+  }, [formData.productId, formData.doseId, products, selectedDose]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -10,8 +11,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
+import { saveIntakeState } from "@/lib/intake-store";
 import { getStatusLabel, getStatusColor, formatDateTime, formatCurrency } from "@/lib/utils";
 import { Package, Clock, CheckCircle2 } from "lucide-react";
+
+type PatientPharmacyOrder = Pick<Types.PharmacyOrder, "orderId" | "status" | "trackingNumber" | "shippedAt">;
 
 function StatusIcon({ status }: { status: Types.OrderStatus }) {
   if (status === "delivered" || status === "fulfilled") {
@@ -22,8 +26,11 @@ function StatusIcon({ status }: { status: Types.OrderStatus }) {
 
 function PatientPortalContent() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [patient, setPatient] = useState<Types.Patient | null>(null);
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [products, setProducts] = useState<Record<string, Types.Product>>({});
+  const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, PatientPharmacyOrder>>({});
 
   useEffect(() => {
     if (!user?.patientId) return;
@@ -34,7 +41,12 @@ function PatientPortalContent() {
       try {
         const response = await fetch("/api/patient/orders", { cache: "no-store" });
         if (!response.ok) throw new Error("server orders unavailable");
-        const data = await response.json() as { orders: Types.Order[]; products: Types.Product[] };
+        const data = await response.json() as {
+          patient: Types.Patient;
+          orders: Types.Order[];
+          products: Types.Product[];
+          pharmacyOrders: PatientPharmacyOrder[];
+        };
         if (cancelled) return;
         const patientOrders = [...data.orders].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -42,10 +54,13 @@ function PatientPortalContent() {
         data.products.forEach((product) => {
           productMap[product.id] = product;
         });
+        setPatient(data.patient);
         setOrders(patientOrders);
         setProducts(productMap);
+        setPharmacyOrders(Object.fromEntries((data.pharmacyOrders ?? []).map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
         return;
       } catch {
+        const localPatient = db.patientDb.getById(patientId);
         const patientOrders = db.orderDb
           .getByPatient(patientId)
           .sort(
@@ -59,8 +74,15 @@ function PatientPortalContent() {
           }
         });
         if (!cancelled) {
+          setPatient(localPatient ?? null);
           setOrders(patientOrders);
           setProducts(productMap);
+          const localPharmacyOrders: Record<string, PatientPharmacyOrder> = {};
+          patientOrders.forEach((order) => {
+            const pharmacyOrder = db.pharmacyOrderDb.getByOrder(order.id);
+            if (pharmacyOrder) localPharmacyOrders[order.id] = pharmacyOrder;
+          });
+          setPharmacyOrders(localPharmacyOrders);
         }
       }
     }
@@ -76,6 +98,50 @@ function PatientPortalContent() {
       o.status !== "rejected" &&
       o.status !== "draft"
   );
+
+  const handleReorder = (order: Types.Order) => {
+    const sourcePatient = patient;
+    saveIntakeState({
+      patientId: sourcePatient?.id,
+      firstName: sourcePatient?.firstName ?? "",
+      lastName: sourcePatient?.lastName ?? "",
+      dateOfBirth: sourcePatient?.dateOfBirth ?? "",
+      gender: sourcePatient?.gender ?? "",
+      phone: sourcePatient?.phone ?? "",
+      email: sourcePatient?.email ?? "",
+      address: sourcePatient?.address ?? {
+        street1: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        country: "USA",
+      },
+      shippingAddress: sourcePatient?.shippingAddress ?? sourcePatient?.address ?? {
+        street1: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        country: "USA",
+      },
+      productId: order.productId,
+      doseId: order.doseId,
+      questionnaireAnswers: {},
+      consentAcknowledged: false,
+      signedName: "",
+      consented: false,
+      consentSignedAt: undefined,
+      licenseUploaded: false,
+      selfieUploaded: false,
+      licenseImageData: undefined,
+      selfieFrameData: undefined,
+      identityVideoData: undefined,
+      paymentProcessed: false,
+      orderId: undefined,
+      identityStatus: "missing",
+      identityAiResult: undefined,
+    });
+    router.push("/start/info?reorder=1");
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -112,10 +178,12 @@ function PatientPortalContent() {
             {activeOrders.map((order) => {
               const product = products[order.productId];
               const dose = product?.doses.find((d) => d.id === order.doseId);
+              const pharmacyOrder = pharmacyOrders[order.id];
+              const trackingNumber = pharmacyOrder?.trackingNumber?.trim();
               return (
                 <Card key={order.id}>
                   <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3 min-w-0">
                         <StatusIcon status={order.status} />
                         <div className="min-w-0">
@@ -136,8 +204,21 @@ function PatientPortalContent() {
                               {formatDateTime(order.createdAt)}
                             </span>
                           </div>
+                          <p className="mt-2 text-xs leading-5 text-gray-500">
+                            {trackingNumber ? (
+                              <>
+                                Tracking number:{" "}
+                                <span className="font-mono font-semibold text-gray-700">{trackingNumber}</span>
+                              </>
+                            ) : (
+                              "Tracking number will be provided here once your order ships."
+                            )}
+                          </p>
                         </div>
                       </div>
+                      <Button size="sm" variant="outline" onClick={() => handleReorder(order)}>
+                        Reorder
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -146,13 +227,6 @@ function PatientPortalContent() {
           </div>
         )}
 
-        <div className="mt-6 text-center">
-          <Link href="/status">
-            <Button variant="ghost" size="sm">
-              Track order status
-            </Button>
-          </Link>
-        </div>
       </div>
     </div>
   );
