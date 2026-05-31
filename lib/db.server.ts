@@ -706,7 +706,12 @@ export const practiceqAutomationJobDb = {
       SELECT * FROM practiceq_automation_jobs
       WHERE status = 'queued'
          OR (status = 'running' AND attempts < 10 AND locked_at < NOW() - INTERVAL '10 minutes')
-         OR (status = 'failed' AND intake_id IS NULL AND attempts < 10)
+         OR (
+           status = 'failed'
+           AND intake_id IS NULL
+           AND attempts < 10
+           AND COALESCE(last_error, '') NOT LIKE 'Missing required patient vitals for IntakeQ:%'
+         )
       ORDER BY
         CASE
           WHEN status = 'queued' THEN 0

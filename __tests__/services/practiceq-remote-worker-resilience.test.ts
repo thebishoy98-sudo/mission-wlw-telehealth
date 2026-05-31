@@ -44,7 +44,14 @@ describe("PracticeQ remote worker resilience", () => {
   });
 
   it("automatically retries failed form-fill jobs that never submitted an intake", () => {
-    expect(dbSource).toContain("status = 'failed' AND intake_id IS NULL AND attempts < 10");
+    expect(dbSource).toContain("status = 'failed'");
+    expect(dbSource).toContain("AND intake_id IS NULL");
+    expect(dbSource).toContain("AND attempts < 10");
+  });
+
+  it("does not keep retrying PracticeQ jobs that are missing required patient vitals", () => {
+    expect(dbSource).toContain("Missing required patient vitals for IntakeQ:%");
+    expect(dbSource).toContain("COALESCE(last_error, '') NOT LIKE");
   });
 
   it("prioritizes fresh queued PracticeQ jobs ahead of stale retry backlog", () => {
