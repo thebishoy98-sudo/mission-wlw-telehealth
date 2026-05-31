@@ -145,8 +145,12 @@ services:
       - key: PRACTICEQ_REMOTE_PUBLIC_URL
         value: https://mission-wlw-practiceq-remote.onrender.com
       - key: USE_REAL_SPRUCE
-        value: false
+        sync: false
       - key: SPRUCE_AUTH_TOKEN
+        sync: false
+      - key: SPRUCE_ACCESS_ID
+        sync: false
+      - key: SPRUCE_API_KEY
         sync: false
       - key: SPRUCE_INTERNAL_ENDPOINT_ID
         sync: false
@@ -206,6 +210,16 @@ services:
       - key: PRACTICEQ_ADMIN_SET_COMPLETED
         value: true
       - key: PRACTICEQ_ADMIN_STORAGE_STATE_JSON
+        sync: false
+      - key: USE_REAL_SPRUCE
+        sync: false
+      - key: SPRUCE_AUTH_TOKEN
+        sync: false
+      - key: SPRUCE_ACCESS_ID
+        sync: false
+      - key: SPRUCE_API_KEY
+        sync: false
+      - key: SPRUCE_INTERNAL_ENDPOINT_ID
         sync: false
       - key: PHARMACY_PROVIDER
         value: appsheet

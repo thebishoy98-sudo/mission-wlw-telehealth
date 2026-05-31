@@ -1,6 +1,8 @@
 /** @jest-environment node */
 
 import { buildSpruceMessageRecord, normalizeSprucePhoneNumber, renderSpruceTemplate } from "@/services/spruce.server";
+import fs from "fs";
+import path from "path";
 import type { Patient } from "@/types";
 
 const patient: Patient = {
@@ -62,5 +64,16 @@ describe("buildSpruceMessageRecord", () => {
     expect(normalizeSprucePhoneNumber("+1 (732) 822-8376")).toBe("+17328228376");
     expect(normalizeSprucePhoneNumber("73228228376")).toBe("+17322822837");
     expect(normalizeSprucePhoneNumber("12345")).toBeNull();
+  });
+});
+
+describe("Render Spruce configuration", () => {
+  const renderYaml = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
+
+  it("does not hard-code live Spruce messaging off in the Render blueprint", () => {
+    expect(renderYaml).not.toMatch(/key:\s*USE_REAL_SPRUCE\s*\r?\n\s*value:\s*false/);
+    expect(renderYaml).toContain("key: USE_REAL_SPRUCE");
+    expect(renderYaml).toContain("key: SPRUCE_AUTH_TOKEN");
+    expect(renderYaml).toContain("key: SPRUCE_INTERNAL_ENDPOINT_ID");
   });
 });
