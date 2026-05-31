@@ -40,6 +40,74 @@ async function linkLatestPracticeQIntake(jobId: string, order: Order) {
   return match;
 }
 
+async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
+  const clientId = linkedClientId ?? order.practiceqClientId;
+  if (!clientId) return;
+
+  const [patient, answers, questions, consent, uploads, packet] = await Promise.all([
+    dbServer.patientDb.getById(order.patientId).catch(() => null),
+    dbServer.answerDb.getByOrder(order.id).catch(() => []),
+    dbServer.questionDb.getAll().catch(() => []),
+    dbServer.consentDb.getByOrder(order.id).catch(() => null),
+    dbServer.uploadDb.getByOrder(order.id).catch(() => []),
+    dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null),
+  ]);
+  if (!patient) return;
+
+  const files = await practiceq.uploadMissionChartFiles({
+    clientId,
+    order,
+    patient,
+    answers,
+    questions,
+    consent,
+    uploads,
+  }).catch(() => null);
+  if (!files) return;
+
+  const previousPacketData = packet?.packetData;
+  const packetPatch = {
+    packetData: {
+      patientInfo: previousPacketData?.patientInfo ?? { id: patient.id },
+      questionnaireAnswers: previousPacketData?.questionnaireAnswers ?? answers,
+      consentRecord: previousPacketData?.consentRecord ?? (consent ?? {}),
+      uploads: previousPacketData?.uploads ?? uploads,
+      productRequested: previousPacketData?.productRequested ?? order.productId,
+      doseSelected: previousPacketData?.doseSelected ?? order.doseId,
+      practiceQAnswerFile: files.answerFile ?? previousPacketData?.practiceQAnswerFile,
+      practiceQPdfFile: files.pdfFile ?? previousPacketData?.practiceQPdfFile,
+      practiceQIdentityFiles: files.identityFiles?.length
+        ? files.identityFiles
+        : previousPacketData?.practiceQIdentityFiles,
+    },
+    status: "completed" as const,
+    lastSyncAt: new Date().toISOString(),
+  } satisfies Partial<import("@/types").PracticeQPacket>;
+
+  if (packet) {
+    await dbServer.practiceqPacketDb.update(packet.id, packetPatch).catch(() => null);
+  } else {
+    await dbServer.practiceqPacketDb.create({
+      id: order.id,
+      orderId: order.id,
+      patientId: order.patientId,
+      submittedAt: new Date().toISOString(),
+      status: "completed",
+      packetData: {
+        patientInfo: { id: patient.id },
+        questionnaireAnswers: answers,
+        consentRecord: consent ?? {},
+        uploads,
+        practiceQAnswerFile: files.answerFile,
+        practiceQPdfFile: files.pdfFile,
+        practiceQIdentityFiles: files.identityFiles,
+        productRequested: order.productId,
+        doseSelected: order.doseId,
+      },
+    }).catch(() => null);
+  }
+}
+
 export async function completePracticeQSession(jobId: string): Promise<CompletionResult> {
   const job = await dbServer.practiceqAutomationJobDb.update(jobId, { status: "completed" }).catch(() => null);
   if (!job) return { status: "missing_job" };
@@ -51,7 +119,8 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
     .update(order.id, { practiceQStatus: "completed" })
     .catch(() => null);
   const dispatchOrder = completedOrder ?? { ...order, practiceQStatus: "completed" as const };
-  await linkLatestPracticeQIntake(jobId, dispatchOrder).catch(() => null);
+  const linkedIntake = await linkLatestPracticeQIntake(jobId, dispatchOrder).catch(() => null);
+  await attachMissionChartFiles(dispatchOrder, linkedIntake?.clientId).catch(() => null);
 
   if (!canTryPharmacyDispatch(dispatchOrder)) return { status: "waiting_for_identity" };
 

@@ -10,8 +10,12 @@ jest.mock("@/lib/db.server", () => ({
   orderDb: { getById: jest.fn(), update: jest.fn() },
   patientDb: { getById: jest.fn() },
   productDb: { getById: jest.fn() },
+  questionDb: { getAll: jest.fn() },
   answerDb: { getByOrder: jest.fn() },
+  consentDb: { getByOrder: jest.fn() },
+  uploadDb: { getByOrder: jest.fn() },
   pharmacyOrderDb: { getByOrder: jest.fn(), create: jest.fn() },
+  practiceqPacketDb: { getByOrder: jest.fn(), create: jest.fn(), update: jest.fn() },
 }));
 
 jest.mock("@/services/pharmacy", () => ({
@@ -25,6 +29,7 @@ jest.mock("@/services/spruce.server", () => ({
 
 jest.mock("@/services/practiceq", () => ({
   getIntakeSummaryFeed: jest.fn(),
+  uploadMissionChartFiles: jest.fn(),
 }));
 
 jest.mock("@/lib/phi-audit", () => ({
@@ -94,6 +99,7 @@ describe("completePracticeQSession", () => {
     (dbServer.orderDb.update as jest.Mock).mockImplementation(async (_id, data) => ({ ...order, ...data }));
     (dbServer.patientDb.getById as jest.Mock).mockResolvedValue(patient);
     (dbServer.productDb.getById as jest.Mock).mockResolvedValue(product);
+    (dbServer.questionDb.getAll as jest.Mock).mockResolvedValue([]);
     (dbServer.answerDb.getByOrder as jest.Mock).mockResolvedValue([
       {
         id: "answer_1",
@@ -103,14 +109,37 @@ describe("completePracticeQSession", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
       },
     ]);
+    (dbServer.consentDb.getByOrder as jest.Mock).mockResolvedValue(null);
+    (dbServer.uploadDb.getByOrder as jest.Mock).mockResolvedValue([]);
     (dbServer.pharmacyOrderDb.getByOrder as jest.Mock).mockResolvedValue(null);
     (dbServer.pharmacyOrderDb.create as jest.Mock).mockResolvedValue(null);
+    (dbServer.practiceqPacketDb.getByOrder as jest.Mock).mockResolvedValue({
+      id: "packet_1",
+      orderId: order.id,
+      patientId: patient.id,
+      status: "submitted",
+      submittedAt: "2026-01-01T00:00:00.000Z",
+      packetData: {
+        patientInfo: { id: patient.id },
+        questionnaireAnswers: [],
+        consentRecord: {},
+        uploads: [],
+        productRequested: product.name,
+        doseSelected: "2.5mg weekly",
+      },
+    });
+    (dbServer.practiceqPacketDb.update as jest.Mock).mockResolvedValue(null);
     (spruceServer.sendMessage as jest.Mock).mockResolvedValue({ id: "sms_1" });
     (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
       available: true,
       completed: [],
       pending: [],
       all: [],
+    });
+    (practiceq.uploadMissionChartFiles as jest.Mock).mockResolvedValue({
+      answerFile: { fileId: "file_answers", filename: "answers.json", uploadedAt: "2026-01-01T00:00:00.000Z" },
+      pdfFile: { fileId: "file_pdf", filename: "chart.pdf", uploadedAt: "2026-01-01T00:00:00.000Z" },
+      identityFiles: [],
     });
     (pharmacy.createPharmacyOrder as jest.Mock).mockResolvedValue({
       id: "pharmacy_1",
@@ -148,6 +177,39 @@ describe("completePracticeQSession", () => {
       practiceqClientId: "client_81",
       practiceQStatus: "completed",
     });
+  });
+
+  it("attaches Mission chart files to the linked PracticeQ client", async () => {
+    (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
+      available: true,
+      completed: [],
+      pending: [],
+      all: [
+        {
+          id: "intake_1",
+          clientId: "client_81",
+          clientEmail: patient.email,
+          clientName: "Bishoy Kamel",
+          status: "Completed",
+          submittedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await completePracticeQSession("job_1");
+
+    expect(practiceq.uploadMissionChartFiles).toHaveBeenCalledWith(expect.objectContaining({
+      clientId: "client_81",
+      order: expect.objectContaining({ id: order.id }),
+      patient,
+    }));
+    expect(dbServer.practiceqPacketDb.update).toHaveBeenCalledWith("packet_1", expect.objectContaining({
+      packetData: expect.objectContaining({
+        practiceQAnswerFile: expect.objectContaining({ fileId: "file_answers" }),
+        practiceQPdfFile: expect.objectContaining({ fileId: "file_pdf" }),
+      }),
+      status: "completed",
+    }));
   });
 
   it("marks the order PracticeQ-completed and dispatches verified orders to pharmacy", async () => {

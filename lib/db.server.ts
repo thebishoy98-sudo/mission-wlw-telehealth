@@ -135,6 +135,21 @@ export const patientDb = {
     return rows[0] ? rowToPatient(rows[0]) : null;
   },
 
+  async getByPhone(phone: string): Promise<Patient | null> {
+    if (!isDbAvailable()) return null;
+    const digits = phone.replace(/\D/g, "");
+    if (!digits) return null;
+    const alternateDigits = digits.length === 10 ? `1${digits}` : digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+    const { rows } = await sql`
+      SELECT * FROM patients
+      WHERE regexp_replace(phone, '[^0-9]', '', 'g') = ${digits}
+         OR regexp_replace(phone, '[^0-9]', '', 'g') = ${alternateDigits}
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `;
+    return rows[0] ? rowToPatient(rows[0]) : null;
+  },
+
   async create(p: Patient): Promise<Patient> {
     if (!isDbAvailable()) return p;
     await sql`
@@ -267,14 +282,26 @@ export const uploadDb = {
 
   async create(upload: Upload): Promise<Upload> {
     if (!isDbAvailable()) return upload;
-    await sql`
-      INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
-        storage_url, base64_data, uploaded_at, status, verification_notes)
-      VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
-        ${upload.fileSize}, ${upload.mimeType}, ${""}, ${upload.base64Data ?? ""},
-        ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
-      ON CONFLICT (id) DO NOTHING
-    `;
+    try {
+      await sql`
+        INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
+          storage_url, storage_key, base64_data, uploaded_at, status, verification_notes)
+        VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
+          ${upload.fileSize}, ${upload.mimeType}, ${upload.storageUrl ?? ""}, ${upload.storageKey ?? null}, ${upload.base64Data ?? ""},
+          ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
+        ON CONFLICT (id) DO NOTHING
+      `;
+    } catch (error) {
+      if (!String((error as Error).message).includes("storage_key")) throw error;
+      await sql`
+        INSERT INTO uploads (id, order_id, type, filename, file_size, mime_type,
+          storage_url, base64_data, uploaded_at, status, verification_notes)
+        VALUES (${upload.id}, ${upload.orderId}, ${upload.type}, ${upload.filename},
+          ${upload.fileSize}, ${upload.mimeType}, ${upload.storageUrl ?? ""}, ${upload.base64Data ?? ""},
+          ${upload.uploadedAt}, ${upload.status}, ${upload.verificationNotes ?? null})
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
     return upload;
   },
 };
@@ -351,12 +378,69 @@ export const consentDb = {
   async create(c: ConsentRecord): Promise<ConsentRecord> {
     if (!isDbAvailable()) return c;
     await sql`
-      INSERT INTO consent_records (id, order_id, consent_text, acknowledgments, signed_name, signed_at)
+      INSERT INTO consent_records (
+        id, order_id, consent_text, acknowledgments, signed_name, signed_at,
+        ip_address, user_agent, consent_version
+      )
       VALUES (${c.id}, ${c.orderId}, ${c.consentText}, ${JSON.stringify(c.acknowledgments)},
-        ${c.signedName}, ${c.signedAt})
+        ${c.signedName}, ${c.signedAt}, ${c.ipAddress ?? null}, ${c.userAgent ?? null},
+        ${c.consentVersion ?? "1.0"})
       ON CONFLICT (id) DO NOTHING
     `;
     return c;
+  },
+};
+
+export const patientLoginOtpDb = {
+  async create(entry: {
+    id: string;
+    phoneNumber: string;
+    patientId: string;
+    codeHash: string;
+    expiresAt: string;
+    createdAt: string;
+  }) {
+    if (!isDbAvailable()) return entry;
+    await sql`
+      INSERT INTO patient_login_otps (
+        id, phone_number, patient_id, code_hash, expires_at, attempts, consumed_at, created_at
+      ) VALUES (
+        ${entry.id}, ${entry.phoneNumber}, ${entry.patientId}, ${entry.codeHash},
+        ${entry.expiresAt}, 0, NULL, ${entry.createdAt}
+      )
+    `;
+    return entry;
+  },
+
+  async getActive(phoneNumber: string) {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM patient_login_otps
+      WHERE phone_number = ${phoneNumber}
+        AND consumed_at IS NULL
+        AND expires_at > NOW()
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  },
+
+  async incrementAttempts(id: string) {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE patient_login_otps
+      SET attempts = attempts + 1
+      WHERE id = ${id}
+    `;
+  },
+
+  async consume(id: string) {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE patient_login_otps
+      SET consumed_at = NOW()
+      WHERE id = ${id}
+    `;
   },
 };
 
@@ -838,6 +922,8 @@ function rowToUpload(r: any): Upload {
     filename: r.filename,
     fileSize: r.file_size,
     mimeType: r.mime_type,
+    storageUrl: r.storage_url ?? undefined,
+    storageKey: r.storage_key ?? undefined,
     base64Data: r.base64_data ?? "",
     uploadedAt: r.uploaded_at,
     status: r.status,
@@ -866,6 +952,7 @@ function rowToConsent(r: any): ConsentRecord {
     signedAt: r.signed_at,
     ipAddress: r.ip_address ?? undefined,
     userAgent: r.user_agent ?? undefined,
+    consentVersion: r.consent_version ?? undefined,
   };
 }
 
@@ -981,5 +1068,48 @@ export const phiAuditDb = {
       SELECT * FROM phi_audit_logs ORDER BY timestamp DESC LIMIT ${limit}
     `;
     return rows;
+  },
+};
+
+export const adminMaintenanceDb = {
+  async deleteSmokeTestData() {
+    if (!isDbAvailable()) {
+      return { patients: 0, orders: 0 };
+    }
+
+    const patientRows = await sql`
+      SELECT id FROM patients
+      WHERE LOWER(first_name) = 'smoke'
+         OR LOWER(email) LIKE 'practiceq-smoke-%@missionwlw.com'
+         OR LOWER(email) LIKE 'smoke-%@missionwlw.com'
+    `;
+    const patientIds = patientRows.rows.map((row) => row.id);
+    if (!patientIds.length) return { patients: 0, orders: 0 };
+
+    const orderRows = await sql`
+      SELECT id FROM orders WHERE patient_id = ANY(${patientIds})
+    `;
+    const orderIds = orderRows.rows.map((row) => row.id);
+
+    if (orderIds.length) {
+      await sql`DELETE FROM spruce_messages WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM integration_logs WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM practiceq_automation_jobs WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM practiceq_packets WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM provider_reviews WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM pharmacy_orders WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM quickbooks_records WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM uploads WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM consent_records WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM questionnaire_answers WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM payments WHERE order_id = ANY(${orderIds})`;
+      await sql`DELETE FROM orders WHERE id = ANY(${orderIds})`;
+    }
+
+    const deletedPatients = await sql`DELETE FROM patients WHERE id = ANY(${patientIds})`;
+    return {
+      patients: deletedPatients.rowCount ?? 0,
+      orders: orderIds.length,
+    };
   },
 };

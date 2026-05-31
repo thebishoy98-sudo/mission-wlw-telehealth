@@ -27,22 +27,47 @@ function PatientPortalContent() {
 
   useEffect(() => {
     if (!user?.patientId) return;
-    const patientOrders = db.orderDb
-      .getByPatient(user.patientId)
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    setOrders(patientOrders);
-
-    const productMap: Record<string, Types.Product> = {};
-    patientOrders.forEach((o) => {
-      if (!productMap[o.productId]) {
-        const p = db.productDb.getById(o.productId);
-        if (p) productMap[o.productId] = p;
+    const patientId = user.patientId;
+    let cancelled = false;
+    async function loadOrders() {
+      const productMap: Record<string, Types.Product> = {};
+      try {
+        const response = await fetch("/api/patient/orders", { cache: "no-store" });
+        if (!response.ok) throw new Error("server orders unavailable");
+        const data = await response.json() as { orders: Types.Order[]; products: Types.Product[] };
+        if (cancelled) return;
+        const patientOrders = [...data.orders].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        data.products.forEach((product) => {
+          productMap[product.id] = product;
+        });
+        setOrders(patientOrders);
+        setProducts(productMap);
+        return;
+      } catch {
+        const patientOrders = db.orderDb
+          .getByPatient(patientId)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        patientOrders.forEach((o) => {
+          if (!productMap[o.productId]) {
+            const p = db.productDb.getById(o.productId);
+            if (p) productMap[o.productId] = p;
+          }
+        });
+        if (!cancelled) {
+          setOrders(patientOrders);
+          setProducts(productMap);
+        }
       }
-    });
-    setProducts(productMap);
+    }
+    void loadOrders();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const activeOrders = orders.filter(

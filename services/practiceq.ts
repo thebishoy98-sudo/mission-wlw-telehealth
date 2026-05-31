@@ -10,6 +10,9 @@ import * as Types from "@/types";
 import * as db from "@/lib/db";
 import { serviceConfig } from "@/lib/service-config";
 import { generateId } from "@/lib/utils";
+import { buildConsentCertificate } from "@/lib/consent";
+import { dataUrlToFileParts } from "@/lib/data-url";
+import { loadIdentityMedia } from "@/services/identity-storage";
 
 type PacketOverrides = {
   patient?: Types.Patient | null;
@@ -639,7 +642,16 @@ async function uploadMissionIntakeFiles(
     patientId: patient.id,
     submittedAt: new Date().toISOString(),
     consent: consent
-      ? { signedName: consent.signedName, signedAt: consent.signedAt, acknowledgments: consent.acknowledgments }
+      ? {
+          signedName: consent.signedName,
+          signedAt: consent.signedAt,
+          acknowledgments: consent.acknowledgments,
+          ipAddress: consent.ipAddress,
+          userAgent: consent.userAgent,
+          consentVersion: consent.consentVersion,
+          certificate: buildConsentCertificate(consent, patient),
+          consentText: consent.consentText,
+        }
       : null,
     answers: normalizedAnswers,
   };
@@ -672,6 +684,72 @@ async function uploadMissionIntakeFiles(
       filename: pdfFilename,
       uploadedAt,
     },
+  };
+}
+
+export async function uploadMissionChartFiles(input: {
+  clientId: string | number;
+  order: Types.Order;
+  patient: Types.Patient;
+  answers: Types.QuestionnaireAnswer[];
+  questions: Types.Question[];
+  consent: Types.ConsentRecord | null;
+  uploads: Types.Upload[];
+}) {
+  const intakeFiles = await uploadMissionIntakeFiles(
+    input.clientId,
+    input.order,
+    input.patient,
+    input.answers,
+    input.questions,
+    input.consent
+  );
+  const uploadedAt = new Date().toISOString();
+  const identityFiles: NonNullable<Types.PracticeQPacket["packetData"]["practiceQIdentityFiles"]> = [];
+
+  for (const upload of input.uploads.filter((item) => item.type === "driver_license" || item.type === "selfie_video")) {
+    try {
+      const file = await practiceQFileFromUpload(upload);
+      if (!file) continue;
+      const uploaded = await uploadPracticeQClientFile(input.clientId, file);
+      identityFiles.push({
+        fileId: uploaded.id,
+        filename: file.filename,
+        uploadedAt,
+        type: upload.type,
+      });
+    } catch {
+      // Identity evidence attachment should not block chart completion or pharmacy dispatch.
+    }
+  }
+
+  return {
+    answerFile: intakeFiles?.answerFile,
+    pdfFile: intakeFiles?.pdfFile,
+    identityFiles,
+  };
+}
+
+function filenameStem(filename: string) {
+  return filename.replace(/\.[a-zA-Z0-9]+$/, "") || "identity-file";
+}
+
+async function practiceQFileFromUpload(upload: Types.Upload): Promise<PracticeQFileUploadInput | null> {
+  if (upload.base64Data) {
+    const parts = dataUrlToFileParts(upload.base64Data, filenameStem(upload.filename));
+    return {
+      filename: parts.filename,
+      mimeType: parts.mimeType,
+      buffer: parts.buffer,
+    };
+  }
+
+  const media = await loadIdentityMedia(upload);
+  if (!media) return null;
+  return {
+    filename: upload.filename,
+    mimeType: media.contentType || upload.mimeType || "application/octet-stream",
+    buffer: media.body,
   };
 }
 
@@ -719,6 +797,7 @@ export function createMissionIntakePdf(input: {
     profileAnswers,
     clinicalAnswers,
     consent: input.consent,
+    patient: input.patient,
   });
 }
 
@@ -729,6 +808,7 @@ function buildStyledMissionIntakePdf(input: {
   profileAnswers: Types.PracticeQMirrorAnswer[];
   clinicalAnswers: Types.PracticeQMirrorAnswer[];
   consent: Types.ConsentRecord | null;
+  patient: Types.Patient;
 }) {
   const pageWidth = 612;
   const pageHeight = 792;
@@ -819,16 +899,27 @@ function buildStyledMissionIntakePdf(input: {
     y = top - height - 10;
   };
   const consentBlock = () => {
-    sectionTitle("Consent");
-    ensureSpace(72);
-    rect(margin, y + 10, contentWidth, 58, "#f0fdfa", "#99f6e4");
+    sectionTitle("Consent Certificate");
+    ensureSpace(96);
+    rect(margin, y + 10, contentWidth, 82, "#f0fdfa", "#99f6e4");
     if (input.consent) {
       text("Signed", margin + 16, y - 12, 10, "bold", "#0f766e");
-      drawWrapped(`${input.consent.signedName} on ${new Date(input.consent.signedAt).toLocaleString("en-US")}`, margin + 82, y - 12, contentWidth - 104, 10, "regular", "#1f2937");
+      drawWrapped(buildConsentCertificate(input.consent, input.patient), margin + 82, y - 12, contentWidth - 104, 10, "regular", "#1f2937");
+      text("Version", margin + 16, y - 50, 9, "bold", "#0f766e");
+      drawWrapped(input.consent.consentVersion ?? "1.0", margin + 82, y - 50, contentWidth - 104, 9, "regular", "#1f2937");
+      y -= 108;
+      sectionTitle("Consent Terms Accepted");
+      for (const paragraph of input.consent.consentText.split(/\n{2,}/)) {
+        const textValue = paragraph.trim();
+        if (!textValue) continue;
+        const lines = wrappedLines(textValue, contentWidth, 8);
+        ensureSpace(lines.length * 12 + 10);
+        y = drawWrapped(textValue, margin, y, contentWidth, 8, "regular", "#374151") - 6;
+      }
     } else {
       text("No consent record supplied.", margin + 16, y - 12, 10, "regular", "#374151");
+      y -= 78;
     }
-    y -= 78;
   };
 
   startPage();

@@ -163,6 +163,7 @@ export interface ConsentRecord {
   signedAt: string;
   ipAddress?: string;
   userAgent?: string;
+  consentVersion?: string;
 }
 
 // File Uploads
@@ -234,6 +235,12 @@ export interface PracticeQPacket {
       filename: string;
       uploadedAt: string;
     };
+    practiceQIdentityFiles?: {
+      fileId: string;
+      filename: string;
+      uploadedAt: string;
+      type: Upload["type"];
+    }[];
     productRequested: string;
     doseSelected: string;
   };

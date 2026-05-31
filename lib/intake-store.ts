@@ -33,6 +33,7 @@ export interface IntakeFormState {
   consentAcknowledged: boolean;
   signedName: string;
   consented: boolean;
+  consentSignedAt?: string;
   licenseUploaded: boolean;
   selfieUploaded: boolean;
   licenseImageData?: string;

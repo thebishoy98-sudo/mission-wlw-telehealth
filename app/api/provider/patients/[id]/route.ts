@@ -50,9 +50,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireProviderOrAdmin(req);
+  if (denied) return denied;
+
   try {
     const { id } = await params;
-    const { orderId, action, reviewedBy = "Dr. Provider" } = await req.json();
+    const { orderId, action, reviewedBy = "Dotson, Karen" } = await req.json();
     if (!orderId || action !== "mark_chart_viewed") {
       return NextResponse.json({ error: "orderId and action=mark_chart_viewed required" }, { status: 400 });
     }

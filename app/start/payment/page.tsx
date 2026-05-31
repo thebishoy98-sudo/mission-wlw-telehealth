@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/Input";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { buildTreatmentConsentText, CONSENT_VERSION } from "@/lib/consent";
+import { dataUrlToFileMetadata } from "@/lib/data-url";
 import { formatCurrency } from "@/lib/utils";
 import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
 import { Lock, CreditCard } from "lucide-react";
@@ -185,10 +187,11 @@ export default function Payment() {
       db.consentDb.create({
         id: `consent_${Date.now()}`,
         orderId: order.id,
-        consentText: "Patient consented to telehealth services and data collection.",
+        consentText: buildTreatmentConsentText(patient),
         acknowledgments: { telehealth: true, pharmacy: true, payment: true, privacy: true },
         signedName: intakeState.signedName,
-        signedAt: new Date().toISOString(),
+        signedAt: intakeState.consentSignedAt ?? new Date().toISOString(),
+        consentVersion: CONSENT_VERSION,
       });
     }
 
@@ -207,16 +210,20 @@ export default function Payment() {
       });
     }
     if (intakeState.selfieUploaded) {
+      const identityData = intakeState.selfieFrameData || intakeState.identityVideoData || "";
+      const identityFile = identityData
+        ? dataUrlToFileMetadata(identityData, intakeState.selfieFrameData ? "identity-frame" : "identity-video")
+        : null;
       db.uploadDb.create({
         id: `upload_selfie_${Date.now()}`,
         orderId: order.id,
         type: "selfie_video",
-        filename: "selfie_video.mp4",
-        fileSize: 8500000,
-        mimeType: "video/mp4",
+        filename: identityFile?.filename ?? "identity-frame.jpg",
+        fileSize: identityData.length,
+        mimeType: identityFile?.mimeType ?? "image/jpeg",
         uploadedAt: new Date().toISOString(),
         status: "uploaded",
-        base64Data: intakeState.selfieFrameData ?? "",
+        base64Data: identityData,
       });
     }
 
@@ -274,7 +281,7 @@ export default function Payment() {
         questionnaireAnswers: qaAnswers,
         consentData: intakeState.consented && intakeState.signedName ? {
           signedName: intakeState.signedName,
-          signedAt: new Date().toISOString(),
+          signedAt: intakeState.consentSignedAt ?? new Date().toISOString(),
           acknowledgments: { telehealth: true, pharmacy: true, payment: true, privacy: true },
         } : null,
       }),

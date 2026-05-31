@@ -7,10 +7,8 @@ import {
   useState,
   ReactNode,
 } from "react";
-import * as db from "@/lib/db";
 
 const AUTH_KEY = "tele_auth_session";
-const PATIENT_PORTAL_PASSWORD = process.env.NEXT_PUBLIC_PATIENT_PORTAL_PASSWORD ?? "";
 
 export type UserRole = "patient" | "provider" | "admin";
 
@@ -70,25 +68,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (role === "patient") {
-      if (!PATIENT_PORTAL_PASSWORD || password !== PATIENT_PORTAL_PASSWORD) {
-        return { success: false, error: "Invalid email or password." };
+      const response = await fetch("/api/auth/patient-otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: email, code: password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, error: payload.error ?? "Invalid or expired code." };
       }
-      const patients = db.patientDb.getAll();
-      const patient = patients.find(
-        (p) => p.email.toLowerCase() === normalized
-      );
-      if (!patient) {
-        return { success: false, error: "No patient account found with that email." };
-      }
-      const authUser: AuthUser = {
-        id: `patient_session_${patient.id}`,
-        name: `${patient.firstName} ${patient.lastName}`,
-        email: patient.email,
-        role: "patient",
-        patientId: patient.id,
-      };
-      setUser(authUser);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(authUser));
+      setUser(payload.user);
+      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
       return { success: true };
     }
 

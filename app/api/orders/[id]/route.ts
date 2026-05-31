@@ -41,15 +41,16 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
   }
-  const [uploads, review, integrationLogs] = canViewIdentity
+  const [uploads, review, integrationLogs, consent] = canViewIdentity
     ? await Promise.all([
         dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
         dbServer.providerReviewDb.getByOrder(order.id).catch(() => db.providerReviewDb.getByOrder(order.id)),
         dbServer.integrationLogDb.getByOrder(order.id).catch(() =>
           db.integrationLogDb.getAll().filter((log) => log.orderId === order.id)
         ),
+        dbServer.consentDb.getByOrder(order.id).catch(() => db.consentDb.getByOrder(order.id)),
       ])
-    : [[], null, []];
+    : [[], null, [], null];
 
   return NextResponse.json({
     order,
@@ -88,6 +89,7 @@ export async function GET(
           uploads,
         }
       : undefined,
+    consent: canViewIdentity ? consent : undefined,
     diagnostics: canViewIdentity
       ? {
           practiceqAutomation: practiceqAutomationJob

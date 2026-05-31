@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID } from "crypto";
 import type { Upload } from "@/types";
+import { dataUrlToFileMetadata } from "@/lib/data-url";
 import { generateId } from "@/lib/utils";
 
 type IdentityUploadInput = {
@@ -42,17 +43,19 @@ export async function buildIdentityUploads({
   identityVideoData,
 }: IdentityUploadInput): Promise<IdentityUploadBuildResult> {
   const now = new Date().toISOString();
+  const documentFile = dataUrlToFileMetadata(idImageData, "identity-document");
   const documentUpload = await storeIdentityMedia({
     orderId,
     type: "driver_license",
-    filename: "identity-document.jpg",
+    filename: documentFile.filename,
     dataUrl: idImageData,
   });
   const videoData = identityVideoData ?? selfieFrameData;
+  const selfieFile = dataUrlToFileMetadata(videoData, identityVideoData ? "identity-video" : "identity-frame");
   const selfieUpload = await storeIdentityMedia({
     orderId,
     type: "selfie_video",
-    filename: identityVideoData ? "identity-video.webm" : "identity-frame.jpg",
+    filename: selfieFile.filename,
     dataUrl: videoData,
   });
 

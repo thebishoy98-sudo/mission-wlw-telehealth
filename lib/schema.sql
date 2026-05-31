@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS uploads (
   file_size           INTEGER NOT NULL,
   mime_type           TEXT NOT NULL,
   storage_url         TEXT NOT NULL DEFAULT '',
+  storage_key         TEXT,
   base64_data         TEXT,
   uploaded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status              TEXT NOT NULL DEFAULT 'uploaded',
@@ -173,6 +174,23 @@ CREATE TABLE IF NOT EXISTS uploads (
 );
 
 ALTER TABLE uploads ADD COLUMN IF NOT EXISTS base64_data TEXT;
+ALTER TABLE uploads ADD COLUMN IF NOT EXISTS storage_key TEXT;
+
+-- ── Patient Portal OTP Login ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS patient_login_otps (
+  id            TEXT PRIMARY KEY,
+  phone_number  TEXT NOT NULL,
+  patient_id    TEXT NOT NULL REFERENCES patients(id),
+  code_hash     TEXT NOT NULL,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  consumed_at   TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_patient_login_otps_phone_active
+  ON patient_login_otps(phone_number, expires_at)
+  WHERE consumed_at IS NULL;
 
 -- ── Provider Reviews ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS provider_reviews (

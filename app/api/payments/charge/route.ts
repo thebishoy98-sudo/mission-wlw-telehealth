@@ -39,6 +39,13 @@ import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { shouldBypassQuickBooksPayment } from "@/lib/payment-bypass";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
+import {
+  buildTreatmentConsentText,
+  CONSENT_VERSION,
+  doesSignatureMatchPatient,
+  getRequestIp,
+} from "@/lib/consent";
+import { dataUrlToFileParts } from "@/lib/data-url";
 import type { Payment, Upload } from "@/types";
 
 async function wakePracticeQRemoteWorker() {
@@ -184,13 +191,22 @@ export async function POST(req: NextRequest) {
       await Promise.all(submittedAnswerRows.map((a) => dbServer.answerDb.create(a).catch(() => {}))).catch(() => {});
     }
     if (consentData?.signedName) {
+      if (!effectivePatient || !doesSignatureMatchPatient(consentData.signedName, effectivePatient)) {
+        return NextResponse.json(
+          { error: "Consent signature must match the patient's legal name." },
+          { status: 422 }
+        );
+      }
       await dbServer.consentDb.create({
         id: `consent_${orderId}`,
         orderId,
-        consentText: "Patient consented to telehealth services and data collection.",
+        consentText: buildTreatmentConsentText(effectivePatient),
         acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
-        signedName: consentData.signedName,
+        signedName: String(consentData.signedName).trim(),
         signedAt: consentData.signedAt ?? new Date().toISOString(),
+        ipAddress: getRequestIp(req),
+        userAgent: req.headers.get("user-agent") ?? undefined,
+        consentVersion: CONSENT_VERSION,
       }).catch(() => {});
     }
 
@@ -304,30 +320,38 @@ export async function POST(req: NextRequest) {
     const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
     const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
     const submittedUploads: Upload[] = submittedIdentityMedia
-      ? [
-          {
-            id: generateId(),
-            orderId,
-            type: "driver_license",
-            filename: "identity-document.jpg",
-            fileSize: identityUploads.licenseImageData.length,
-            mimeType: "image/jpeg",
-            base64Data: identityUploads.licenseImageData,
-            uploadedAt: new Date().toISOString(),
-            status: "uploaded",
-          },
-          {
-            id: generateId(),
-            orderId,
-            type: "selfie_video",
-            filename: "identity-video.webm",
-            fileSize: (identityUploads.identityVideoData ?? identityUploads.selfieFrameData).length,
-            mimeType: identityUploads.identityVideoData ? "video/webm" : "image/jpeg",
-            base64Data: identityUploads.identityVideoData ?? identityUploads.selfieFrameData,
-            uploadedAt: new Date().toISOString(),
-            status: "uploaded",
-          },
-        ]
+      ? (() => {
+          const documentFile = dataUrlToFileParts(identityUploads.licenseImageData, "identity-document");
+          const identityData = identityUploads.identityVideoData ?? identityUploads.selfieFrameData;
+          const identityFile = dataUrlToFileParts(
+            identityData,
+            identityUploads.identityVideoData ? "identity-video" : "identity-frame"
+          );
+          return [
+            {
+              id: generateId(),
+              orderId,
+              type: "driver_license",
+              filename: documentFile.filename,
+              fileSize: documentFile.buffer.byteLength,
+              mimeType: documentFile.mimeType,
+              base64Data: identityUploads.licenseImageData,
+              uploadedAt: new Date().toISOString(),
+              status: "uploaded",
+            },
+            {
+              id: generateId(),
+              orderId,
+              type: "selfie_video",
+              filename: identityFile.filename,
+              fileSize: identityFile.buffer.byteLength,
+              mimeType: identityFile.mimeType,
+              base64Data: identityData,
+              uploadedAt: new Date().toISOString(),
+              status: "uploaded",
+            },
+          ];
+        })()
       : [];
     const identityAiUploads = submittedUploads.map((upload) =>
       upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: identityUploads.selfieFrameData } : upload

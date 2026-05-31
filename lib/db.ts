@@ -50,6 +50,15 @@ export const patientDb = {
     const patients = patientDb.getAll();
     return patients.find((p) => p.email.toLowerCase() === email.toLowerCase()) || null;
   },
+  getByPhone: (phone: string): Types.Patient | null => {
+    const digits = phone.replace(/\D/g, "");
+    const alternateDigits = digits.length === 10 ? `1${digits}` : digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+    const patients = patientDb.getAll();
+    return patients.find((p) => {
+      const patientDigits = p.phone.replace(/\D/g, "");
+      return patientDigits === digits || patientDigits === alternateDigits;
+    }) || null;
+  },
   create: (patient: Types.Patient): Types.Patient => {
     const patients = patientDb.getAll();
     patients.push(patient);

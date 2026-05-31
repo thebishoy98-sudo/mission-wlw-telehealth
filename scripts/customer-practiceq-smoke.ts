@@ -76,7 +76,7 @@ async function poll<T>(
       if (result) return result;
     } catch (error) {
       lastError = error;
-      if (error instanceof Error && /failed|missing|required|unauthorized/i.test(error.message)) {
+      if (error instanceof Error && /failed|required|unauthorized/i.test(error.message)) {
         throw error;
       }
     }

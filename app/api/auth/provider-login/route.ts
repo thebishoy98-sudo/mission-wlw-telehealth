@@ -12,6 +12,7 @@ export async function POST(req: Request) {
   const configuredEmail = process.env.PROVIDER_EMAIL ?? "";
   const configuredPassword = process.env.PROVIDER_PASSWORD ?? "";
   const providerSecret = process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET;
+  const providerName = process.env.PROVIDER_NAME ?? "Dotson, Karen";
 
   if (!configuredEmail || !configuredPassword || !providerSecret) {
     return NextResponse.json({ error: "Provider login is not configured" }, { status: 500 });
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     role: "provider",
     user: {
       id: "provider_session",
-      name: "Dr. Sarah Johnson",
+      name: providerName,
       email: configuredEmail,
       role: "provider",
     },

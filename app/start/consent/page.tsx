@@ -5,39 +5,38 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { buildTreatmentConsentText, doesSignatureMatchPatient, patientLegalName } from "@/lib/consent";
 import { Shield } from "lucide-react";
-
-const CONSENT_TEXT = `By proceeding, I consent to telemedicine services from a licensed healthcare provider. I understand that:
-
-- I am receiving telehealth services and may interact with licensed medical professionals remotely.
-- My health information will be collected and used solely for treatment purposes.
-- I have the right to refuse or discontinue treatment at any time.
-- Telehealth services may not be appropriate for all medical conditions.
-- My data is handled in accordance with HIPAA and our Privacy Policy.
-
-I authorize the collection, use, and disclosure of my health information as necessary for my care. I confirm that the information I have provided is accurate and complete to the best of my knowledge.`;
 
 export default function Consent() {
   const router = useRouter();
+  const [intakeState, setIntakeState] = useState(getIntakeState());
   const [signedName, setSignedName] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setSignedName(getIntakeState().signedName || "");
+    const saved = getIntakeState();
+    setIntakeState(saved);
+    setSignedName(saved.signedName || "");
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
     if (!signedName.trim()) newErrors.signedName = "Please type your full name to sign";
+    if (signedName.trim() && !doesSignatureMatchPatient(signedName, intakeState)) {
+      newErrors.signedName = `Signature must match the patient name: ${patientLegalName(intakeState)}`;
+    }
     if (!acknowledged) newErrors.acknowledged = "You must agree to continue";
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    saveIntakeState({ signedName, consented: true });
+    saveIntakeState({ signedName: signedName.trim(), consented: true, consentSignedAt: new Date().toISOString() });
     router.push("/start/uploads");
   };
+
+  const consentText = buildTreatmentConsentText(intakeState);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -52,8 +51,8 @@ export default function Consent() {
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-5 mb-6 max-h-56 overflow-y-auto border border-gray-100">
-          <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{CONSENT_TEXT}</p>
+        <div className="bg-gray-50 rounded-xl p-5 mb-6 max-h-80 overflow-y-auto border border-gray-100">
+          <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{consentText}</p>
         </div>
 
         <div className="space-y-4">
@@ -65,7 +64,7 @@ export default function Consent() {
               className="mt-0.5 accent-teal-600"
             />
             <span className="text-sm text-gray-700 leading-relaxed">
-              I have read and agree to the terms above. I understand my rights and consent to telemedicine services.
+              I have carefully read and agree to the consent terms above. I understand my rights and consent to this treatment.
             </span>
           </label>
           {errors.acknowledged && <p className="text-sm text-red-500">{errors.acknowledged}</p>}

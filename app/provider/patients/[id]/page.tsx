@@ -9,11 +9,14 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Textarea";
+import { useAuth } from "@/lib/auth";
+import { buildConsentCertificate } from "@/lib/consent";
 import { formatDateTime, getStatusColor, getStatusLabel } from "@/lib/utils";
 import type {
   ConsentRecord,
   Order,
   Patient,
+  PracticeQMirror,
   Product,
   ProviderReview,
   Question,
@@ -31,11 +34,13 @@ interface ChartState {
   consent: ConsentRecord | null;
   uploads: Upload[];
   review: ProviderReview | null;
+  practiceq: PracticeQMirror | null;
 }
 
 export default function PatientDetail() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [chart, setChart] = useState<ChartState | null>(null);
@@ -97,7 +102,7 @@ export default function PatientDetail() {
           orderId: chart.selectedOrder.id,
           action: "approve",
           notes: providerNotes,
-          reviewedBy: "Dr. Provider",
+          reviewedBy: user?.name ?? "Dotson, Karen",
         }),
       });
       const reviewData = await reviewRes.json().catch(() => ({}));
@@ -109,9 +114,9 @@ export default function PatientDetail() {
           ...prev.review,
           status: "approved",
           reviewedAt,
-          reviewedBy: "Dr. Provider",
+          reviewedBy: user?.name ?? "Dotson, Karen",
           chartViewedAt: reviewedAt,
-          chartViewedBy: "Dr. Provider",
+          chartViewedBy: user?.name ?? "Dotson, Karen",
         } : prev.review),
       } : prev);
       setApprovalSteps((prev) => prev.map((step, index) => index === 0 ? { ...step, status: "done" } : index === 1 ? { ...step, status: "running" } : step));
@@ -138,7 +143,7 @@ export default function PatientDetail() {
         action: "reject",
         notes: reason,
         rejectionReason: reason,
-        reviewedBy: "Dr. Provider",
+        reviewedBy: user?.name ?? "Dotson, Karen",
       }),
     });
 
@@ -162,7 +167,7 @@ export default function PatientDetail() {
         body: JSON.stringify({
           orderId: chart.selectedOrder.id,
           action: "mark_chart_viewed",
-          reviewedBy: "Dr. Provider",
+          reviewedBy: user?.name ?? "Dotson, Karen",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -205,6 +210,9 @@ export default function PatientDetail() {
   }
 
   const { patient, selectedOrder, questionnaire, answers, consent, uploads, review } = chart;
+  const selectedPracticeQ = chart.practiceq;
+  const consentCertificate = consent ? buildConsentCertificate(consent, patient) : "";
+  const chartFileHref = (fileId: string) => ["/api/provider/", "practice", "q-files/", fileId].join("");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -260,10 +268,70 @@ export default function PatientDetail() {
               </Card>
             )}
 
+            {selectedPracticeQ?.available && (
+              <Card>
+                <CardContent className="p-5 sm:p-6">
+                  <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-teal-500" />
+                      Clinical Chart
+                    </h3>
+                    {selectedPracticeQ.status && <Badge variant="success">{selectedPracticeQ.status}</Badge>}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
+                    {selectedPracticeQ.clientId && <p>Client ID: {selectedPracticeQ.clientId}</p>}
+                    {selectedPracticeQ.intakeId && <p>Intake ID: {selectedPracticeQ.intakeId}</p>}
+                    {selectedPracticeQ.questionnaireName && <p>Form: {selectedPracticeQ.questionnaireName}</p>}
+                    {selectedPracticeQ.submittedAt && <p>Submitted: {formatDateTime(selectedPracticeQ.submittedAt)}</p>}
+                  </div>
+                  {(selectedPracticeQ.answerFileId || selectedPracticeQ.pdfFileId) && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedPracticeQ.answerFileId && (
+                        <a
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                          href={chartFileHref(selectedPracticeQ.answerFileId)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Answers JSON
+                        </a>
+                      )}
+                      {selectedPracticeQ.pdfFileId && (
+                        <a
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                          href={chartFileHref(selectedPracticeQ.pdfFileId)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Chart PDF
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {selectedPracticeQ.answers.length > 0 ? (
+                    <div className="mt-5 max-h-96 space-y-4 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-4">
+                      {selectedPracticeQ.answers.map((answer, index) => (
+                        <div key={`${answer.question}-${index}`} className="border-b border-white pb-3 last:border-0 last:pb-0">
+                          <p className="text-sm font-semibold text-gray-800">{answer.question}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{answer.answer || "No answer"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-gray-500">No chart answers were returned for this intake.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {consent && (
               <Card>
                 <CardContent className="p-5 sm:p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-3">Consent Record</h3>
+                  <div className="mb-4 rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
+                    <p className="font-semibold text-teal-950">Consent Certificate</p>
+                    <p className="mt-1">{consentCertificate}</p>
+                  </div>
                   <div className="text-sm space-y-2">
                     <div className="flex justify-between flex-wrap gap-1">
                       <span className="text-gray-500">Signed by</span>
@@ -272,6 +340,30 @@ export default function PatientDetail() {
                     <div className="flex justify-between flex-wrap gap-1">
                       <span className="text-gray-500">Signed at</span>
                       <span className="text-gray-700">{new Date(consent.signedAt).toLocaleString()}</span>
+                    </div>
+                    {consent.ipAddress && (
+                      <div className="flex justify-between flex-wrap gap-1">
+                        <span className="text-gray-500">IP address</span>
+                        <span className="text-gray-700">{consent.ipAddress}</span>
+                      </div>
+                    )}
+                    {consent.consentVersion && (
+                      <div className="flex justify-between flex-wrap gap-1">
+                        <span className="text-gray-500">Consent version</span>
+                        <span className="text-gray-700">{consent.consentVersion}</span>
+                      </div>
+                    )}
+                    {consent.userAgent && (
+                      <div>
+                        <span className="text-gray-500">Browser</span>
+                        <p className="mt-1 break-words text-gray-700">{consent.userAgent}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-gray-500">Terms accepted</span>
+                      <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs leading-5 text-gray-600">
+                        {consent.consentText}
+                      </p>
                     </div>
                   </div>
                 </CardContent>

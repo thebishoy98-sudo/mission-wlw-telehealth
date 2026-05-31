@@ -13,6 +13,7 @@ import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
+import { buildConsentCertificate } from "@/lib/consent";
 
 type AdminDashboardData = {
   orders: Types.Order[];
@@ -31,6 +32,7 @@ type AdminDashboardData = {
 
 type OrderDetailData = {
   practiceq: Types.PracticeQMirror | null;
+  consent?: Types.ConsentRecord | null;
   identity?: {
     status: Types.IdentityStatus | "missing";
     reason?: string;
@@ -82,6 +84,7 @@ export default function OrdersManagement() {
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [selectedPracticeQ, setSelectedPracticeQ] = useState<Types.PracticeQMirror | null>(null);
+  const [selectedConsent, setSelectedConsent] = useState<Types.ConsentRecord | null>(null);
   const [selectedIdentity, setSelectedIdentity] = useState<OrderDetailData["identity"] | null>(null);
   const [selectedDiagnostics, setSelectedDiagnostics] = useState<OrderDetailData["diagnostics"] | null>(null);
   const [practiceQLoading, setPracticeQLoading] = useState(false);
@@ -140,6 +143,7 @@ export default function OrdersManagement() {
   useEffect(() => {
     if (!selectedOrder) {
       setSelectedPracticeQ(null);
+      setSelectedConsent(null);
       setSelectedIdentity(null);
       setSelectedDiagnostics(null);
       return;
@@ -155,6 +159,7 @@ export default function OrdersManagement() {
       .then((detail) => {
         if (!cancelled) {
           setSelectedPracticeQ(detail.practiceq ?? null);
+          setSelectedConsent(detail.consent ?? null);
           setSelectedIdentity(detail.identity ?? null);
           setSelectedDiagnostics(detail.diagnostics ?? null);
         }
@@ -162,6 +167,7 @@ export default function OrdersManagement() {
       .catch(() => {
         if (!cancelled) {
           setSelectedPracticeQ(null);
+          setSelectedConsent(null);
           setSelectedIdentity(null);
           setSelectedDiagnostics(null);
         }
@@ -292,6 +298,7 @@ export default function OrdersManagement() {
 
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
+  const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
   const latestErroredLogs = selectedDiagnostics?.integrationLogs.filter((log) => log.status === "error").slice(0, 3) ?? [];
 
   return (
@@ -517,6 +524,27 @@ export default function OrdersManagement() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {selectedConsent && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-bold text-gray-900 mb-4">Consent Certificate</h3>
+                      <div className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
+                        {buildConsentCertificate(selectedConsent, selectedPatient)}
+                      </div>
+                      <div className="mt-4 space-y-2 text-sm">
+                        <p><strong>Signed by:</strong> {selectedConsent.signedName}</p>
+                        <p><strong>Signed at:</strong> {formatDateTime(selectedConsent.signedAt)}</p>
+                        {selectedConsent.ipAddress && <p><strong>IP:</strong> {selectedConsent.ipAddress}</p>}
+                        {selectedConsent.consentVersion && <p><strong>Version:</strong> {selectedConsent.consentVersion}</p>}
+                        {selectedConsent.userAgent && <p className="break-words"><strong>Browser:</strong> {selectedConsent.userAgent}</p>}
+                      </div>
+                      <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-gray-50 p-3 text-xs leading-5 text-gray-600">
+                        {selectedConsent.consentText}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardContent className="p-6">

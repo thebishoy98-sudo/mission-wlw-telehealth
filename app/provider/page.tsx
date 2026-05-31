@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useAuth } from "@/lib/auth";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
 import { ClipboardCheck, Eye } from "lucide-react";
@@ -28,6 +29,7 @@ const patientDisplayName = (patient: Types.Patient | undefined) => {
 };
 
 function ProviderDashboardContent() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
   const [products, setProducts] = useState<Record<string, Types.Product>>({});
@@ -76,7 +78,7 @@ function ProviderDashboardContent() {
             orderId: order.id,
             action: "approve",
             notes: "Bulk approved by provider",
-            reviewedBy: "Dr. Provider",
+            reviewedBy: user?.name ?? "Dotson, Karen",
           }),
         });
         if (!reviewRes.ok) {

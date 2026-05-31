@@ -14,6 +14,6 @@ describe("staff login API contract", () => {
   it("returns the provider user object expected by the client auth context", () => {
     expect(providerSource).toContain("user:");
     expect(providerSource).toContain('role: "provider"');
-    expect(providerSource).toContain("Dr. Sarah Johnson");
+    expect(providerSource).toContain("Dotson, Karen");
   });
 });

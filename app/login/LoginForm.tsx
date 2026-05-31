@@ -14,9 +14,9 @@ const ROLE_CONTENT: Record<
   patient: {
     title: "Patient Portal",
     eyebrow: "Patient sign in",
-    description: "Access orders, refill status, and reorder options.",
+    description: "Access orders and refill status with a one-time text code.",
     destination: "/patient",
-    emailPlaceholder: "you@example.com",
+    emailPlaceholder: "(732) 555-0123",
   },
   provider: {
     title: "Provider Portal",
@@ -38,6 +38,7 @@ export function LoginForm({ role }: { role: UserRole }) {
   const config = ROLE_CONTENT[role];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [patientOtpRequested, setPatientOtpRequested] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -47,6 +48,23 @@ export function LoginForm({ role }: { role: UserRole }) {
     event.preventDefault();
     setError("");
     setLoading(true);
+
+    if (role === "patient" && !patientOtpRequested) {
+      const response = await fetch("/api/auth/patient-otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: email }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(payload.error || "Could not send a code.");
+        setLoading(false);
+        return;
+      }
+      setPatientOtpRequested(true);
+      setLoading(false);
+      return;
+    }
 
     const result = await login(email, password, role);
 
@@ -88,11 +106,13 @@ export function LoginForm({ role }: { role: UserRole }) {
 
           <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Email address</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                {role === "patient" ? "Phone number" : "Email address"}
+              </label>
               <input
-                type="email"
+                type={role === "patient" ? "tel" : "email"}
                 required
-                autoComplete="email"
+                autoComplete={role === "patient" ? "tel" : "email"}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder={config.emailPlaceholder}
@@ -100,18 +120,23 @@ export function LoginForm({ role }: { role: UserRole }) {
               />
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
-              <input
-                type="password"
-                required
-                autoComplete={role === "patient" ? "current-password" : "current-password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-teal-500 sm:text-sm"
-              />
-            </div>
+            {(role !== "patient" || patientOtpRequested) && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  {role === "patient" ? "Text code" : "Password"}
+                </label>
+                <input
+                  type={role === "patient" ? "text" : "password"}
+                  required
+                  inputMode={role === "patient" ? "numeric" : undefined}
+                  autoComplete={role === "patient" ? "one-time-code" : "current-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder={role === "patient" ? "Enter 6-digit code" : "Enter your password"}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-teal-500 sm:text-sm"
+                />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -121,8 +146,20 @@ export function LoginForm({ role }: { role: UserRole }) {
 
             <Button type="submit" fullWidth disabled={loading}>
               <Lock className="mr-2 h-4 w-4" />
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Please wait..." : role === "patient" && !patientOtpRequested ? "Send text code" : "Sign in"}
             </Button>
+            {role === "patient" && patientOtpRequested && (
+              <button
+                type="button"
+                className="w-full text-center text-sm font-semibold text-teal-700 hover:text-teal-800"
+                onClick={() => {
+                  setPassword("");
+                  setPatientOtpRequested(false);
+                }}
+              >
+                Use a different phone number
+              </button>
+            )}
           </form>
         </div>
 

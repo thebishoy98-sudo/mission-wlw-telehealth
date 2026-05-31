@@ -86,7 +86,7 @@ const createProviderReviews = (): void => {
     patientId: "patient_1",
     status: "approved",
     reviewedAt: daysAgo(28),
-    reviewedBy: "Dr. Sarah Johnson",
+    reviewedBy: "Dotson, Karen",
     notes: "Patient is a good candidate. Approved at 5mg dose.",
     approvedDose: "5mg",
   });
