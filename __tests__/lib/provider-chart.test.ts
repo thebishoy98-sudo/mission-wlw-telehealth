@@ -1,5 +1,5 @@
 import { hydratePatientFromPracticeQ, loadProviderPatientChart } from "@/lib/provider-chart";
-import type { Order, Patient, Product, ProviderReview } from "@/types";
+import type { Order, Patient, PracticeQAutomationJob, PracticeQPacket, Product, ProviderReview } from "@/types";
 
 const patient: Patient = {
   id: "patient_server",
@@ -71,6 +71,61 @@ describe("loadProviderPatientChart", () => {
     expect(chart?.product?.id).toBe(product.id);
     expect(chart?.payment).toMatchObject({ amount: 299 });
     expect(chart?.review?.identityReviewRequired).toBe(true);
+  });
+
+  it("passes the linked PracticeQ intake id into the chart mirror loader", async () => {
+    const packet: PracticeQPacket = {
+      id: order.id,
+      orderId: order.id,
+      patientId: patient.id,
+      submittedAt: "2026-05-23T18:54:00.000Z",
+      status: "completed",
+      packetData: {
+        patientInfo: { id: patient.id },
+        questionnaireAnswers: [],
+        consentRecord: {},
+        uploads: [],
+        productRequested: product.name,
+        doseSelected: "2.5mg Weekly",
+      },
+    };
+    const job: PracticeQAutomationJob = {
+      id: "pq_job_1",
+      orderId: order.id,
+      patientId: patient.id,
+      status: "completed",
+      attempts: 1,
+      practiceQStartUrl: "https://intakeq.com/new/yjvht0",
+      handoffToken: "token",
+      handoffExpiresAt: "2026-05-24T18:54:00.000Z",
+      intakeId: "remote-intake-123",
+      createdAt: "2026-05-23T18:54:00.000Z",
+      updatedAt: "2026-05-23T18:54:00.000Z",
+    };
+    const getForOrder = jest.fn().mockResolvedValue({
+      available: true,
+      intakeId: job.intakeId,
+      status: "completed",
+      answers: [{ question: "What is your height?", answer: "5'10\"" }],
+    });
+
+    const chart = await loadProviderPatientChart(patient.id, {
+      patients: { getById: jest.fn().mockResolvedValue(patient) },
+      orders: { getByPatient: jest.fn().mockResolvedValue([order]) },
+      products: { getById: jest.fn().mockResolvedValue(product) },
+      questions: { getAll: jest.fn().mockResolvedValue([]) },
+      answers: { getByOrder: jest.fn().mockResolvedValue([]) },
+      consents: { getByOrder: jest.fn().mockResolvedValue(null) },
+      uploads: { getByOrder: jest.fn().mockResolvedValue([]) },
+      payments: { getByOrder: jest.fn().mockResolvedValue(null) },
+      reviews: { getByOrder: jest.fn().mockResolvedValue(review) },
+      practiceqPackets: { getByOrder: jest.fn().mockResolvedValue(packet) },
+      practiceqAutomationJobs: { getByOrder: jest.fn().mockResolvedValue(job) },
+      practiceqMirror: { getForOrder },
+    });
+
+    expect(getForOrder).toHaveBeenCalledWith(order, packet, "remote-intake-123");
+    expect(chart?.practiceq?.answers).toHaveLength(1);
   });
 
   it("returns null when the patient is not in the server store", async () => {

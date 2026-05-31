@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
         pharmacyOrders: dbServer.pharmacyOrderDb,
         reviews: dbServer.providerReviewDb,
         practiceqPackets: dbServer.practiceqPacketDb,
+        practiceqAutomationJobs: dbServer.practiceqAutomationJobDb,
         practiceqMirror: { getForOrder: getPracticeQMirrorForOrder },
       }).catch(() => null);
       if (chart?.selectedOrder.id === order.id) patient = chart.patient;

@@ -4,6 +4,7 @@ import type {
   Patient,
   Payment,
   PharmacyOrder,
+  PracticeQAutomationJob,
   PracticeQMirror,
   PracticeQPacket,
   Product,
@@ -27,8 +28,9 @@ export interface ProviderChartStores {
   pharmacyOrders?: { getByOrder(orderId: string): MaybePromise<PharmacyOrder | null> };
   reviews: { getByOrder(orderId: string): MaybePromise<ProviderReview | null> };
   practiceqPackets?: { getByOrder(orderId: string): MaybePromise<PracticeQPacket | null> };
+  practiceqAutomationJobs?: { getByOrder(orderId: string): MaybePromise<PracticeQAutomationJob | null> };
   practiceqMirror?: {
-    getForOrder(order: Order, packet?: PracticeQPacket | null): MaybePromise<PracticeQMirror>;
+    getForOrder(order: Order, packet?: PracticeQPacket | null, linkedIntakeId?: string): MaybePromise<PracticeQMirror>;
   };
 }
 
@@ -114,7 +116,7 @@ export async function loadProviderPatientChart(
   const selectedOrder = orders[0];
   if (!selectedOrder) return null;
 
-  const [product, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review, practiceqPacket] =
+  const [product, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review, practiceqPacket, practiceqAutomationJob] =
     await Promise.all([
       stores.products.getById(selectedOrder.productId),
       stores.questions.getAll(),
@@ -125,9 +127,10 @@ export async function loadProviderPatientChart(
       stores.pharmacyOrders?.getByOrder(selectedOrder.id) ?? null,
       stores.reviews.getByOrder(selectedOrder.id),
       stores.practiceqPackets?.getByOrder(selectedOrder.id) ?? null,
+      stores.practiceqAutomationJobs?.getByOrder(selectedOrder.id) ?? null,
     ]);
   const practiceq = stores.practiceqMirror
-    ? await stores.practiceqMirror.getForOrder(selectedOrder, practiceqPacket)
+    ? await stores.practiceqMirror.getForOrder(selectedOrder, practiceqPacket, practiceqAutomationJob?.intakeId)
     : null;
   const hydratedPatient = hydratePatientFromPracticeQ(patient, practiceq);
 

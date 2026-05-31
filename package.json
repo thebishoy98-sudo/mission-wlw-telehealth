@@ -13,6 +13,7 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "smoke:launch": "npx tsx scripts/launch-readiness-smoke.ts",
     "smoke:customer-practiceq": "npx tsx scripts/customer-practiceq-smoke.ts",
     "db:migrate": "npx tsx scripts/db-migrate.ts",
     "practiceq:worker": "npx tsx scripts/practiceq-worker.ts",

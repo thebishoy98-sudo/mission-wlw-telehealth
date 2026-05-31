@@ -396,7 +396,10 @@ export async function getPracticeQMirrorForOrder(
   linkedIntakeId?: string
 ): Promise<Types.PracticeQMirror> {
   const clientId = order.practiceqClientId;
-  let intakeId = packet?.id ?? linkedIntakeId;
+  // Locally generated packet rows often use the Mission order id as their id.
+  // Prefer the actual IntakeQ/PracticeQ intake id recorded on the automation job
+  // so chart rendering does not depend on a secondary summary-feed recovery.
+  let intakeId = linkedIntakeId ?? (packet?.id && packet.id !== order.id ? packet.id : undefined);
   const unavailable = (reason: string): Types.PracticeQMirror => ({
     available: false,
     reason,

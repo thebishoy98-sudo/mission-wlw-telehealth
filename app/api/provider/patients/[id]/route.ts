@@ -27,6 +27,7 @@ export async function GET(
       pharmacyOrders: dbServer.pharmacyOrderDb,
       reviews: dbServer.providerReviewDb,
       practiceqPackets: dbServer.practiceqPacketDb,
+      practiceqAutomationJobs: dbServer.practiceqAutomationJobDb,
       practiceqMirror: { getForOrder: getPracticeQMirrorForOrder },
     });
 
