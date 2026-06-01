@@ -8,6 +8,7 @@ describe("patient portal reorder and tracking contract", () => {
   const reorderRoute = fs.readFileSync(path.join(process.cwd(), "app/api/patient/reorder/[orderId]/route.ts"), "utf8");
   const paymentPage = fs.readFileSync(path.join(process.cwd(), "app/start/payment/page.tsx"), "utf8");
   const paymentRoute = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+  const checkoutIdentityReuse = fs.readFileSync(path.join(process.cwd(), "lib/checkout-identity-reuse.ts"), "utf8");
   const confirmationPage = fs.readFileSync(path.join(process.cwd(), "app/start/confirmation/page.tsx"), "utf8");
   const navbar = fs.readFileSync(path.join(process.cwd(), "components/layout/Navbar.tsx"), "utf8");
   const footer = fs.readFileSync(path.join(process.cwd(), "components/layout/Footer.tsx"), "utf8");
@@ -42,9 +43,12 @@ describe("patient portal reorder and tracking contract", () => {
     expect(paymentPage).toContain('identityStatus: intakeState.identityStatus ?? "missing"');
     expect(paymentPage).toContain("intakeState.isReorder && intakeState.reorderSourceOrderId");
     expect(paymentRoute).toContain("reorderSourceOrderId");
-    expect(paymentRoute).toContain("reorderIdentityReused");
-    expect(paymentRoute).toContain("Reorder identity reused");
-    expect(paymentRoute).toContain("!reorderIdentityReused");
+    expect(paymentRoute).toContain("resolveReusableCheckoutIdentity");
+    expect(paymentRoute).toContain("patientOrdersForIdentity");
+    expect(paymentRoute).toContain("checkoutIdentityReused");
+    expect(checkoutIdentityReuse).toContain("Reorder identity reused");
+    expect(checkoutIdentityReuse).toContain("previous verified order");
+    expect(paymentRoute).toContain("!checkoutIdentityReused");
   });
 
   it("sends signed-in order navigation to the patient order list, not the public status tracker", () => {

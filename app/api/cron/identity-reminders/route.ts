@@ -57,6 +57,16 @@ export async function GET(req: NextRequest) {
         AND o.submitted_at IS NOT NULL
         AND o.submitted_at < NOW() - INTERVAL '20 hours'
         AND o.submitted_at > NOW() - INTERVAL '72 hours'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM orders prior
+          WHERE prior.patient_id = o.patient_id
+            AND prior.id <> o.id
+            AND (
+              prior.identity_status IN ('verified', 'manual_approved')
+              OR prior.status IN ('sent_to_pharmacy', 'processing', 'fulfilled', 'shipped', 'delivered')
+            )
+        )
       ORDER BY o.submitted_at ASC
     `;
 
