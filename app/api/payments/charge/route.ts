@@ -444,10 +444,11 @@ export async function POST(req: NextRequest) {
       productId: productForIntegrations.id,
       doseId: persistedDose?.id ?? order.doseId,
     };
-    const updatedOrder = { ...orderForIntegrations, ...orderUpdates };
+    let updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken) : "";
-    let practiceQAutomationStatus: "queued" | "error" = "queued";
+    const skipPracticeQAutomation = checkoutIdentityReused;
+    let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     if (bypassQuickBooksPayment) {
@@ -493,9 +494,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 9. PracticeQ — queue browser automation. Do not create a PracticeQ chart before payment.
-    // PracticeQ completion is tracked separately and does not block pharmacy dispatch.
-    try {
+    // 9. PracticeQ — queue browser automation for new intakes only. Reorders that
+    // reuse a previous verified order keep the prior chart and skip a duplicate form.
+    if (skipPracticeQAutomation) {
+      updatedOrder = { ...updatedOrder, practiceQStatus: "skipped" };
+      db.orderDb.update(orderId, { practiceQStatus: "skipped" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "skipped" }).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "practiceq",
+        action: "PracticeQ automation skipped for returning-patient reorder",
+        orderId,
+        patientId: patient.id,
+        status: "success",
+        details: { source: "payment_charge", reason: identityAiResult.summary },
+      }).catch(() => {});
+    } else try {
       const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
       await dbServer.practiceqAutomationJobDb.create(automationJob);
       db.practiceqAutomationJobDb.create(automationJob);

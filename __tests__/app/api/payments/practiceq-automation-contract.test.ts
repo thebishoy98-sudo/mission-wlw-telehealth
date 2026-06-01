@@ -11,6 +11,13 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).not.toContain("practiceq.submitIntakePacket");
   });
 
+  it("skips PracticeQ automation when checkout reused a previous verified order", () => {
+    expect(source).toContain("skipPracticeQAutomation");
+    expect(source).toContain("checkoutIdentityReused");
+    expect(source).toContain('practiceQStatus: "skipped"');
+    expect(source).toContain("PracticeQ automation skipped for returning-patient reorder");
+  });
+
   it("does not swallow failed server PracticeQ job inserts as a pending state", () => {
     expect(source).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
     expect(source).toContain("PracticeQ automation queue failed");

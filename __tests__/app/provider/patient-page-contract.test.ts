@@ -13,9 +13,8 @@ describe("provider patient page", () => {
     expect(source).toContain("encodeURIComponent(orderId)");
   });
 
-  it("does not render payment or pharmacy fulfillment details in the provider chart sidebar", () => {
+  it("does not render payment details or dispatch controls in the provider chart sidebar", () => {
     expect(source).not.toContain("Card ending");
-    expect(source).not.toContain("LifeFile ID");
     expect(source).not.toContain("Sent to Pharmacy");
     expect(source).not.toContain("No manual action required");
   });

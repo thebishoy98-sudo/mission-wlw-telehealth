@@ -14,6 +14,7 @@ import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
 import { buildConsentCertificate } from "@/lib/consent";
+import { getDisplayOrderNumber, getDisplayPracticeQStatus, isPracticeQSkippedForOrder } from "@/lib/order-display";
 
 type AdminDashboardData = {
   orders: Types.Order[];
@@ -299,7 +300,11 @@ export default function OrdersManagement() {
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
   const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
-  const latestErroredLogs = selectedDiagnostics?.integrationLogs.filter((log) => log.status === "error").slice(0, 3) ?? [];
+  const selectedPracticeQSkipped = selectedOrder ? isPracticeQSkippedForOrder(selectedOrder) : false;
+  const latestErroredLogs = selectedDiagnostics?.integrationLogs
+    .filter((log) => log.status === "error")
+    .filter((log) => !(selectedPracticeQSkipped && log.integrationName === "practiceq"))
+    .slice(0, 3) ?? [];
 
   return (
     <>
@@ -374,7 +379,8 @@ export default function OrdersManagement() {
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
-                                <p className="mt-1 font-mono text-xs text-gray-500">{order.id.slice(-8)}</p>
+                                <p className="mt-1 font-mono text-xs text-gray-500">{getDisplayOrderNumber(order, pharmacyOrder)}</p>
+                                {pharmacyOrder?.lifeFileOrderId && <p className="text-[11px] text-gray-400">Internal {order.id.slice(-8)}</p>}
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.paymentStatus)}>{getStatusLabel(order.paymentStatus)}</Badge>
@@ -384,7 +390,7 @@ export default function OrdersManagement() {
                                 {payment?.transactionId && <p className="mt-1 max-w-[10rem] truncate text-xs text-gray-500">{payment.transactionId}</p>}
                               </td>
                               <td className="px-4 py-4 text-sm">
-                                <Badge className={getStatusColor(order.practiceQStatus)}>{getStatusLabel(order.practiceQStatus)}</Badge>
+                                <Badge className={getStatusColor(getDisplayPracticeQStatus(order))}>{getStatusLabel(getDisplayPracticeQStatus(order))}</Badge>
                                 {order.practiceqClientId && <p className="mt-1 text-xs text-gray-500">Client {order.practiceqClientId}</p>}
                               </td>
                               <td className="px-4 py-4 text-sm">
@@ -442,7 +448,8 @@ export default function OrdersManagement() {
                   <CardContent className="p-6">
                     <h3 className="font-bold text-gray-900 mb-4">Order Details</h3>
                     <div className="space-y-2 text-sm">
-                      <p><strong>ID:</strong> {selectedOrder.id.slice(-8)}</p>
+                      <p><strong>Order #:</strong> <span className="font-mono text-xs">{getDisplayOrderNumber(selectedOrder, selectedPharmacyOrder)}</span></p>
+                      {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>Internal ID:</strong> <span className="font-mono text-xs">{selectedOrder.id.slice(-8)}</span></p>}
                       <p><strong>Status:</strong> {getStatusLabel(selectedOrder.status)}</p>
                       <p><strong>Created:</strong> {formatDateTime(selectedOrder.createdAt)}</p>
                       <p><strong>Identity:</strong> {selectedOrder.identityStatus ?? "missing"}</p>
@@ -452,13 +459,19 @@ export default function OrdersManagement() {
                         <p><strong>Payment:</strong> {getStatusLabel(selectedOrder.paymentStatus)}</p>
                         {selectedPayment?.transactionId && <p><strong>QB payment tx:</strong> <span className="font-mono text-xs">{selectedPayment.transactionId}</span></p>}
                         <p><strong>QuickBooks:</strong> {getStatusLabel(selectedOrder.quickbooksStatus)}</p>
-                        <p><strong>PracticeQ:</strong> {getStatusLabel(selectedOrder.practiceQStatus)}</p>
+                        <p><strong>PracticeQ:</strong> {getStatusLabel(getDisplayPracticeQStatus(selectedOrder))}</p>
                         <p><strong>Pharmacy:</strong> {getStatusLabel(selectedOrder.pharmacyStatus)}</p>
                         {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>LifeFile ID:</strong> <span className="font-mono text-xs">{selectedPharmacyOrder.lifeFileOrderId}</span></p>}
                         {selectedPharmacyOrder?.lastError && <p className="text-red-600">{selectedPharmacyOrder.lastError}</p>}
                       </div>
 
-                      {(selectedDiagnostics?.practiceqAutomation || latestErroredLogs.length > 0) && (
+                      {selectedPracticeQSkipped && (
+                        <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-gray-600">
+                          PracticeQ was skipped for this reorder because a previous verified chart is already on file.
+                        </div>
+                      )}
+
+                      {((selectedDiagnostics?.practiceqAutomation && !selectedPracticeQSkipped) || latestErroredLogs.length > 0) && (
                         <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm">
                           <p className="font-semibold text-gray-900">Latest Integration Details</p>
                           {latestErroredLogs.map((log) => (
@@ -474,7 +487,7 @@ export default function OrdersManagement() {
                               )}
                             </div>
                           ))}
-                          {selectedDiagnostics?.practiceqAutomation && (
+                          {selectedDiagnostics?.practiceqAutomation && !selectedPracticeQSkipped && (
                             <div className="mt-2 border-t border-amber-100 pt-2">
                               <p className="font-medium text-gray-800">PracticeQ Automation</p>
                               <p>Status: {selectedDiagnostics.practiceqAutomation.status}</p>
