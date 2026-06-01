@@ -250,10 +250,10 @@ async function loadPracticeQFile(fileId: string): Promise<LoadedIdentityMedia | 
   const baseUrl = process.env.PRACTICEQ_BASE_URL?.trim() || "https://intakeq.com/api/v1";
   if (!apiKey) return null;
 
-  const attempts = Math.max(1, Number(process.env.PRACTICEQ_FILE_DOWNLOAD_ATTEMPTS ?? "4") || 4);
+  const attempts = Math.max(1, Number(process.env.PRACTICEQ_FILE_DOWNLOAD_ATTEMPTS ?? "10") || 10);
   const delayMs = Math.max(
     0,
-    Number(process.env.PRACTICEQ_FILE_RETRY_DELAY_MS ?? (process.env.NODE_ENV === "test" ? "0" : "750")) || 0
+    Number(process.env.PRACTICEQ_FILE_RETRY_DELAY_MS ?? (process.env.NODE_ENV === "test" ? "0" : "1000")) || 0
   );
   const url = `${baseUrl.replace(/\/$/, "")}/files/${encodeURIComponent(fileId)}`;
   let response: Response | null = null;

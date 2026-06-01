@@ -168,10 +168,17 @@ describe("identity-storage", () => {
     configurePracticeQStorage();
     process.env.PRACTICEQ_API_KEY = "pq-key";
     process.env.PRACTICEQ_BASE_URL = "https://practiceq.test/api/v1";
+    process.env.PRACTICEQ_FILE_RETRY_DELAY_MS = "0";
     const bytes = Buffer.from("video");
+    const transientMiss = { ok: false, status: 404 } as Response;
     const fetchMock = jest
       .fn()
-      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce(transientMiss)
+      .mockResolvedValueOnce(transientMiss)
+      .mockResolvedValueOnce(transientMiss)
+      .mockResolvedValueOnce(transientMiss)
+      .mockResolvedValueOnce(transientMiss)
+      .mockResolvedValueOnce(transientMiss)
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ "content-type": "video/mp4" }),
@@ -195,6 +202,6 @@ describe("identity-storage", () => {
 
     expect(media?.contentType).toBe("video/mp4");
     expect(media?.body.toString("utf8")).toBe("video");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
   });
 });
