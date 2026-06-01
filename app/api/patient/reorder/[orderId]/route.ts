@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { getPatientIdFromRequest } from "@/lib/patient-session";
+import { normalizeProduct } from "@/data/products";
 
 export async function GET(
   req: Request,
@@ -31,7 +32,7 @@ export async function GET(
   return NextResponse.json({
     patient,
     order,
-    product,
+    product: product ? normalizeProduct(product) : null,
     questionnaireAnswers,
   });
 }

@@ -31,9 +31,12 @@ describe("patient portal reorder and tracking contract", () => {
     expect(reorderPage).toContain("isReorder: true");
     expect(reorderPage).toContain("reorderSourceOrderId: data.order.id");
     expect(reorderPage).toContain('router.push("/start/payment")');
+    expect(reorderPage).toContain("formatDoseOptionLabel(dose)");
+    expect(reorderPage).toContain("formatDoseOptionSummary(selectedDoseOption)");
     expect(reorderPage).not.toContain("/start/questionnaire");
     expect(reorderPage).not.toContain("/start/info");
     expect(reorderRoute).toContain("answerDb.getByOrder");
+    expect(reorderRoute).toContain("normalizeProduct");
     expect(reorderRoute).toContain("order.patientId !== patientId");
   });
 

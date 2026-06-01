@@ -1,4 +1,17 @@
 import type { DoseOption, Product } from "@/types";
+import { formatCurrency } from "@/lib/utils";
+
+function doseDescription(dose: Pick<DoseOption, "patientDescription" | "strength">): string {
+  return dose.patientDescription?.trim() || dose.strength || "Prescription";
+}
+
+export function formatDoseOptionLabel(dose: Pick<DoseOption, "label" | "patientDescription" | "strength" | "price">): string {
+  return `${dose.label} - ${doseDescription(dose)} - ${formatCurrency(dose.price)}`;
+}
+
+export function formatDoseOptionSummary(dose: Pick<DoseOption, "label" | "patientDescription" | "strength" | "price">): string {
+  return `${dose.label} - ${doseDescription(dose)} at ${formatCurrency(dose.price)}`;
+}
 
 export function resolvePersistedDose(
   persistedProduct: Pick<Product, "doses"> | null | undefined,

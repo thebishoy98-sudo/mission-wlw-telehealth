@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { saveIntakeState } from "@/lib/intake-store";
-import { formatCurrency } from "@/lib/utils";
+import { formatDoseOptionLabel, formatDoseOptionSummary } from "@/lib/product-dose";
 import type { Order, Patient, Product } from "@/types";
 
 type ReorderData = {
@@ -133,13 +133,13 @@ function ReorderContent() {
                   onChange={(event) => setSelectedDose(event.target.value)}
                   options={doseOptions.map((dose) => ({
                     value: dose.id,
-                    label: `${dose.label} - ${dose.patientDescription ?? dose.strength} - ${formatCurrency(dose.price)}`,
+                    label: formatDoseOptionLabel(dose),
                   }))}
                 />
 
                 {selectedDoseOption && (
                   <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-sm text-gray-700">
-                    Checkout will use {selectedDoseOption.label} at {formatCurrency(selectedDoseOption.price)}.
+                    Checkout will use {formatDoseOptionSummary(selectedDoseOption)}.
                   </div>
                 )}
               </>
