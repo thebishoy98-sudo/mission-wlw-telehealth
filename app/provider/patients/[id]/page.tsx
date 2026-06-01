@@ -364,19 +364,13 @@ export default function PatientDetail() {
                 <h3 className="font-semibold text-gray-900 mb-3">Order Details</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between flex-wrap gap-1">
-                    <span className="text-gray-500">Order #</span>
+                    <span className="text-gray-500">LifeFile order number</span>
                     <span className="font-mono text-xs text-gray-700">{getDisplayOrderNumber(selectedOrder, pharmacyOrder)}</span>
                   </div>
                   {pharmacyOrder?.lifeFileOrderId && (
                     <div className="flex justify-between flex-wrap gap-1">
-                      <span className="text-gray-500">Internal ID</span>
+                      <span className="text-gray-500">Order ID</span>
                       <span className="font-mono text-xs text-gray-700">{selectedOrder.id.slice(-8)}</span>
-                    </div>
-                  )}
-                  {pharmacyOrder?.lifeFileOrderId && (
-                    <div className="flex justify-between flex-wrap gap-1">
-                      <span className="text-gray-500">LifeFile ID</span>
-                      <span className="font-mono text-xs text-gray-700">{pharmacyOrder.lifeFileOrderId}</span>
                     </div>
                   )}
                   <div className="flex justify-between flex-wrap gap-1">

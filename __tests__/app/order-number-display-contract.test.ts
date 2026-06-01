@@ -7,14 +7,18 @@ describe("order number display contract", () => {
 
   it("shows the external pharmacy order number instead of only the internal id in admin details", () => {
     expect(adminOrders).toContain("getDisplayOrderNumber");
-    expect(adminOrders).toContain("Order #");
-    expect(adminOrders).toContain("Internal ID");
+    expect(adminOrders).toContain("LifeFile order number");
+    expect(adminOrders).toContain("Order ID");
+    expect(adminOrders).not.toContain("Internal ID");
+    expect(adminOrders).not.toContain("Order #");
     expect(adminOrders).not.toContain("<strong>ID:</strong> {selectedOrder.id.slice(-8)}");
   });
 
   it("shows the external pharmacy order number in provider chart details when available", () => {
     expect(providerChart).toContain("getDisplayOrderNumber");
     expect(providerChart).toContain("pharmacyOrder");
-    expect(providerChart).toContain("Order #");
+    expect(providerChart).toContain("LifeFile order number");
+    expect(providerChart).toContain("Order ID");
+    expect(providerChart).not.toContain("Internal ID");
   });
 });

@@ -380,7 +380,7 @@ export default function OrdersManagement() {
                               <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
                                 <p className="mt-1 font-mono text-xs text-gray-500">{getDisplayOrderNumber(order, pharmacyOrder)}</p>
-                                {pharmacyOrder?.lifeFileOrderId && <p className="text-[11px] text-gray-400">Internal {order.id.slice(-8)}</p>}
+                                {pharmacyOrder?.lifeFileOrderId && <p className="text-[11px] text-gray-400">Order ID {order.id.slice(-8)}</p>}
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.paymentStatus)}>{getStatusLabel(order.paymentStatus)}</Badge>
@@ -448,8 +448,8 @@ export default function OrdersManagement() {
                   <CardContent className="p-6">
                     <h3 className="font-bold text-gray-900 mb-4">Order Details</h3>
                     <div className="space-y-2 text-sm">
-                      <p><strong>Order #:</strong> <span className="font-mono text-xs">{getDisplayOrderNumber(selectedOrder, selectedPharmacyOrder)}</span></p>
-                      {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>Internal ID:</strong> <span className="font-mono text-xs">{selectedOrder.id.slice(-8)}</span></p>}
+                      <p><strong>LifeFile order number:</strong> <span className="font-mono text-xs">{getDisplayOrderNumber(selectedOrder, selectedPharmacyOrder)}</span></p>
+                      {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>Order ID:</strong> <span className="font-mono text-xs">{selectedOrder.id.slice(-8)}</span></p>}
                       <p><strong>Status:</strong> {getStatusLabel(selectedOrder.status)}</p>
                       <p><strong>Created:</strong> {formatDateTime(selectedOrder.createdAt)}</p>
                       <p><strong>Identity:</strong> {selectedOrder.identityStatus ?? "missing"}</p>
@@ -461,7 +461,6 @@ export default function OrdersManagement() {
                         <p><strong>QuickBooks:</strong> {getStatusLabel(selectedOrder.quickbooksStatus)}</p>
                         <p><strong>PracticeQ:</strong> {getStatusLabel(getDisplayPracticeQStatus(selectedOrder))}</p>
                         <p><strong>Pharmacy:</strong> {getStatusLabel(selectedOrder.pharmacyStatus)}</p>
-                        {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>LifeFile ID:</strong> <span className="font-mono text-xs">{selectedPharmacyOrder.lifeFileOrderId}</span></p>}
                         {selectedPharmacyOrder?.lastError && <p className="text-red-600">{selectedPharmacyOrder.lastError}</p>}
                       </div>
 

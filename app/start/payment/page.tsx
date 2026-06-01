@@ -340,7 +340,7 @@ export default function Payment() {
           )}
           {chargeAmountOverride !== null && productTotal !== total && (
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-600">Testing charge override</span>
+                <span className="text-gray-600">Today's charge</span>
               <span className="font-semibold text-teal-700">{formatCurrency(total)}</span>
             </div>
           )}
@@ -360,7 +360,7 @@ export default function Payment() {
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-            <span>Test payment mode</span>
+              <span>{quickBooksPaymentsEnabled ? "Secure payment" : "Test payment mode"}</span>
           </div>
         </div>
 
