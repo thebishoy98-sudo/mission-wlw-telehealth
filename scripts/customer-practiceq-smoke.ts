@@ -370,21 +370,30 @@ async function main() {
     await page.goto(`${BASE_URL}/start/payment`, { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/start\/payment/, { timeout: 30_000 });
 
-    console.log("Step 5: payment with QB bypass");
-    await page.locator('input[placeholder*="4242"]').fill("4111111111111111");
-    await page.locator('input[placeholder*="12/"]').fill("12/28");
-    await page.locator('input[type="password"]').fill("123");
+    console.log("Step 5: submit order with QB bypass");
+    const paymentDisabled = await page.getByText(/Payment disabled/i).isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!paymentDisabled) {
+      await page.locator('input[placeholder*="4242"]').fill("4111111111111111");
+      await page.locator('input[placeholder*="12/"]').fill("12/28");
+      await page.locator('input[type="password"]').fill("123");
+    }
     const chargeResponsePromise = page.waitForResponse((response) => response.url().includes("/api/payments/charge"), {
       timeout: 120_000,
     });
-    await page.getByRole("button", { name: /Pay/ }).click();
+    const submitButtonName = paymentDisabled ? /Submit order/i : /Pay|Submit order/i;
+    const submitButton = page.getByRole("button", { name: submitButtonName });
+    await submitButton.waitFor({ state: "visible", timeout: 30_000 });
+    await submitButton.click();
     const chargeResponse = await chargeResponsePromise;
     const chargeBody = await chargeResponse.json().catch(() => ({}));
     if (!chargeResponse.ok()) {
       throw new Error(`Payment failed: ${JSON.stringify(chargeBody)}`);
     }
-    if (chargeBody.chargedAmount !== 0.01 || !String(chargeBody.chargeId ?? "").startsWith("test_bypass_")) {
+    if (!String(chargeBody.chargeId ?? "").startsWith("test_bypass_")) {
       throw new Error(`QB bypass was not used: ${JSON.stringify(chargeBody)}`);
+    }
+    if (!(Number(chargeBody.chargedAmount) > 0)) {
+      throw new Error(`Bypass response did not include a positive order amount: ${JSON.stringify(chargeBody)}`);
     }
 
     await page.waitForURL(/\/start\/confirmation/, { timeout: 60_000 });

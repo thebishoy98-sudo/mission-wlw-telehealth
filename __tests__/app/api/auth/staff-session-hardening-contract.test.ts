@@ -8,6 +8,7 @@ describe("staff session hardening contract", () => {
   const adminLoginSource = fs.readFileSync(path.join(repoRoot, "app/api/auth/admin-login/route.ts"), "utf8");
   const providerLoginSource = fs.readFileSync(path.join(repoRoot, "app/api/auth/provider-login/route.ts"), "utf8");
   const logoutSource = fs.readFileSync(path.join(repoRoot, "app/api/auth/logout/route.ts"), "utf8");
+  const proxySource = fs.readFileSync(path.join(repoRoot, "proxy.ts"), "utf8");
 
   it("hydrates staff identity from the server instead of localStorage", () => {
     expect(authSource).toContain('fetch("/api/auth/session"');
@@ -31,6 +32,13 @@ describe("staff session hardening contract", () => {
     expect(serverAuthSource).toContain('req.headers?.get?.("x-provider-secret")');
     expect(serverAuthSource).not.toContain('readCookie(req, "admin_secret")');
     expect(serverAuthSource).not.toContain('readCookie(req, "provider_secret")');
+  });
+
+  it("authorizes admin pages from signed staff sessions at the proxy", () => {
+    expect(proxySource).toContain("verifyStaffSessionCookieForProxy");
+    expect(proxySource).toContain("STAFF_SESSION_COOKIE");
+    expect(proxySource).toContain('req.headers.get("x-admin-secret")');
+    expect(proxySource).not.toContain('req.cookies.get("admin_secret")');
   });
 
   it("logout clears the signed staff session and old bridge cookies", () => {

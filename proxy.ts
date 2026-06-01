@@ -16,6 +16,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+const STAFF_SESSION_COOKIE = "staff_session";
+const STAFF_SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+
 // ── Simple in-memory rate limiter (Edge-compatible) ───────────────────────────
 // For production with multiple Vercel instances, swap this map for Upstash Redis:
 //   https://github.com/upstash/ratelimit
@@ -49,22 +52,89 @@ function maybeCleanup() {
   }
 }
 
-// ── Admin / Provider route protection ────────────────────────────────────────
-// In production, replace this with a real session check (NextAuth, Clerk, etc.)
-// For now, we check the ADMIN_SECRET header that your internal dashboards set.
-function checkAdminAuth(req: NextRequest): boolean {
+type StaffSessionRole = "admin" | "provider";
+
+function sessionSecret() {
+  return (
+    process.env.STAFF_SESSION_SECRET ??
+    process.env.ADMIN_SECRET ??
+    process.env.NEXTAUTH_SECRET ??
+    ""
+  );
+}
+
+async function hmacHex(payload: string, secret: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function safeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let index = 0; index < a.length; index++) {
+    result |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return result === 0;
+}
+
+function decodeBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  return atob(padded);
+}
+
+export async function verifyStaffSessionCookieForProxy(
+  token: string | undefined,
+  requiredRole: StaffSessionRole
+) {
+  const secret = sessionSecret();
+  if (!token || !secret) return false;
+
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return false;
+
+  const expected = await hmacHex(payload, secret);
+  if (!safeEqual(signature, expected)) return false;
+
+  try {
+    const session = JSON.parse(decodeBase64Url(payload)) as {
+      role?: StaffSessionRole;
+      email?: string;
+      name?: string;
+      issuedAt?: number;
+    };
+    if (session.role !== requiredRole) return false;
+    if (!session.email || !session.name || !session.issuedAt) return false;
+    if (Date.now() - session.issuedAt > STAFF_SESSION_MAX_AGE_MS) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Admin route protection ───────────────────────────────────────────────────
+async function checkAdminAuth(req: NextRequest): Promise<boolean> {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) return true; // not configured — allow in dev
 
-  const provided =
-    req.headers.get("x-admin-secret") ??
-    req.cookies.get("admin_secret")?.value;
+  const provided = req.headers.get("x-admin-secret");
+  if (provided === secret) return true;
 
-  return provided === secret;
+  return verifyStaffSessionCookieForProxy(req.cookies.get(STAFF_SESSION_COOKIE)?.value, "admin");
 }
 
 // ── Main middleware ────────────────────────────────────────────────────────────
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const path = req.nextUrl.pathname;
 
@@ -95,7 +165,7 @@ export function proxy(req: NextRequest) {
   }
 
   // ── Admin dashboard protection ─────────────────────────────────────────────
-  if (path.startsWith("/admin") && !checkAdminAuth(req)) {
+  if (path.startsWith("/admin") && !(await checkAdminAuth(req))) {
     // Redirect to a simple login page (or return 401 for API calls)
     const loginUrl = new URL("/login/admin", req.url);
     loginUrl.searchParams.set("redirect", path);
