@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { createStaffSessionToken, STAFF_SESSION_COOKIE } from "@/lib/staff-session";
 
 function safeEquals(a: string, b: string) {
   const left = Buffer.from(a);
@@ -11,10 +12,10 @@ export async function POST(req: Request) {
   const { email, password } = await req.json().catch(() => ({}));
   const configuredEmail = process.env.PROVIDER_EMAIL ?? "";
   const configuredPassword = process.env.PROVIDER_PASSWORD ?? "";
-  const providerSecret = process.env.PROVIDER_SECRET ?? process.env.ADMIN_SECRET;
+  const staffSessionSecret = process.env.STAFF_SESSION_SECRET ?? process.env.ADMIN_SECRET;
   const providerName = process.env.PROVIDER_NAME ?? "Dotson, Karen";
 
-  if (!configuredEmail || !configuredPassword || !providerSecret) {
+  if (!configuredEmail || !configuredPassword || !staffSessionSecret) {
     return NextResponse.json({ error: "Provider login is not configured" }, { status: 500 });
   }
 
@@ -34,7 +35,11 @@ export async function POST(req: Request) {
       role: "provider",
     },
   });
-  response.cookies.set("provider_secret", providerSecret, {
+  response.cookies.set(STAFF_SESSION_COOKIE, createStaffSessionToken({
+    role: "provider",
+    email: configuredEmail,
+    name: providerName,
+  }), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

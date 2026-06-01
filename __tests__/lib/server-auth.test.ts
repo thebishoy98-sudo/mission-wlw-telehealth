@@ -22,6 +22,7 @@ class TestRequest {
 (global as any).Response = class TestResponse {};
 
 const { isAdminRequest, isProviderRequest } = require("@/lib/server-auth");
+const { createStaffSessionToken } = require("@/lib/staff-session");
 
 describe("server auth", () => {
   const originalEnv = process.env;
@@ -41,14 +42,22 @@ describe("server auth", () => {
     expect(isAdminRequest(req)).toBe(true);
   });
 
-  it("accepts admin secret from cookie header without NextRequest private state", () => {
-    const req = new Request("https://example.com", { headers: { cookie: "theme=dark; admin_secret=admin-secret" } });
+  it("accepts admin signed staff session cookie without NextRequest private state", () => {
+    const token = createStaffSessionToken({ role: "admin", email: "admin@example.com", name: "Admin User" });
+    const req = new Request("https://example.com", { headers: { cookie: `theme=dark; staff_session=${encodeURIComponent(token)}` } });
 
     expect(isAdminRequest(req)).toBe(true);
   });
 
-  it("accepts provider secret from provider cookie", () => {
-    const req = new Request("https://example.com", { headers: { cookie: "provider_secret=provider-secret" } });
+  it("rejects raw admin secret cookies", () => {
+    const req = new Request("https://example.com", { headers: { cookie: "admin_secret=admin-secret" } });
+
+    expect(isAdminRequest(req)).toBe(false);
+  });
+
+  it("accepts provider signed staff session cookie", () => {
+    const token = createStaffSessionToken({ role: "provider", email: "provider@example.com", name: "Dotson, Karen" });
+    const req = new Request("https://example.com", { headers: { cookie: `staff_session=${encodeURIComponent(token)}` } });
 
     expect(isProviderRequest(req)).toBe(true);
   });

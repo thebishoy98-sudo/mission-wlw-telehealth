@@ -8,8 +8,6 @@ import {
   ReactNode,
 } from "react";
 
-const AUTH_KEY = "tele_auth_session";
-
 export type UserRole = "patient" | "provider" | "admin";
 
 export interface AuthUser {
@@ -38,11 +36,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_KEY);
-      if (stored) setUser(JSON.parse(stored));
-    } catch {}
-    setIsLoading(false);
+    let isMounted = true;
+
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/auth/session", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (isMounted && response.ok) {
+          setUser(payload.user ?? null);
+        }
+      } catch {
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (
@@ -50,8 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     role: UserRole
   ): Promise<{ success: boolean; error?: string }> => {
-    const normalized = email.toLowerCase().trim();
-
     if (role === "admin") {
       const response = await fetch("/api/auth/admin-login", {
         method: "POST",
@@ -63,7 +79,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: payload.error ?? "Invalid email or password." };
       }
       setUser(payload.user);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
       return { success: true };
     }
 
@@ -78,7 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: payload.error ?? "Invalid or expired code." };
       }
       setUser(payload.user);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
       return { success: true };
     }
 
@@ -93,7 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: payload.error ?? "Invalid email or password." };
       }
       setUser(payload.user);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(payload.user));
       return { success: true };
     }
 
@@ -102,7 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem(AUTH_KEY);
     void fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
   };
 

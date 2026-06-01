@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { createStaffSessionToken, STAFF_SESSION_COOKIE } from "@/lib/staff-session";
 
 function safeEquals(a: string, b: string) {
   const left = Buffer.from(a);
@@ -11,8 +12,9 @@ export async function POST(req: Request) {
   const { email, password } = await req.json().catch(() => ({}));
   const configuredEmail = process.env.ADMIN_EMAIL ?? "";
   const configuredPassword = process.env.ADMIN_PASSWORD ?? "";
+  const staffSessionSecret = process.env.STAFF_SESSION_SECRET ?? process.env.ADMIN_SECRET;
 
-  if (!configuredEmail || !configuredPassword || !process.env.ADMIN_SECRET) {
+  if (!configuredEmail || !configuredPassword || !staffSessionSecret) {
     return NextResponse.json({ error: "Admin login is not configured" }, { status: 500 });
   }
 
@@ -32,7 +34,11 @@ export async function POST(req: Request) {
       role: "admin",
     },
   });
-  response.cookies.set("admin_secret", process.env.ADMIN_SECRET, {
+  response.cookies.set(STAFF_SESSION_COOKIE, createStaffSessionToken({
+    role: "admin",
+    email: configuredEmail,
+    name: "Admin User",
+  }), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
