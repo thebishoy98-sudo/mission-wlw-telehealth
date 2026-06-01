@@ -150,8 +150,25 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
         pharmacyStatus: "submitted",
       })
       .catch(() => null);
+    const provider = pharmacy.getPharmacyProvider();
+    await dbServer.integrationLogDb.create({
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      timestamp: new Date().toISOString(),
+      integrationName: provider === "appsheet" ? "appsheet" : "lifefile",
+      action: provider === "lifefile"
+        ? "Pharmacy order submitted to LifeFile"
+        : "Pharmacy order submitted",
+      orderId: dispatchOrder.id,
+      patientId: dispatchOrder.patientId,
+      status: "success",
+      details: {
+        lifeFileOrderId: pharmacyOrder.lifeFileOrderId,
+        provider,
+        environment: process.env.LIFEFILE_ENVIRONMENT ?? "",
+      },
+    }).catch(() => null);
     await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId: dispatchOrder.id }).catch(() => null);
-    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, pharmacy.getPharmacyProvider(), "practiceq-remote-worker");
+    logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, provider, "practiceq-remote-worker");
     return { status: "sent_to_pharmacy", pharmacyOrderId: pharmacyOrder.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -16,6 +16,7 @@ jest.mock("@/lib/db.server", () => ({
   uploadDb: { getByOrder: jest.fn() },
   pharmacyOrderDb: { getByOrder: jest.fn(), create: jest.fn() },
   practiceqPacketDb: { getByOrder: jest.fn(), create: jest.fn(), update: jest.fn() },
+  integrationLogDb: { create: jest.fn() },
 }));
 
 jest.mock("@/services/pharmacy", () => ({
@@ -113,6 +114,7 @@ describe("completePracticeQSession", () => {
     (dbServer.uploadDb.getByOrder as jest.Mock).mockResolvedValue([]);
     (dbServer.pharmacyOrderDb.getByOrder as jest.Mock).mockResolvedValue(null);
     (dbServer.pharmacyOrderDb.create as jest.Mock).mockResolvedValue(null);
+    (dbServer.integrationLogDb.create as jest.Mock).mockResolvedValue(null);
     (dbServer.practiceqPacketDb.getByOrder as jest.Mock).mockResolvedValue({
       id: "packet_1",
       orderId: order.id,
@@ -141,10 +143,12 @@ describe("completePracticeQSession", () => {
       pdfFile: { fileId: "file_pdf", filename: "chart.pdf", uploadedAt: "2026-01-01T00:00:00.000Z" },
       identityFiles: [],
     });
+    (pharmacy.getPharmacyProvider as jest.Mock).mockReturnValue("lifefile");
     (pharmacy.createPharmacyOrder as jest.Mock).mockResolvedValue({
       id: "pharmacy_1",
       orderId: order.id,
       patientId: patient.id,
+      lifeFileOrderId: "124172582",
       status: "submitted",
       payload: {},
       submittedAt: "2026-01-01T00:00:00.000Z",
@@ -226,6 +230,14 @@ describe("completePracticeQSession", () => {
       status: "sent_to_pharmacy",
       pharmacyStatus: "submitted",
     });
+    expect(dbServer.integrationLogDb.create).toHaveBeenCalledWith(expect.objectContaining({
+      integrationName: "lifefile",
+      action: "Pharmacy order submitted to LifeFile",
+      orderId: order.id,
+      patientId: patient.id,
+      status: "success",
+      details: expect.objectContaining({ lifeFileOrderId: "124172582" }),
+    }));
     expect(spruceServer.sendMessage).toHaveBeenCalledWith(patient, "order_sent_to_pharmacy", { orderId: order.id });
   });
 

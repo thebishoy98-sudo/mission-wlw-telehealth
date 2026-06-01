@@ -465,11 +465,6 @@ async function main() {
         const identityStatus = payload.order?.identityStatus;
         const pharmacyStatus = payload.order?.pharmacyStatus;
         const practiceq = payload.practiceq;
-        const lifefileSuccess = payload.diagnostics?.integrationLogs?.some((log) =>
-          log.integrationName === "lifefile" &&
-          log.status === "success" &&
-          /submitted to Life File/i.test(String(log.action ?? ""))
-        );
         console.log(
           `Order poll: order=${orderStatus}, identity=${identityStatus}, qb=${quickbooksStatus}, pharmacy=${pharmacyStatus}/${payload.pharmacy?.status ?? "none"}, lf=${payload.pharmacy?.lifeFileOrderId ?? "none"}, pq=${practiceq?.status ?? practiceq?.reason ?? "missing"}`
         );
@@ -487,9 +482,6 @@ async function main() {
           return null;
         }
         if (ADMIN_SECRET && !payload.pharmacy?.lifeFileOrderId) {
-          return null;
-        }
-        if (ADMIN_SECRET && !lifefileSuccess) {
           return null;
         }
         if (!practiceq?.available || !/completed/i.test(String(practiceq.status ?? ""))) return null;

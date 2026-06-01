@@ -568,6 +568,22 @@ export async function POST(req: NextRequest) {
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         db.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: pharmacyIntegration,
+          action: pharmacyIntegration === "lifefile"
+            ? "Pharmacy order submitted to LifeFile"
+            : "Pharmacy order submitted",
+          orderId,
+          patientId: patient.id,
+          status: "success",
+          details: {
+            lifeFileOrderId: pharmacyOrder.lifeFileOrderId,
+            provider: pharmacyIntegration,
+            environment: process.env.LIFEFILE_ENVIRONMENT ?? "",
+          },
+        }).catch(() => {});
         logPhiDisclosure(patient.id, orderId, pharmacy.getPharmacyProvider(), auditCtx.actor);
       } catch (e) {
         const errorMessage = (e as Error).message;
