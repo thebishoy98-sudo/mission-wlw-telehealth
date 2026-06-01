@@ -12,6 +12,7 @@ describe("patient portal reorder and tracking contract", () => {
   const confirmationPage = fs.readFileSync(path.join(process.cwd(), "app/start/confirmation/page.tsx"), "utf8");
   const navbar = fs.readFileSync(path.join(process.cwd(), "components/layout/Navbar.tsx"), "utf8");
   const footer = fs.readFileSync(path.join(process.cwd(), "components/layout/Footer.tsx"), "utf8");
+  const statusPage = fs.readFileSync(path.join(process.cwd(), "app/status/page.tsx"), "utf8");
 
   it("shows tracking inline on order cards and removes the separate track order button", () => {
     expect(patientOrdersRoute).toContain("pharmacyOrders");
@@ -38,6 +39,8 @@ describe("patient portal reorder and tracking contract", () => {
     expect(reorderRoute).toContain("answerDb.getByOrder");
     expect(reorderRoute).toContain("normalizeProduct");
     expect(reorderRoute).toContain("order.patientId !== patientId");
+    expect(reorderPage).toContain("Back to Order History");
+    expect(reorderPage).not.toContain("Back to My Orders");
   });
 
   it("reuses identity verification for reorder checkout without identity reminder sms or admin flag", () => {
@@ -56,8 +59,18 @@ describe("patient portal reorder and tracking contract", () => {
 
   it("sends signed-in order navigation to the patient order list, not the public status tracker", () => {
     expect(navbar).toContain('href: "/patient"');
-    expect(navbar).toContain('label: "My Orders"');
+    expect(navbar).toContain('label: "Order History"');
+    expect(navbar).not.toContain("My Orders");
+    expect(footer).toContain("Order History");
+    expect(footer).not.toContain("My Orders");
     expect(navbar).not.toContain("My Status");
     expect(navbar).not.toContain("Order Status");
+  });
+
+  it("requires phone login for the legacy public status route", () => {
+    expect(statusPage).toContain('redirect("/login/patient?next=/patient")');
+    expect(statusPage).not.toContain("Order Status Tracker");
+    expect(statusPage).not.toContain("/api/orders/");
+    expect(statusPage).not.toContain("Enter your order ID and email.");
   });
 });

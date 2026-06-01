@@ -26,10 +26,10 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
   const links = {
     customer: [
       { label: "Products", href: "/products" },
-      { label: "My Orders", href: "/patient" },
+      { label: "Order History", href: "/patient" },
     ],
     patient: [
-      { label: "My Orders", href: "/patient" },
+      { label: "Order History", href: "/patient" },
       { label: "Products", href: "/products" },
     ],
     provider: [

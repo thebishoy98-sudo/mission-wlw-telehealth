@@ -147,7 +147,7 @@ function ReorderContent() {
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button fullWidth variant="outline" onClick={() => router.push("/patient")}>
-                Back to My Orders
+                Back to Order History
               </Button>
               <Button fullWidth onClick={handleCheckout} disabled={!data || !selectedDose}>
                 Continue to Checkout
