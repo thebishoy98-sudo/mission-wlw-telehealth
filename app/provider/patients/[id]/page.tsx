@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { ChevronLeft, CheckCircle, Eye, FileText, X } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -38,7 +38,9 @@ interface ChartState {
 export default function PatientDetail() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const orderId = searchParams.get("orderId") ?? "";
 
   const [chart, setChart] = useState<ChartState | null>(null);
   const [chartReviewing, setChartReviewing] = useState(false);
@@ -53,7 +55,8 @@ export default function PatientDetail() {
     async function loadPatientChart() {
       setLoadError("");
       try {
-        const res = await fetch(`/api/provider/patients/${patientId}`, { cache: "no-store" });
+        const query = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
+        const res = await fetch(`/api/provider/patients/${patientId}${query}`, { cache: "no-store" });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         if (!cancelled) setChart(data);
@@ -66,7 +69,7 @@ export default function PatientDetail() {
     return () => {
       cancelled = true;
     };
-  }, [patientId]);
+  }, [patientId, orderId]);
 
   const handleMarkChartReviewed = async () => {
     if (!chart || !patientId) return;

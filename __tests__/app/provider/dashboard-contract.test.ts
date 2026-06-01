@@ -14,6 +14,8 @@ describe("provider dashboard permissions", () => {
   it("only lets providers mark charts reviewed, not approve or deny orders", () => {
     expect(source).toContain("Mark All Reviewed");
     expect(source).toContain("mark_chart_viewed");
+    expect(source).toContain("?orderId=");
+    expect(source).toContain("encodeURIComponent(order.id)");
     expect(source).not.toContain("Approve All");
     expect(source).not.toContain("approve");
     expect(source).not.toContain("reject");

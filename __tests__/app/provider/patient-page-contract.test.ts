@@ -9,6 +9,8 @@ describe("provider patient page", () => {
     expect(source).toContain("Mark Chart as Reviewed");
     expect(source).toContain("mark_chart_viewed");
     expect(source).toContain("api/provider/patients");
+    expect(source).toContain("orderId");
+    expect(source).toContain("encodeURIComponent(orderId)");
   });
 
   it("does not render payment or pharmacy fulfillment details in the provider chart sidebar", () => {

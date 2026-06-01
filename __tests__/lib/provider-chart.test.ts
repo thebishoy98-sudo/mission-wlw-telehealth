@@ -128,6 +128,33 @@ describe("loadProviderPatientChart", () => {
     expect(chart?.practiceq?.answers).toHaveLength(1);
   });
 
+  it("selects the requested order when a patient has multiple orders", async () => {
+    const newerOrder: Order = {
+      ...order,
+      id: "order_newer",
+      status: "pending_review",
+      createdAt: "2026-05-24T18:54:00.000Z",
+      updatedAt: "2026-05-24T18:54:00.000Z",
+    };
+    const getConsent = jest.fn().mockResolvedValue({ id: "consent_requested", orderId: order.id });
+
+    const chart = await loadProviderPatientChart(patient.id, {
+      selectedOrderId: order.id,
+      patients: { getById: jest.fn().mockResolvedValue(patient) },
+      orders: { getByPatient: jest.fn().mockResolvedValue([newerOrder, order]) },
+      products: { getById: jest.fn().mockResolvedValue(product) },
+      questions: { getAll: jest.fn().mockResolvedValue([]) },
+      answers: { getByOrder: jest.fn().mockResolvedValue([]) },
+      consents: { getByOrder: getConsent },
+      uploads: { getByOrder: jest.fn().mockResolvedValue([]) },
+      payments: { getByOrder: jest.fn().mockResolvedValue(null) },
+      reviews: { getByOrder: jest.fn().mockResolvedValue(review) },
+    });
+
+    expect(chart?.selectedOrder.id).toBe(order.id);
+    expect(getConsent).toHaveBeenCalledWith(order.id);
+  });
+
   it("returns null when the patient is not in the server store", async () => {
     const chart = await loadProviderPatientChart("missing", {
       patients: { getById: jest.fn().mockResolvedValue(null) },

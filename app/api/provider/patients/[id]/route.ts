@@ -17,6 +17,7 @@ export async function GET(
   try {
     const { id } = await params;
     const chart = await loadProviderPatientChart(id, {
+      selectedOrderId: req.nextUrl.searchParams.get("orderId") ?? undefined,
       patients: dbServer.patientDb,
       orders: dbServer.orderDb,
       products: dbServer.productDb,

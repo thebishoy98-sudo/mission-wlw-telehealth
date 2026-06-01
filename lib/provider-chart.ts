@@ -17,6 +17,7 @@ import type {
 type MaybePromise<T> = T | Promise<T>;
 
 export interface ProviderChartStores {
+  selectedOrderId?: string;
   patients: { getById(id: string): MaybePromise<Patient | null> };
   orders: { getByPatient(patientId: string): MaybePromise<Order[]> };
   products: { getById(id: string): MaybePromise<Product | null> };
@@ -113,7 +114,9 @@ export async function loadProviderPatientChart(
   if (!patient) return null;
 
   const orders = await stores.orders.getByPatient(patientId);
-  const selectedOrder = orders[0];
+  const selectedOrder = stores.selectedOrderId
+    ? orders.find((order) => order.id === stores.selectedOrderId) ?? orders[0]
+    : orders[0];
   if (!selectedOrder) return null;
 
   const [product, questionnaire, answers, consent, uploads, payment, pharmacyOrder, review, practiceqPacket, practiceqAutomationJob] =

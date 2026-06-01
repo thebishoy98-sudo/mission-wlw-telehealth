@@ -428,7 +428,7 @@ async function smokeStaffDashboards() {
     await provider.page.locator("text=Provider Dashboard").waitFor({ timeout: 30_000 });
     const text = await pageText(provider.page);
     assert(/Dotson,\s*Karen/i.test(text), "Provider navbar does not show Dotson, Karen.");
-    assert(/Orders Requiring Review|No orders awaiting review/i.test(text), "Provider dashboard did not render order review area.");
+    assert(/All Orders|Needs Chart Review|No provider orders yet/i.test(text), "Provider dashboard did not render order review area.");
   } finally {
     await provider.context.close();
   }
@@ -487,7 +487,7 @@ async function smokeOrderChartSurfaces() {
   const provider = await loginStaff("provider", PROVIDER_EMAIL, PROVIDER_PASSWORD);
   activePage = provider.page;
   try {
-    await provider.page.goto(`${BASE_URL}/provider/patients/${encodeURIComponent(candidate.order.patientId)}`, {
+    await provider.page.goto(`${BASE_URL}/provider/patients/${encodeURIComponent(candidate.order.patientId)}?orderId=${encodeURIComponent(candidate.order.id)}`, {
       waitUntil: "domcontentloaded",
     });
     await provider.page.locator("text=Order Details").waitFor({ timeout: 30_000 });

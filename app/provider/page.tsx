@@ -212,7 +212,7 @@ function ProviderDashboardContent() {
                             {markingOrder === order.id ? "Marking..." : "Mark Reviewed"}
                           </Button>
                         )}
-                        <Link href={`/provider/patients/${order.patientId}`}>
+                        <Link href={`/provider/patients/${order.patientId}?orderId=${encodeURIComponent(order.id)}`}>
                           <Button size="sm" className="w-full sm:w-auto">View Chart</Button>
                         </Link>
                       </div>
@@ -277,7 +277,7 @@ function ProviderDashboardContent() {
                                   {markingOrder === order.id ? "Marking..." : "Mark Reviewed"}
                                 </Button>
                               )}
-                              <Link href={`/provider/patients/${order.patientId}`}>
+                              <Link href={`/provider/patients/${order.patientId}?orderId=${encodeURIComponent(order.id)}`}>
                                 <Button size="sm" variant="outline">View Chart</Button>
                               </Link>
                             </div>
