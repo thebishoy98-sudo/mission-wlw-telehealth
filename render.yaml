@@ -62,10 +62,6 @@ services:
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
         value: sandbox
-      - key: NEXT_PUBLIC_PAYMENT_CHARGE_AMOUNT_OVERRIDE
-        value: 0.01
-      - key: PAYMENT_CHARGE_AMOUNT_OVERRIDE
-        value: 0.01
       - key: QB_ALLOW_RAW_CARD_CHARGES
         value: true
       - key: QB_CLIENT_ID

@@ -22,7 +22,7 @@ export const tirzepatideProduct: Product = {
       weeklyDoseMg: 2.5,
       injectionUnits: 12.5,
       prescriptionLabel: "Inject 12.5 units (2.5mg) SbQ weekly.",
-      patientDescription: "Starter dose. 2.5mg weekly for 8 weeks.",
+      patientDescription: "8-Week Prescription",
     },
     {
       id: "tirzepatide_40mg_8_week",
@@ -34,7 +34,7 @@ export const tirzepatideProduct: Product = {
       weeklyDoseMg: 5,
       injectionUnits: 25,
       prescriptionLabel: "Inject 25.0 units (5mg) SbQ weekly.",
-      patientDescription: "Standard dose. 5mg weekly for 8 weeks.",
+      patientDescription: "8-Week Prescription",
     },
     {
       id: "tirzepatide_60mg_8_week",
@@ -46,7 +46,7 @@ export const tirzepatideProduct: Product = {
       weeklyDoseMg: 7.5,
       injectionUnits: 37.5,
       prescriptionLabel: "Inject 37.5 units (7.5mg) SbQ weekly.",
-      patientDescription: "Higher dose. 7.5mg weekly for 8 weeks.",
+      patientDescription: "8-Week Prescription",
     },
   ],
   eligibilityNote:

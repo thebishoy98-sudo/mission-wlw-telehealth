@@ -9,6 +9,18 @@ const makeProduct = (id: string, name: string, slug: string): Product => ({
 });
 
 describe("normalizeCustomerProducts", () => {
+  it("publishes the exact 8-week Tirzepatide catalog and prices", () => {
+    expect(tirzepatideProduct.doses.map((dose) => ({
+      label: dose.label,
+      patientDescription: dose.patientDescription,
+      price: dose.price,
+    }))).toEqual([
+      { label: "Tirzepatide 20mg", patientDescription: "8-Week Prescription", price: 349 },
+      { label: "Tirzepatide 40mg", patientDescription: "8-Week Prescription", price: 479 },
+      { label: "Tirzepatide 60mg", patientDescription: "8-Week Prescription", price: 799 },
+    ]);
+  });
+
   it("hides test products and dedupes repeated customer treatments", () => {
     const products = normalizeCustomerProducts([
       makeProduct("demo_1", "Demo Product", "demo-product"),

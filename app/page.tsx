@@ -68,9 +68,9 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { dose: "Tirzepatide 20mg", price: 349, note: "2.5mg weekly", popular: false },
-    { dose: "Tirzepatide 40mg", price: 479, note: "5mg weekly", popular: true },
-    { dose: "Tirzepatide 60mg", price: 799, note: "7.5mg weekly", popular: false },
+    { dose: "Tirzepatide 20mg", price: 349, note: "8-Week Prescription", popular: false },
+    { dose: "Tirzepatide 40mg", price: 479, note: "8-Week Prescription", popular: true },
+    { dose: "Tirzepatide 60mg", price: 799, note: "8-Week Prescription", popular: false },
   ];
 
   const faqs = [

@@ -152,7 +152,7 @@ function PatientPortalContent() {
                           {dose && (
                             <p className="text-sm text-gray-500">
                               {dose.label} &bull;{" "}
-                              {formatCurrency(dose.price)}/mo
+                              {formatCurrency(dose.price)} - 8-week prescription
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
