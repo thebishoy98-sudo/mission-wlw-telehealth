@@ -161,7 +161,7 @@ services:
 
       # Optional AppSheet mirror/tracking support.
       - key: USE_REAL_APPSHEET
-        value: "true"
+        value: "false"
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY
