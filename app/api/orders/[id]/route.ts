@@ -66,6 +66,7 @@ export async function GET(
     pharmacy: pharmacyOrder
       ? {
           status: pharmacyOrder.status,
+          ...(isPrivilegedRequest ? { lifeFileOrderId: pharmacyOrder.lifeFileOrderId } : {}),
           trackingNumber: pharmacyOrder.trackingNumber,
           shippedAt: pharmacyOrder.shippedAt,
         }

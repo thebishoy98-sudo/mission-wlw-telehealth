@@ -28,6 +28,31 @@ type PracticeQMirror = {
   answers?: Array<{ question: string; answer: string }>;
 };
 
+type OrderDetail = {
+  order?: {
+    status?: string;
+    quickbooksStatus?: string;
+    pharmacyStatus?: string;
+    identityStatus?: string;
+    identityReason?: string;
+  };
+  pharmacy?: {
+    status?: string;
+    lifeFileOrderId?: string;
+    trackingNumber?: string;
+  } | null;
+  practiceq?: PracticeQMirror | null;
+  diagnostics?: {
+    integrationLogs?: Array<{
+      integrationName?: string;
+      action?: string;
+      status?: string;
+      error?: string;
+      details?: Record<string, unknown>;
+    }>;
+  };
+};
+
 const BASE_URL = (process.env.E2E_BASE_URL ?? "https://mission-wlw-web.onrender.com").replace(/\/$/, "");
 const HEADLESS = process.env.E2E_HEADLESS !== "false";
 const ARTIFACT_ROOT =
@@ -39,6 +64,7 @@ const ID_IMAGE_PATH =
 const ID_VIDEO_PATH =
   process.env.E2E_ID_VIDEO_PATH ??
   "C:\\Users\\BishoyKamel\\Downloads\\WhatsApp Video 2026-05-28 at 8.19.04 AM.mp4";
+const ADMIN_SECRET = process.env.E2E_ADMIN_SECRET ?? "";
 
 const expectedAnswers = {
   pq_height: `5'10"`,
@@ -52,8 +78,8 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { cache: "no-store" });
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { cache: "no-store", ...init });
   const body = await response.text();
   const json = body ? JSON.parse(body) : {};
   if (!response.ok) {
@@ -427,18 +453,44 @@ async function main() {
 
     console.log("Step 7: verify order, bypass, and PracticeQ answers");
     const detail = await poll(
-      "PracticeQ answer mirror",
+      "PracticeQ answer mirror and LifeFile sandbox dispatch",
       async () => {
-        const payload = await fetchJson<{ order?: any; practiceq?: PracticeQMirror | null }>(
-          `${BASE_URL}/api/orders/${encodeURIComponent(orderId)}?email=${encodeURIComponent(patient.email)}`
+        const headers = ADMIN_SECRET ? { "x-admin-secret": ADMIN_SECRET } : undefined;
+        const payload = await fetchJson<OrderDetail>(
+          `${BASE_URL}/api/orders/${encodeURIComponent(orderId)}?email=${encodeURIComponent(patient.email)}`,
+          headers ? { headers } : undefined
         );
         const quickbooksStatus = payload.order?.quickbooksStatus;
+        const orderStatus = payload.order?.status;
+        const identityStatus = payload.order?.identityStatus;
+        const pharmacyStatus = payload.order?.pharmacyStatus;
         const practiceq = payload.practiceq;
+        const lifefileSuccess = payload.diagnostics?.integrationLogs?.some((log) =>
+          log.integrationName === "lifefile" &&
+          log.status === "success" &&
+          /submitted to Life File/i.test(String(log.action ?? ""))
+        );
         console.log(
-          `Order poll: order=${payload.order?.status}, qb=${quickbooksStatus}, pq=${practiceq?.status ?? practiceq?.reason ?? "missing"}`
+          `Order poll: order=${orderStatus}, identity=${identityStatus}, qb=${quickbooksStatus}, pharmacy=${pharmacyStatus}/${payload.pharmacy?.status ?? "none"}, lf=${payload.pharmacy?.lifeFileOrderId ?? "none"}, pq=${practiceq?.status ?? practiceq?.reason ?? "missing"}`
         );
         if (quickbooksStatus !== "skipped") {
           throw new Error(`Expected QuickBooks status skipped, got ${quickbooksStatus}`);
+        }
+        if (!["verified", "manual_approved"].includes(String(identityStatus ?? ""))) {
+          throw new Error(`Identity blocked pharmacy dispatch: ${identityStatus ?? "missing"} - ${payload.order?.identityReason ?? "no reason"}`);
+        }
+        if (pharmacyStatus === "error" || payload.pharmacy?.status === "error") {
+          const lifefileError = payload.diagnostics?.integrationLogs?.find((log) => log.integrationName === "lifefile" && log.status === "error");
+          throw new Error(`LifeFile sandbox dispatch failed: ${lifefileError?.error ?? "unknown error"}`);
+        }
+        if (orderStatus !== "sent_to_pharmacy" || pharmacyStatus !== "submitted" || payload.pharmacy?.status !== "submitted") {
+          return null;
+        }
+        if (ADMIN_SECRET && !payload.pharmacy?.lifeFileOrderId) {
+          return null;
+        }
+        if (ADMIN_SECRET && !lifefileSuccess) {
+          return null;
         }
         if (!practiceq?.available || !/completed/i.test(String(practiceq.status ?? ""))) return null;
         requirePracticeQAnswers(practiceq);
@@ -456,6 +508,8 @@ async function main() {
           orderId,
           patientEmail: patient.email,
           quickbooks: "bypassed",
+          pharmacyStatus: detail.pharmacy?.status,
+          lifeFileOrderId: detail.pharmacy?.lifeFileOrderId,
           practiceqStatus: practiceq.status,
           practiceqIntakeId: practiceq.intakeId,
           verifiedAnswers: expectedAnswers,

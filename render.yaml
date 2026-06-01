@@ -158,6 +158,8 @@ services:
         sync: false
       - key: IDENTITY_STORAGE_PROVIDER
         value: practiceq
+      - key: IDENTITY_SANDBOX_AUTO_VERIFY
+        value: true
 
       # Optional AppSheet mirror/tracking support.
       - key: USE_REAL_APPSHEET
@@ -257,6 +259,8 @@ services:
         value: 6230
       - key: IDENTITY_STORAGE_PROVIDER
         value: practiceq
+      - key: IDENTITY_SANDBOX_AUTO_VERIFY
+        value: true
       - key: USE_REAL_APPSHEET
         value: "false"
       - key: APPSHEET_ID
