@@ -436,7 +436,8 @@ async function smokeStaffDashboards() {
   const admin = await loginStaff("admin", ADMIN_EMAIL, ADMIN_PASSWORD);
   activePage = admin.page;
   try {
-    await admin.page.locator("text=Admin Dashboard").waitFor({ timeout: 30_000 });
+    await admin.page.getByRole("heading", { name: "Admin Dashboard" }).waitFor({ timeout: 30_000 });
+    await admin.page.getByText("Total Orders", { exact: true }).waitFor({ timeout: 30_000 });
     const text = await pageText(admin.page);
     assert(/Total Orders|Recent Orders|Revenue/i.test(text), "Admin dashboard did not render operational metrics.");
     await admin.page.goto(`${BASE_URL}/admin/orders`, { waitUntil: "domcontentloaded" });
