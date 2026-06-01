@@ -250,16 +250,35 @@ async function loadPracticeQFile(fileId: string): Promise<LoadedIdentityMedia | 
   const baseUrl = process.env.PRACTICEQ_BASE_URL?.trim() || "https://intakeq.com/api/v1";
   if (!apiKey) return null;
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/files/${encodeURIComponent(fileId)}`, {
-    headers: { "X-Auth-Key": apiKey },
-  });
-  if (!response.ok) return null;
+  const attempts = Math.max(1, Number(process.env.PRACTICEQ_FILE_DOWNLOAD_ATTEMPTS ?? "4") || 4);
+  const delayMs = Math.max(
+    0,
+    Number(process.env.PRACTICEQ_FILE_RETRY_DELAY_MS ?? (process.env.NODE_ENV === "test" ? "0" : "750")) || 0
+  );
+  const url = `${baseUrl.replace(/\/$/, "")}/files/${encodeURIComponent(fileId)}`;
+  let response: Response | null = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    response = await fetch(url, { headers: { "X-Auth-Key": apiKey } });
+    if (response.ok) break;
+    if (!isRetriablePracticeQFileStatus(response.status) || attempt === attempts) return null;
+    if (delayMs > 0) await sleep(delayMs);
+  }
+  if (!response?.ok) return null;
 
   const arrayBuffer = await response.arrayBuffer();
   return {
     contentType: response.headers.get("content-type") ?? "application/octet-stream",
     body: Buffer.from(arrayBuffer),
   };
+}
+
+function isRetriablePracticeQFileStatus(status: number) {
+  return status === 404 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildStorageKey(orderId: string, type: Upload["type"], filename: string) {
