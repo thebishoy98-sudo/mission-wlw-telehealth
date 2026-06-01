@@ -38,6 +38,7 @@ import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { shouldBypassQuickBooksPayment } from "@/lib/payment-bypass";
+import { canDispatchPharmacyAfterPayment, isRealPharmacyEnabled } from "@/lib/payment-dispatch-safety";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
 import {
@@ -410,6 +411,14 @@ export async function POST(req: NextRequest) {
     const hasSubmittedIdentity = !checkoutIdentityReused && submittedUploads.length > 0;
     const identityStatus = checkoutIdentityReused ? reusedIdentityStatus : hasSubmittedIdentity ? statusFromAiResult(identityAiResult) : "missing";
     const dispatchGate = getIdentityGate({ identityStatus });
+    const pharmacyProvider = pharmacy.getPharmacyProvider();
+    const realPharmacyEnabled = isRealPharmacyEnabled(pharmacyProvider);
+    const canDispatchPharmacy = canDispatchPharmacyAfterPayment({
+      identityCanDispatch: dispatchGate.canDispatch,
+      paymentBypassed: bypassQuickBooksPayment,
+      realPharmacyEnabled,
+    });
+    const pharmacyDispatchHeldForPayment = dispatchGate.canDispatch && !canDispatchPharmacy;
 
     // 8. Update order status
     const orderUpdates = {
@@ -449,6 +458,22 @@ export async function POST(req: NextRequest) {
     const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken) : "";
     const skipPracticeQAutomation = checkoutIdentityReused;
     let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
+
+    if (pharmacyDispatchHeldForPayment) {
+      const holdMessage = "Real pharmacy dispatch held because payment was bypassed";
+      errors.push(holdMessage);
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: pharmacyProvider === "appsheet" ? "appsheet" : "lifefile",
+        action: holdMessage,
+        orderId,
+        patientId: patient.id,
+        status: "error",
+        details: { paymentBypassed: true, realPharmacyEnabled, pharmacyProvider },
+        error: "A real pharmacy order requires a non-bypassed payment.",
+      }).catch(() => {});
+    }
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
     if (bypassQuickBooksPayment) {
@@ -537,8 +562,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 10. Pharmacy prescription order
-    if (dispatchGate.canDispatch) {
-      const pharmacyIntegration = pharmacy.getPharmacyProvider() === "appsheet" ? "appsheet" : "lifefile";
+    if (canDispatchPharmacy) {
+      const pharmacyIntegration = pharmacyProvider === "appsheet" ? "appsheet" : "lifefile";
       try {
         const selectedProductDose = productData?.doses?.find((dose: { id: string }) => dose.id === orderData?.doseId);
         const normalized = normalizeOrderForPharmacyDispatch(updatedOrder, productForIntegrations, [
@@ -610,7 +635,9 @@ export async function POST(req: NextRequest) {
       status: dispatchGate.canDispatch ? "approved" as const : "needs_more_info" as const,
       reviewedAt: dispatchGate.canDispatch ? new Date().toISOString() : undefined,
       reviewedBy: dispatchGate.canDispatch ? "system-auto" : undefined,
-      notes: dispatchGate.canDispatch
+      notes: pharmacyDispatchHeldForPayment
+        ? "Auto-approved clinically, but pharmacy dispatch is held because payment is bypassed while real pharmacy is enabled."
+        : dispatchGate.canDispatch
         ? "Auto-approved: patient passed eligibility and identity screening"
         : `Payment collected. Pharmacy dispatch blocked until identity is approved. Upload link: ${identityUploadUrl}`,
       identityAiResult,
@@ -634,12 +661,12 @@ export async function POST(req: NextRequest) {
       chargeId: chargeResult.chargeId,
       chargedAmount: chargeAmount,
       identityStatus,
-      orderStatus: dispatchGate.canDispatch && !errors.some((error) => error.startsWith("Pharmacy:"))
+      orderStatus: canDispatchPharmacy && !errors.some((error) => error.startsWith("Pharmacy:"))
         ? "sent_to_pharmacy"
         : orderUpdates.status,
-      pharmacyStatus: dispatchGate.canDispatch && !errors.some((error) => error.startsWith("Pharmacy:"))
+      pharmacyStatus: canDispatchPharmacy && !errors.some((error) => error.startsWith("Pharmacy:"))
         ? "submitted"
-        : dispatchGate.canDispatch
+        : canDispatchPharmacy
           ? "error"
           : "draft",
       identityUploadUrl: dispatchGate.canDispatch ? undefined : identityUploadUrl,

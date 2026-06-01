@@ -18,6 +18,12 @@ describe("payment to PracticeQ automation contract", () => {
     expect(source).toContain("PracticeQ automation skipped for returning-patient reorder");
   });
 
+  it("does not dispatch to a real pharmacy when payment was bypassed", () => {
+    expect(source).toContain("canDispatchPharmacyAfterPayment");
+    expect(source).toContain("isRealPharmacyEnabled");
+    expect(source).toContain("Real pharmacy dispatch held because payment was bypassed");
+  });
+
   it("does not swallow failed server PracticeQ job inserts as a pending state", () => {
     expect(source).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
     expect(source).toContain("PracticeQ automation queue failed");

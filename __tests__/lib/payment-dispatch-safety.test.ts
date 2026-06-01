@@ -1,0 +1,29 @@
+import { canDispatchPharmacyAfterPayment, isRealPharmacyEnabled } from "@/lib/payment-dispatch-safety";
+
+describe("payment dispatch safety", () => {
+  it("holds real pharmacy dispatch when payment was bypassed", () => {
+    expect(
+      canDispatchPharmacyAfterPayment({
+        identityCanDispatch: true,
+        paymentBypassed: true,
+        realPharmacyEnabled: true,
+      })
+    ).toBe(false);
+  });
+
+  it("allows real pharmacy dispatch after a non-bypassed payment", () => {
+    expect(
+      canDispatchPharmacyAfterPayment({
+        identityCanDispatch: true,
+        paymentBypassed: false,
+        realPharmacyEnabled: true,
+      })
+    ).toBe(true);
+  });
+
+  it("detects production LifeFile and AppSheet modes from env", () => {
+    expect(isRealPharmacyEnabled("lifefile", { USE_REAL_LIFEFILE: "true" })).toBe(true);
+    expect(isRealPharmacyEnabled("appsheet", { USE_REAL_APPSHEET: "true" })).toBe(true);
+    expect(isRealPharmacyEnabled("lifefile", { USE_REAL_LIFEFILE: "false" })).toBe(false);
+  });
+});
