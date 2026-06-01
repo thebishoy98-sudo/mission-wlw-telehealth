@@ -161,6 +161,7 @@ export default function Payment() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     } as unknown as Types.Order;
+    draftOrder.identityStatus = intakeState.identityStatus ?? "missing";
     const order = db.orderDb.create(draftOrder);
 
     // Payment record will be created by the charge API after real charge succeeds
@@ -234,6 +235,8 @@ export default function Payment() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         orderId: order.id,
+        isReorder: intakeState.isReorder,
+        reorderSourceOrderId: intakeState.reorderSourceOrderId,
         token: quickBooksToken || undefined,
         cardNumber: quickBooksPaymentsEnabled ? undefined : cardDigits,
         expMonth: quickBooksPaymentsEnabled ? undefined : expMonth,
@@ -268,12 +271,14 @@ export default function Payment() {
           patientId: patient.id,
           productId: intakeState.productId,
           doseId: intakeState.doseId,
+          isReorder: intakeState.isReorder,
+          reorderSourceOrderId: intakeState.reorderSourceOrderId,
           status: "draft",
           paymentStatus: "pending",
           pharmacyStatus: "draft",
           [clinicalConsentStatusKey]: "pending",
           [accountingStatusKey]: "pending",
-          identityStatus: "missing",
+          identityStatus: intakeState.identityStatus ?? "missing",
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },
@@ -307,7 +312,13 @@ export default function Payment() {
       updatedAt: new Date().toISOString(),
     });
 
-    saveIntakeState({ orderId: order.id, patientId: patient.id, paymentProcessed: true });
+    saveIntakeState({
+      orderId: order.id,
+      patientId: patient.id,
+      paymentProcessed: true,
+      isReorder: false,
+      reorderSourceOrderId: undefined,
+    });
     setProcessing(false);
     router.push("/start/confirmation");
   };
@@ -433,7 +444,17 @@ export default function Payment() {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/uploads")} disabled={processing}>
+        <Button
+          fullWidth
+          variant="outline"
+          type="button"
+          onClick={() => router.push(
+            intakeState.isReorder && intakeState.reorderSourceOrderId
+              ? `/patient/reorder?orderId=${encodeURIComponent(intakeState.reorderSourceOrderId)}`
+              : "/start/uploads"
+          )}
+          disabled={processing}
+        >
           Back
         </Button>
         <Button fullWidth type="submit" disabled={processing || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>

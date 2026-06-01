@@ -41,6 +41,8 @@ export interface IntakeFormState {
   identityVideoData?: string;
   paymentProcessed: boolean;
   orderId?: string;
+  isReorder?: boolean;
+  reorderSourceOrderId?: string;
   identityStatus?: "missing" | "pending" | "verified" | "needs_review" | "rejected" | "manual_approved";
   identityAiResult?: { verdict: string; confidence: number; summary: string; flags: string[] };
 }

@@ -74,6 +74,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
+    const isReorder = body.isReorder === true || orderData?.isReorder === true;
+    const reorderSourceOrderId = typeof body.reorderSourceOrderId === "string"
+      ? body.reorderSourceOrderId
+      : typeof orderData?.reorderSourceOrderId === "string"
+        ? orderData.reorderSourceOrderId
+        : "";
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
     const chargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
 
@@ -317,7 +323,21 @@ export async function POST(req: NextRequest) {
     await dbServer.paymentDb.create(payment).catch(() => {});
 
     // 7. Verify identity when patient submitted usable media. Missing/uncertain identity blocks pharmacy dispatch.
-    const identityUploadToken = order.identityUploadToken ?? createIdentityUploadToken(orderId);
+    const reorderSourceOrder = isReorder && reorderSourceOrderId
+      ? await dbServer.orderDb.getById(reorderSourceOrderId).catch(() => null)
+      : null;
+    const reorderSourceBelongsToPatient = !!reorderSourceOrder && reorderSourceOrder.patientId === patient.id;
+    const reorderSourceWasPreviouslyAllowed =
+      reorderSourceBelongsToPatient &&
+      (
+        getIdentityGate({ identityStatus: reorderSourceOrder.identityStatus }).canDispatch ||
+        ["sent_to_pharmacy", "processing", "fulfilled", "shipped", "delivered"].includes(reorderSourceOrder.status)
+      );
+    const reorderIdentityReused = isReorder && reorderSourceWasPreviouslyAllowed;
+    const reusedIdentityStatus = getIdentityGate({ identityStatus: reorderSourceOrder?.identityStatus }).canDispatch
+      ? reorderSourceOrder?.identityStatus ?? "manual_approved"
+      : "manual_approved";
+    const identityUploadToken = reorderIdentityReused ? undefined : (order.identityUploadToken ?? createIdentityUploadToken(orderId));
     const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
     const submittedUploads: Upload[] = submittedIdentityMedia
       ? (() => {
@@ -362,7 +382,15 @@ export async function POST(req: NextRequest) {
       await Promise.all(submittedUploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
     }
 
-    const identityAiResult = submittedUploads.length
+    const identityAiResult = reorderIdentityReused
+      ? {
+          status: reusedIdentityStatus as "verified" | "manual_approved",
+          confidence: 1,
+          summary: "Reorder identity reused from the patient's previous verified order.",
+          flags: [] as string[],
+          checkedAt: new Date().toISOString(),
+        }
+      : submittedUploads.length
       ? await verifyIdentityUploads(identityAiUploads, {
           patientName: patient ? `${patient.firstName} ${patient.lastName}` : undefined,
           dateOfBirth: patient?.dateOfBirth,
@@ -374,8 +402,8 @@ export async function POST(req: NextRequest) {
           flags: ["missing_identity_uploads"],
           checkedAt: new Date().toISOString(),
         };
-    const hasSubmittedIdentity = submittedUploads.length > 0;
-    const identityStatus = hasSubmittedIdentity ? statusFromAiResult(identityAiResult) : "missing";
+    const hasSubmittedIdentity = !reorderIdentityReused && submittedUploads.length > 0;
+    const identityStatus = reorderIdentityReused ? reusedIdentityStatus : hasSubmittedIdentity ? statusFromAiResult(identityAiResult) : "missing";
     const dispatchGate = getIdentityGate({ identityStatus });
 
     // 8. Update order status
@@ -397,7 +425,7 @@ export async function POST(req: NextRequest) {
       patientId: patient.id,
       patientName,
     }).catch(() => {});
-    if (!dispatchGate.canDispatch) {
+    if (!dispatchGate.canDispatch && !reorderIdentityReused) {
       sendAdminNotification("identity_review_needed", {
         orderId,
         patientId: patient.id,
@@ -413,7 +441,7 @@ export async function POST(req: NextRequest) {
     };
     const updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
-    const identityUploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
+    const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken) : "";
     let practiceQAutomationStatus: "queued" | "error" = "queued";
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
@@ -540,7 +568,9 @@ export async function POST(req: NextRequest) {
     try {
       await spruceServer.sendMessage(
         patient,
-        dispatchGate.canDispatch
+        reorderIdentityReused
+          ? "payment_received"
+          : dispatchGate.canDispatch
           ? "payment_received"
           : hasSubmittedIdentity
             ? "identity_review_received"

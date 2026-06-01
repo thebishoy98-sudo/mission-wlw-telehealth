@@ -17,6 +17,9 @@ type ReorderData = {
   questionnaireAnswers: Record<string, string>;
 };
 
+const reusableIdentityStatus = (status: Order["identityStatus"]) =>
+  status === "verified" || status === "manual_approved" ? status : "manual_approved";
+
 function ReorderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,7 +86,9 @@ function ReorderContent() {
       identityVideoData: undefined,
       paymentProcessed: false,
       orderId: undefined,
-      identityStatus: "missing",
+      isReorder: true,
+      reorderSourceOrderId: data.order.id,
+      identityStatus: reusableIdentityStatus(data.order.identityStatus),
       identityAiResult: undefined,
     });
     router.push("/start/payment");

@@ -72,7 +72,13 @@ export default function PatientInfo() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    saveIntakeState({ ...formData, doseId: selectedDose, shippingAddress: formData.shippingAddress || formData.address });
+    saveIntakeState({
+      ...formData,
+      doseId: selectedDose,
+      shippingAddress: formData.shippingAddress || formData.address,
+      isReorder: false,
+      reorderSourceOrderId: undefined,
+    });
     router.push("/start/questionnaire");
   };
 
