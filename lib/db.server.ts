@@ -1080,6 +1080,11 @@ export const adminMaintenanceDb = {
     const patientRows = await sql`
       SELECT id FROM patients
       WHERE LOWER(first_name) = 'smoke'
+         OR (
+           LOWER(first_name) = 'pq'
+           AND LOWER(last_name) LIKE 'check%'
+           AND LOWER(email) LIKE 'pq-real-check%@missionwlw.com'
+         )
          OR LOWER(email) LIKE 'practiceq-smoke-%@missionwlw.com'
          OR LOWER(email) LIKE 'smoke-%@missionwlw.com'
     `;

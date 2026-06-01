@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatCurrency } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
@@ -39,71 +38,91 @@ function AdminDashboardContent() {
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadAdminData() {
-      let allOrders = db.orderDb.getAll();
-      let allPayments = db.paymentDb.getAll();
-      let allPatients = db.patientDb.getAll();
-      let allPharmacyOrders = db.pharmacyOrderDb.getAll();
-
       try {
+        setLoading(true);
+        setError("");
+
         const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
-        if (response.ok) {
-          const data = (await response.json()) as AdminDashboardData;
-          allOrders = data.orders;
-          allPayments = data.payments;
-          allPatients = data.patients;
-          allPharmacyOrders = data.pharmacyOrders;
+        if (!response.ok) {
+          throw new Error(`Admin dashboard request failed with ${response.status}`);
         }
-      } catch {
-        // Keep local fallback for static/local runs.
-      }
 
-      const totalRevenue = allPayments
-        .filter((p) => p.status === "completed")
-        .reduce((sum, p) => sum + paymentAmount(p), 0);
+        const data = (await response.json()) as AdminDashboardData;
+        if (!isMounted) return;
 
-      const paidOrders = allPayments.filter((p) => p.status === "completed").length;
-      const fulfilled = allOrders.filter(
-        (o) => o.status === "delivered" || o.status === "fulfilled"
-      ).length;
+        const allOrders = data.orders;
+        const allPayments = data.payments;
+        const allPatients = data.patients;
+        const allPharmacyOrders = data.pharmacyOrders;
 
-      setStats({
-        totalOrders: allOrders.length,
-        totalPatients: allPatients.length,
-        totalRevenue,
-        paidOrders,
-        pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
-        fulfilled,
-        averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
-      });
-
-      setOrders(allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      setPayments(Object.fromEntries(allPayments.map((payment) => [payment.orderId, payment])));
-      setPharmacyOrders(Object.fromEntries(allPharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder])));
-
-      const last7Days: { date: string; revenue: number }[] = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dayRevenue = allPayments
-          .filter(
-            (p) =>
-              p.status === "completed" &&
-              new Date(p.createdAt).toDateString() === date.toDateString()
-          )
+        const totalRevenue = allPayments
+          .filter((p) => p.status === "completed")
           .reduce((sum, p) => sum + paymentAmount(p), 0);
 
-        last7Days.push({
-          date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          revenue: dayRevenue,
+        const paidOrders = allPayments.filter((p) => p.status === "completed").length;
+        const fulfilled = allOrders.filter(
+          (o) => o.status === "delivered" || o.status === "fulfilled"
+        ).length;
+
+        setStats({
+          totalOrders: allOrders.length,
+          totalPatients: allPatients.length,
+          totalRevenue,
+          paidOrders,
+          pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
+          fulfilled,
+          averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
         });
+
+        setOrders(
+          allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        );
+        setPayments(Object.fromEntries(allPayments.map((payment) => [payment.orderId, payment])));
+        setPharmacyOrders(
+          Object.fromEntries(allPharmacyOrders.map((pharmacyOrder) => [pharmacyOrder.orderId, pharmacyOrder]))
+        );
+
+        const last7Days: { date: string; revenue: number }[] = [];
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          const dayRevenue = allPayments
+            .filter(
+              (p) =>
+                p.status === "completed" &&
+                new Date(p.createdAt).toDateString() === date.toDateString()
+            )
+            .reduce((sum, p) => sum + paymentAmount(p), 0);
+
+          last7Days.push({
+            date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            revenue: dayRevenue,
+          });
+        }
+        setRevenueData(last7Days);
+      } catch {
+        if (isMounted) {
+          setError("Could not load admin dashboard data. Please refresh the page or open Order Management.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setRevenueData(last7Days);
     }
 
     void loadAdminData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (
@@ -112,6 +131,22 @@ function AdminDashboardContent() {
       <div className="container-max py-8 sm:py-12">
         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Admin Dashboard</h1>
 
+        {loading && (
+          <Card className="mb-8">
+            <CardContent className="p-6 text-sm text-gray-600">
+              Loading admin dashboard data...
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && error && (
+          <div className="mb-8 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6 mb-8 sm:mb-12">
           <Card>
@@ -273,6 +308,8 @@ function AdminDashboardContent() {
             </div>
           </CardContent>
         </Card>
+          </>
+        )}
       </div>
     </div>
   );
