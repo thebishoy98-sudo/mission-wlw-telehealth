@@ -3,6 +3,7 @@ import path from "path";
 
 describe("provider dashboard permissions", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/provider/page.tsx"), "utf8");
+  const routeSource = fs.readFileSync(path.join(process.cwd(), "app/api/provider/dashboard/route.ts"), "utf8");
 
   it("does not expose admin-only identity review actions to providers", () => {
     expect(source).not.toContain("/api/identity/approve");
@@ -27,5 +28,11 @@ describe("provider dashboard permissions", () => {
 
     expect(navbarSource).toContain("Karen");
     expect(navbarSource).not.toContain("Sarah Johnson");
+  });
+
+  it("keeps the dashboard summary fast by leaving PracticeQ hydration to chart detail pages", () => {
+    expect(routeSource).not.toContain("getPracticeQMirrorForOrder");
+    expect(routeSource).not.toContain("hydratePatientFromPracticeQ");
+    expect(routeSource).not.toContain("orders.map(resolveProviderPatient)");
   });
 });

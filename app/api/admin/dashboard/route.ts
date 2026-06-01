@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import type { Patient, PracticeQMirror } from "@/types";
-import { resolvePatient } from "@/lib/patient-resolver";
-import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
-import { getPracticeQMirrorForOrder } from "@/services/practiceq";
+import type { Patient } from "@/types";
 import { requireAdmin } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
@@ -67,61 +64,33 @@ function mergePatientMap(patients: Array<Patient | null>) {
   return map;
 }
 
-function answerValue(practiceq: PracticeQMirror | null | undefined, pattern: RegExp): string {
-  const answer = practiceq?.answers.find((item) => pattern.test(item.question.toLowerCase()))?.answer?.trim() ?? "";
-  return answer.toLowerCase() === "no answer" ? "" : answer;
+async function loadDashboardPatientMap(orders: dbServeredOrder[]) {
+  const ids = orders.map((order) => order.patientId);
+  const serverPatients = await dbServer.patientDb.getByIds(ids).catch(() => []);
+  const patientMap = mergePatientMap(serverPatients);
+
+  for (const id of ids) {
+    if (!patientMap.has(id)) {
+      const localPatient = db.patientDb.getById(id);
+      if (localPatient) patientMap.set(id, localPatient);
+    }
+  }
+
+  return patientMap;
 }
 
-async function resolveAdminPatient(order: dbServeredOrder): Promise<Patient | null> {
-  const patient =
-    (await resolvePatient(order).catch(() => null)) ??
-    (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
-    db.patientDb.getById(order.patientId);
+async function loadDashboardPayments(orders: dbServeredOrder[]) {
+  const ids = orders.map((order) => order.id);
+  const serverPayments = await dbServer.paymentDb.getByOrders(ids).catch(() => []);
+  if (serverPayments.length) return serverPayments;
+  return ids.map((id) => db.paymentDb.getByOrder(id)).filter(Boolean);
+}
 
-  if (!patient || !order.practiceqClientId) return patient;
-
-  const hasName = !!(patient.firstName && patient.lastName);
-  if (hasName) return patient;
-
-  const packet = await dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null);
-  const practiceq = await getPracticeQMirrorForOrder(order, packet).catch(() => null);
-  if (!practiceq?.available) return patient;
-
-  const hydrated = hydratePatientFromPracticeQ(patient, practiceq);
-  if (!practiceq.answers.length) return hydrated;
-
-  const firstName = hydrated.firstName || answerValue(practiceq, /^first name\b/);
-  const lastName = hydrated.lastName || answerValue(practiceq, /^last name\b/);
-  const phone = hydrated.phone || answerValue(practiceq, /^phone/);
-  const dateOfBirth = hydrated.dateOfBirth || answerValue(practiceq, /date of birth|dob/);
-  const street1 = hydrated.address?.street1 || answerValue(practiceq, /address/);
-  const city = hydrated.address?.city || answerValue(practiceq, /^city\b/);
-  const state = hydrated.address?.state || answerValue(practiceq, /^state\b/);
-  const zipCode = hydrated.address?.zipCode || answerValue(practiceq, /zip/);
-
-  return {
-    ...hydrated,
-    firstName,
-    lastName,
-    phone,
-    dateOfBirth,
-    address: {
-      ...hydrated.address,
-      street1,
-      city,
-      state,
-      zipCode,
-      country: hydrated.address?.country || "US",
-    },
-    shippingAddress: {
-      ...hydrated.shippingAddress,
-      street1: hydrated.shippingAddress?.street1 || street1,
-      city: hydrated.shippingAddress?.city || city,
-      state: hydrated.shippingAddress?.state || state,
-      zipCode: hydrated.shippingAddress?.zipCode || zipCode,
-      country: hydrated.shippingAddress?.country || "US",
-    },
-  };
+async function loadDashboardPharmacyOrders(orders: dbServeredOrder[]) {
+  const ids = orders.map((order) => order.id);
+  const serverPharmacyOrders = await dbServer.pharmacyOrderDb.getByOrders(ids).catch(() => []);
+  if (serverPharmacyOrders.length) return serverPharmacyOrders;
+  return ids.map((id) => db.pharmacyOrderDb.getByOrder(id)).filter(Boolean);
 }
 
 export async function GET(req: NextRequest) {
@@ -132,34 +101,24 @@ export async function GET(req: NextRequest) {
     const { page, pageSize, q } = getPagination(req);
     const orders = await dbServer.orderDb.getAll().catch(() => db.orderDb.getAll());
     const products = await dbServer.productDb.getAll().catch(() => db.productDb.getAll());
-
-    const allPatients = await Promise.all(
-      orders.map(resolveAdminPatient)
-    );
-    const patientMap = mergePatientMap(allPatients);
-
-    const filteredOrders = orders.filter((order) =>
-      matchesSearch(order, patientMap.get(order.patientId) ?? null, q)
-    );
-    const sortedOrders = [...filteredOrders].sort(
+    const sortedAllOrders = [...orders].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+    const searchPatientMap = q ? await loadDashboardPatientMap(sortedAllOrders) : new Map<string, Patient>();
+    const filteredOrders = q
+      ? sortedAllOrders.filter((order) =>
+          matchesSearch(order, searchPatientMap.get(order.patientId) ?? null, q)
+        )
+      : sortedAllOrders;
+    const sortedOrders = filteredOrders;
     const total = sortedOrders.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
     const pagedOrders = sortedOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
+    const patientMap = q ? searchPatientMap : await loadDashboardPatientMap(pagedOrders);
 
-    const payments = await Promise.all(
-      pagedOrders.map(async (order) =>
-        (await dbServer.paymentDb.getByOrder(order.id).catch(() => null)) ?? db.paymentDb.getByOrder(order.id)
-      )
-    );
-
-    const pharmacyOrders = await Promise.all(
-      pagedOrders.map(async (order) =>
-        (await dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null)) ?? db.pharmacyOrderDb.getByOrder(order.id)
-      )
-    );
+    const payments = await loadDashboardPayments(pagedOrders);
+    const pharmacyOrders = await loadDashboardPharmacyOrders(pagedOrders);
 
     return NextResponse.json({
       orders: pagedOrders,

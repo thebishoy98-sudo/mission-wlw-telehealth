@@ -150,6 +150,16 @@ export const patientDb = {
     return rows[0] ? rowToPatient(rows[0]) : null;
   },
 
+  async getByIds(ids: string[]): Promise<Patient[]> {
+    if (!isDbAvailable()) return [];
+    const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+    if (!uniqueIds.length) return [];
+    const { rows } = await sql`
+      SELECT * FROM patients WHERE id = ANY(${uniqueIds}::text[])
+    `;
+    return rows.map(rowToPatient);
+  },
+
   async create(p: Patient): Promise<Patient> {
     if (!isDbAvailable()) return p;
     await sql`
@@ -337,6 +347,19 @@ export const paymentDb = {
     if (!isDbAvailable()) return null;
     const { rows } = await sql`SELECT * FROM payments WHERE order_id = ${orderId} LIMIT 1`;
     return rows[0] ? rowToPayment(rows[0]) : null;
+  },
+
+  async getByOrders(orderIds: string[]): Promise<Payment[]> {
+    if (!isDbAvailable()) return [];
+    const uniqueOrderIds = Array.from(new Set(orderIds.map((id) => id.trim()).filter(Boolean)));
+    if (!uniqueOrderIds.length) return [];
+    const { rows } = await sql`
+      SELECT DISTINCT ON (order_id) *
+      FROM payments
+      WHERE order_id = ANY(${uniqueOrderIds}::text[])
+      ORDER BY order_id, created_at DESC
+    `;
+    return rows.map(rowToPayment);
   },
 
   async create(p: Payment): Promise<Payment> {
@@ -583,6 +606,19 @@ export const pharmacyOrderDb = {
       SELECT * FROM pharmacy_orders WHERE order_id = ${orderId} ORDER BY submitted_at DESC NULLS LAST LIMIT 1
     `;
     return rows[0] ? rowToPharmacyOrder(rows[0]) : null;
+  },
+
+  async getByOrders(orderIds: string[]): Promise<PharmacyOrder[]> {
+    if (!isDbAvailable()) return [];
+    const uniqueOrderIds = Array.from(new Set(orderIds.map((id) => id.trim()).filter(Boolean)));
+    if (!uniqueOrderIds.length) return [];
+    const { rows } = await sql`
+      SELECT DISTINCT ON (order_id) *
+      FROM pharmacy_orders
+      WHERE order_id = ANY(${uniqueOrderIds}::text[])
+      ORDER BY order_id, submitted_at DESC NULLS LAST
+    `;
+    return rows.map(rowToPharmacyOrder);
   },
 
   async getByLifeFileId(lifeFileOrderId: string): Promise<PharmacyOrder | null> {
