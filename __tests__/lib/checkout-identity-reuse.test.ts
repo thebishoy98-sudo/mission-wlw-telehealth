@@ -66,7 +66,7 @@ describe("resolveReusableCheckoutIdentity", () => {
     expect(result.reused).toBe(false);
   });
 
-  it("reuses an owned explicit reorder source without requiring a new upload", () => {
+  it("reuses an owned explicit reorder source that already passed identity", () => {
     const result = resolveReusableCheckoutIdentity({
       patientId: "patient_1",
       currentOrderId: "order_current",
@@ -76,10 +76,10 @@ describe("resolveReusableCheckoutIdentity", () => {
         order({ id: "order_current", identityStatus: "missing" }),
         order({
           id: "order_source",
-          status: "approved",
+          status: "sent_to_pharmacy",
           paymentStatus: "completed",
-          pharmacyStatus: "draft",
-          identityStatus: "missing",
+          pharmacyStatus: "submitted",
+          identityStatus: "manual_approved",
           createdAt: "2026-05-31T00:00:00.000Z",
         }),
       ],
@@ -90,5 +90,27 @@ describe("resolveReusableCheckoutIdentity", () => {
       sourceOrderId: "order_source",
       identityStatus: "manual_approved",
     });
+  });
+
+  it("does not reuse an explicit reorder source that was never allowed through identity", () => {
+    const result = resolveReusableCheckoutIdentity({
+      patientId: "patient_1",
+      currentOrderId: "order_current",
+      isReorder: true,
+      reorderSourceOrderId: "order_source",
+      patientOrders: [
+        order({ id: "order_current", identityStatus: "missing" }),
+        order({
+          id: "order_source",
+          status: "pending_review",
+          paymentStatus: "completed",
+          pharmacyStatus: "draft",
+          identityStatus: "missing",
+          createdAt: "2026-05-31T00:00:00.000Z",
+        }),
+      ],
+    });
+
+    expect(result.reused).toBe(false);
   });
 });

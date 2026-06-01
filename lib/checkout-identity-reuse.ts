@@ -58,7 +58,7 @@ export function resolveReusableCheckoutIdentity({
 
   if (isReorder && reorderSourceOrderId) {
     const sourceOrder = ownedOrders.find((order) => order.id === reorderSourceOrderId);
-    if (sourceOrder) {
+    if (sourceOrder && isAllowedPriorOrder(sourceOrder)) {
       return {
         reused: true,
         sourceOrderId: sourceOrder.id,
