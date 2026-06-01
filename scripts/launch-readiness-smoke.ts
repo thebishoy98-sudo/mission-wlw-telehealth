@@ -233,32 +233,6 @@ function nameForPatient(patient?: Patient) {
   return [patient?.firstName, patient?.lastName].filter(Boolean).join(" ").trim();
 }
 
-function selectCandidateOrder(
-  dashboard: DashboardData,
-  details: Array<{ order: Order; patient?: Patient; detail: OrderDetail }>,
-  strictChart: boolean
-): OrderCandidate {
-  if (TARGET_ORDER_ID) {
-    const target = details.find((item) => item.order.id === TARGET_ORDER_ID);
-    assert(target, `Target order ${TARGET_ORDER_ID} was not found in admin dashboard results.`);
-    return { ...target, strictChart: true };
-  }
-
-  const withFullChart = details.find((item) =>
-    item.detail.consent &&
-    (item.detail.identity?.uploads?.length ?? 0) >= 2 &&
-    item.detail.practiceq?.available
-  );
-  if (withFullChart) return { ...withFullChart, strictChart };
-
-  const withConsent = details.find((item) => item.detail.consent);
-  if (withConsent) return { ...withConsent, strictChart };
-
-  const newest = details[0];
-  assert(newest, `No orders were available in admin dashboard; total=${dashboard.pagination?.total ?? 0}.`);
-  return { ...newest, strictChart };
-}
-
 async function loadOrderCandidate() {
   const headers = authHeaders();
   const queries = TARGET_ORDER_ID ? [TARGET_ORDER_ID] : [SEARCH_QUERY, ""];
@@ -273,14 +247,32 @@ async function loadOrderCandidate() {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     if (!orders.length) continue;
-    const details = await Promise.all(
-      orders.slice(0, 8).map(async (order) => ({
+
+    if (TARGET_ORDER_ID) {
+      const order = orders.find((item) => item.id === TARGET_ORDER_ID);
+      assert(order, `Target order ${TARGET_ORDER_ID} was not found in admin dashboard results.`);
+      return {
         order,
         patient: patientMap.get(order.patientId),
         detail: await fetchJson<OrderDetail>(`${BASE_URL}/api/orders/${encodeURIComponent(order.id)}`, { headers }),
-      }))
-    );
-    return selectCandidateOrder(dashboard, details, Boolean(query));
+        strictChart: true,
+      };
+    }
+
+    let fallback: OrderCandidate | null = null;
+    for (const order of orders.slice(0, 8)) {
+      const patient = patientMap.get(order.patientId);
+      const detail = await fetchJson<OrderDetail>(`${BASE_URL}/api/orders/${encodeURIComponent(order.id)}`, { headers });
+      if (detail.consent && (detail.identity?.uploads?.length ?? 0) >= 2 && detail.practiceq?.available) {
+        return { order, patient, detail, strictChart: Boolean(query) };
+      }
+
+      if (!fallback || (!fallback.detail.consent && detail.consent)) {
+        fallback = { order, patient, detail, strictChart: Boolean(query) };
+      }
+    }
+
+    if (fallback) return fallback;
   }
   throw new Error(`No order candidate found. Search query=${SEARCH_QUERY || "(none)"}.`);
 }
