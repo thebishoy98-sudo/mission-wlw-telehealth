@@ -66,12 +66,13 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
   if (!files) return;
 
   const previousPacketData = packet?.packetData;
+  const sanitizedUploads = files.uploads ?? uploads.map((upload) => ({ ...upload, base64Data: "" }));
   const packetPatch = {
     packetData: {
       patientInfo: previousPacketData?.patientInfo ?? { id: patient.id },
       questionnaireAnswers: previousPacketData?.questionnaireAnswers ?? answers,
       consentRecord: previousPacketData?.consentRecord ?? (consent ?? {}),
-      uploads: previousPacketData?.uploads ?? uploads,
+      uploads: sanitizedUploads,
       productRequested: previousPacketData?.productRequested ?? order.productId,
       doseSelected: previousPacketData?.doseSelected ?? order.doseId,
       practiceQAnswerFile: files.answerFile ?? previousPacketData?.practiceQAnswerFile,
@@ -97,7 +98,7 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
         patientInfo: { id: patient.id },
         questionnaireAnswers: answers,
         consentRecord: consent ?? {},
-        uploads,
+        uploads: sanitizedUploads,
         practiceQAnswerFile: files.answerFile,
         practiceQPdfFile: files.pdfFile,
         practiceQIdentityFiles: files.identityFiles,

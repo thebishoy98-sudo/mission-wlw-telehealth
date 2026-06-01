@@ -27,6 +27,7 @@ const chargeAmountOverride =
     ? configuredChargeOverride
     : null;
 const quickBooksPaymentsEnabled = process.env.NEXT_PUBLIC_QB_PAYMENTS_ENABLED === "true";
+const paymentsDisabled = !quickBooksPaymentsEnabled;
 const quickBooksPaymentsEnvironment = process.env.NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT === "sandbox" ? "sandbox" : "production";
 const quickBooksTokenBaseUrl =
   quickBooksPaymentsEnvironment === "sandbox"
@@ -134,11 +135,12 @@ export default function Payment() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const digits = cardNumber.replace(/\s/g, "");
-    if (!productReady || digits.length < 15 || !cardExpiry || cardCvc.length < 3) return;
+    if (!productReady) return;
+    if (!paymentsDisabled && (digits.length < 15 || !cardExpiry || cardCvc.length < 3)) return;
     setPaymentError("");
     setProcessing(true);
 
-    setProcessingStep(quickBooksPaymentsEnabled ? "Securing payment details..." : "Setting up your account...");
+    setProcessingStep(paymentsDisabled ? "Submitting order..." : "Securing payment details...");
     let quickBooksToken = "";
     try {
       if (quickBooksPaymentsEnabled) {
@@ -195,7 +197,7 @@ export default function Payment() {
 
     // Payment record will be created by the charge API after real charge succeeds
     const cardDigits = cardNumber.replace(/\s/g, "");
-    const cardLast4 = cardDigits.slice(-4);
+    const cardLast4 = paymentsDisabled ? "0000" : cardDigits.slice(-4);
     const [expMonth, expYear] = cardExpiry.split("/").map((s) => s.trim());
 
     // Save questionnaire answers
@@ -267,13 +269,13 @@ export default function Payment() {
         isReorder: intakeState.isReorder,
         reorderSourceOrderId: intakeState.reorderSourceOrderId,
         token: quickBooksToken || undefined,
-        cardNumber: quickBooksPaymentsEnabled ? undefined : cardDigits,
-        expMonth: quickBooksPaymentsEnabled ? undefined : expMonth,
-        expYear: quickBooksPaymentsEnabled ? undefined : (expYear?.length === 2 ? `20${expYear}` : expYear),
-        cvc: quickBooksPaymentsEnabled ? undefined : cardCvc,
+        cardNumber: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardDigits,
+        expMonth: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : expMonth,
+        expYear: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : (expYear?.length === 2 ? `20${expYear}` : expYear),
+        cvc: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardCvc,
         cardName: `${intakeState.firstName} ${intakeState.lastName}`,
         cardLast4,
-        cardBrand: "Visa",
+        cardBrand: paymentsDisabled ? "bypass" : "Visa",
         amount: total,
         identityUploads: {
           licenseImageData: intakeState.licenseImageData,
@@ -389,16 +391,21 @@ export default function Payment() {
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-            <span>{quickBooksPaymentsEnabled ? "Secure payment" : "Test payment mode"}</span>
+            <span>{paymentsDisabled ? "Payment disabled" : "Secure payment"}</span>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <Input
-            label="Cardholder Name"
-            disabled
-            defaultValue={`${intakeState.firstName} ${intakeState.lastName}`}
-          />
+        {paymentsDisabled ? (
+          <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-sm text-gray-700">
+            Payment collection is disabled for this sandbox order. No card will be charged.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Input
+              label="Cardholder Name"
+              disabled
+              defaultValue={`${intakeState.firstName} ${intakeState.lastName}`}
+            />
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -455,7 +462,14 @@ export default function Payment() {
               {paymentError}
             </div>
           )}
-        </div>
+          </div>
+        )}
+
+        {paymentsDisabled && paymentError && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            {paymentError}
+          </div>
+        )}
       </div>
 
       {/* Processing overlay */}
@@ -486,8 +500,8 @@ export default function Payment() {
         >
           Back
         </Button>
-        <Button fullWidth type="submit" disabled={processing || !productReady || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
-          {processing ? "Processing..." : `Pay ${productReady ? formatCurrency(total) : "-"}`}
+        <Button fullWidth type="submit" disabled={processing || !productReady || (!paymentsDisabled && (cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3))}>
+          {processing ? "Processing..." : paymentsDisabled ? "Submit order" : `Pay ${productReady ? formatCurrency(total) : "-"}`}
         </Button>
       </div>
     </form>

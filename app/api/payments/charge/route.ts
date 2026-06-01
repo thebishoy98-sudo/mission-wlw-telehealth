@@ -47,8 +47,8 @@ import {
   doesSignatureMatchPatient,
   getRequestIp,
 } from "@/lib/consent";
-import { dataUrlToFileParts } from "@/lib/data-url";
-import type { Payment, Upload } from "@/types";
+import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
+import type { Payment } from "@/types";
 
 async function wakePracticeQRemoteWorker() {
   const remoteBase = process.env.PRACTICEQ_REMOTE_PUBLIC_URL;
@@ -256,6 +256,18 @@ export async function POST(req: NextRequest) {
     }
 
     const auditCtx = actorFromHeaders(req.headers);
+    const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
+
+    if (submittedIdentityMedia && !isReorder) {
+      try {
+        assertIdentityStorageReady();
+      } catch (error) {
+        return NextResponse.json(
+          { error: (error as Error).message },
+          { status: 503 }
+        );
+      }
+    }
 
     // Audit: PHI accessed for payment processing
     logPhiAccess({
@@ -344,44 +356,15 @@ export async function POST(req: NextRequest) {
     const checkoutIdentityReused = reusableIdentity.reused;
     const reusedIdentityStatus = reusableIdentity.reused ? reusableIdentity.identityStatus : "manual_approved";
     const identityUploadToken = checkoutIdentityReused ? undefined : (order.identityUploadToken ?? createIdentityUploadToken(orderId));
-    const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
-    const submittedUploads: Upload[] = submittedIdentityMedia
-      ? (() => {
-          const documentFile = dataUrlToFileParts(identityUploads.licenseImageData, "identity-document");
-          const identityData = identityUploads.identityVideoData ?? identityUploads.selfieFrameData;
-          const identityFile = dataUrlToFileParts(
-            identityData,
-            identityUploads.identityVideoData ? "identity-video" : "identity-frame"
-          );
-          return [
-            {
-              id: generateId(),
-              orderId,
-              type: "driver_license",
-              filename: documentFile.filename,
-              fileSize: documentFile.buffer.byteLength,
-              mimeType: documentFile.mimeType,
-              base64Data: identityUploads.licenseImageData,
-              uploadedAt: new Date().toISOString(),
-              status: "uploaded",
-            },
-            {
-              id: generateId(),
-              orderId,
-              type: "selfie_video",
-              filename: identityFile.filename,
-              fileSize: identityFile.buffer.byteLength,
-              mimeType: identityFile.mimeType,
-              base64Data: identityData,
-              uploadedAt: new Date().toISOString(),
-              status: "uploaded",
-            },
-          ];
-        })()
-      : [];
-    const identityAiUploads = submittedUploads.map((upload) =>
-      upload.type === "selfie_video" ? { ...upload, mimeType: "image/jpeg", base64Data: identityUploads.selfieFrameData } : upload
-    );
+    const { uploads: submittedUploads, aiUploads: identityAiUploads } =
+      submittedIdentityMedia && !checkoutIdentityReused
+        ? await buildIdentityUploads({
+            orderId,
+            idImageData: identityUploads.licenseImageData,
+            selfieFrameData: identityUploads.selfieFrameData,
+            identityVideoData: identityUploads.identityVideoData,
+          })
+        : { uploads: [], aiUploads: [] };
 
     if (submittedUploads.length) {
       submittedUploads.forEach((upload) => db.uploadDb.create(upload));

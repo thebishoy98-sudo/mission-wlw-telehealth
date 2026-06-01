@@ -304,6 +304,18 @@ export const uploadDb = {
     }
     return upload;
   },
+
+  async markStoredInPracticeQ(id: string, fileId: string): Promise<Upload | null> {
+    if (!isDbAvailable()) return null;
+    await sql`
+      UPDATE uploads SET
+        storage_url = ${`practiceq://files/${fileId}`},
+        storage_key = ${fileId},
+        base64_data = ''
+      WHERE id = ${id}
+    `;
+    return this.getById(id);
+  },
 };
 
 // ── Payments ──────────────────────────────────────────────────────────────────

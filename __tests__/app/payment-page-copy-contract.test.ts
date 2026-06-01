@@ -5,8 +5,16 @@ describe("payment page launch copy", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/start/payment/page.tsx"), "utf8");
 
   it("does not show test-mode copy to patients when payment is enabled", () => {
-    expect(source).toContain("quickBooksPaymentsEnabled ? \"Secure payment\" : \"Test payment mode\"");
+    expect(source).toContain("paymentsDisabled ? \"Payment disabled\" : \"Secure payment\"");
     expect(source).not.toContain(">Test payment mode<");
+  });
+
+  it("does not require card fields when payments are disabled", () => {
+    expect(source).toContain("const paymentsDisabled = !quickBooksPaymentsEnabled");
+    expect(source).toContain("if (!productReady) return");
+    expect(source).toContain("if (!paymentsDisabled &&");
+    expect(source).toContain("paymentsDisabled ? \"Submit order\"");
+    expect(source).toContain("!paymentsDisabled && (");
   });
 
   it("does not call the configured charge override a test charge in the patient checkout", () => {

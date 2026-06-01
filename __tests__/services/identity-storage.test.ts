@@ -28,8 +28,25 @@ describe("identity-storage", () => {
     process.env.IDENTITY_STORAGE_FORCE_PATH_STYLE = "true";
   }
 
+  function configurePracticeQStorage() {
+    process.env.NODE_ENV = "production";
+    delete process.env.VERCEL_ENV;
+    process.env.IDENTITY_STORAGE_PROVIDER = "practiceq";
+  }
+
   it("rejects production identity media storage when no storage provider is configured", async () => {
     process.env.VERCEL_ENV = "production";
+
+    await expect(buildIdentityUploads({
+      orderId: "order_1",
+      idImageData: "data:image/jpeg;base64,aGVsbG8=",
+      selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
+    })).rejects.toThrow("IDENTITY_STORAGE_PROVIDER is required");
+  });
+
+  it("rejects Render/Node production identity media storage when no storage provider is configured", async () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.VERCEL_ENV;
 
     await expect(buildIdentityUploads({
       orderId: "order_1",
@@ -72,6 +89,22 @@ describe("identity-storage", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("https://storage.test/mission-identity/identity/order_1/driver_license/");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: "PUT" }));
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toContain("AWS4-HMAC-SHA256");
+  });
+
+  it("stages identity media in Render database when PracticeQ is the configured PHI source of truth", async () => {
+    configurePracticeQStorage();
+
+    const result = await buildIdentityUploads({
+      orderId: "order_1",
+      idImageData: "data:image/jpeg;base64,aGVsbG8=",
+      selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
+      identityVideoData: "data:video/webm;base64,aGVsbG8=",
+    });
+
+    expect(result.uploads).toHaveLength(2);
+    expect(result.uploads.every((upload) => upload.storageUrl === "practiceq://pending")).toBe(true);
+    expect(result.uploads.every((upload) => upload.base64Data.startsWith("data:"))).toBe(true);
+    expect(result.aiUploads.every((upload) => upload.base64Data.startsWith("data:image/jpeg;base64,"))).toBe(true);
   });
 
   it("accepts browser video data URLs that include codec parameters", async () => {

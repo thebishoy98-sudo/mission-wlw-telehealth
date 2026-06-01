@@ -709,12 +709,16 @@ export async function uploadMissionChartFiles(input: {
   );
   const uploadedAt = new Date().toISOString();
   const identityFiles: NonNullable<Types.PracticeQPacket["packetData"]["practiceQIdentityFiles"]> = [];
+  const sanitizedUploads = input.uploads.map((upload) => ({ ...upload, base64Data: "" }));
 
   for (const upload of input.uploads.filter((item) => item.type === "driver_license" || item.type === "selfie_video")) {
     try {
       const file = await practiceQFileFromUpload(upload);
       if (!file) continue;
       const uploaded = await uploadPracticeQClientFile(input.clientId, file);
+      const storedUpload = await markIdentityUploadStoredInPracticeQ(upload, uploaded.id);
+      const uploadIndex = sanitizedUploads.findIndex((item) => item.id === upload.id);
+      if (uploadIndex >= 0) sanitizedUploads[uploadIndex] = storedUpload;
       identityFiles.push({
         fileId: uploaded.id,
         filename: file.filename,
@@ -730,6 +734,7 @@ export async function uploadMissionChartFiles(input: {
     answerFile: intakeFiles?.answerFile,
     pdfFile: intakeFiles?.pdfFile,
     identityFiles,
+    uploads: sanitizedUploads,
   };
 }
 
@@ -754,6 +759,18 @@ async function practiceQFileFromUpload(upload: Types.Upload): Promise<PracticeQF
     mimeType: media.contentType || upload.mimeType || "application/octet-stream",
     buffer: media.body,
   };
+}
+
+async function markIdentityUploadStoredInPracticeQ(upload: Types.Upload, fileId: string): Promise<Types.Upload> {
+  const storedUpload = {
+    ...upload,
+    storageUrl: `practiceq://files/${fileId}`,
+    storageKey: fileId,
+    base64Data: "",
+  };
+  const serverDb = await getServerDb();
+  await serverDb?.uploadDb.markStoredInPracticeQ(upload.id, fileId).catch(() => null);
+  return storedUpload;
 }
 
 export function createMissionIntakePdf(input: {

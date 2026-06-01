@@ -16,6 +16,7 @@ import {
   getIntakeSummaryFeed,
   populateAndUpdatePracticeQIntake,
 } from "@/services/practiceq";
+import { loadIdentityMedia } from "@/services/identity-storage";
 
 type WorkerResult = {
   status: PracticeQAutomationJob["status"];
@@ -69,7 +70,7 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
   if (!patient) return { status: "failed", error: "Patient not found" };
 
   const fillPlan = buildPracticeQFillPlan(patient, answers, questions, consent);
-  const uploadFile = selectPracticeQUploadFile(uploads);
+  const uploadFile = await selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({ headless: process.env.PRACTICEQ_WORKER_HEADLESS !== "false" });
   const page = await browser.newPage();
   page.setDefaultTimeout(8000);
@@ -161,7 +162,7 @@ export async function startPracticeQRemoteSession(
     };
   }
 
-  const uploadFile = selectPracticeQUploadFile(uploads);
+  const uploadFile = await selectPracticeQUploadFile(uploads);
   const browser = await chromium.launch({
     headless: process.env.PRACTICEQ_REMOTE_HEADLESS !== "false",
     args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions", "--disable-background-networking"],
@@ -388,21 +389,35 @@ function practiceQPageSignature(url: string, text: string) {
   return `${url}::${text.replace(/\s+/g, " ").trim().slice(0, 1200)}`;
 }
 
-function selectPracticeQUploadFile(
+async function selectPracticeQUploadFile(
   uploads: Awaited<ReturnType<typeof dbServer.uploadDb.getByOrder>>
-): PracticeQUploadFile | null {
-  const video = uploads.find((u) => u.type === "selfie_video" && u.base64Data);
-  if (video?.base64Data) {
-    return {
-      base64Data: video.base64Data,
-      mimeType: video.mimeType || "video/webm",
-      extension: video.mimeType?.includes("mp4") ? "mp4" : "webm",
-    };
+): Promise<PracticeQUploadFile | null> {
+  const video = uploads.find((u) => u.type === "selfie_video" && (u.base64Data || u.storageUrl || u.storageKey));
+  if (video) {
+    const media = await loadIdentityMedia(video).catch(() => null);
+    if (media) return toPracticeQUploadFile(media.contentType, media.body);
   }
 
-  const license = uploads.find((u) => u.type === "driver_license" && u.base64Data);
-  if (!license?.base64Data) return null;
-  return { base64Data: license.base64Data, mimeType: license.mimeType || "image/jpeg", extension: "jpg" };
+  const license = uploads.find((u) => u.type === "driver_license" && (u.base64Data || u.storageUrl || u.storageKey));
+  if (!license) return null;
+  const media = await loadIdentityMedia(license).catch(() => null);
+  return media ? toPracticeQUploadFile(media.contentType, media.body) : null;
+}
+
+function toPracticeQUploadFile(mimeType: string, body: Buffer): PracticeQUploadFile {
+  const normalizedMimeType = mimeType || "image/jpeg";
+  const extension = normalizedMimeType.includes("mp4")
+    ? "mp4"
+    : normalizedMimeType.includes("webm")
+      ? "webm"
+      : normalizedMimeType.includes("png")
+        ? "png"
+        : "jpg";
+  return {
+    base64Data: `data:${normalizedMimeType};base64,${body.toString("base64")}`,
+    mimeType: normalizedMimeType,
+    extension,
+  };
 }
 
 async function uploadPracticeQFile(page: Page, uploadFile: PracticeQUploadFile) {

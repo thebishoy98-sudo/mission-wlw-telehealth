@@ -1,5 +1,7 @@
 /** @jest-environment node */
 
+import fs from "fs";
+import path from "path";
 import { getChargeAmount } from "@/lib/payment-amount";
 
 describe("payment charge amount contract", () => {
@@ -36,5 +38,28 @@ describe("payment charge amount contract", () => {
     expect(getChargeAmount(undefined)).toBeNull();
     expect(getChargeAmount("not-a-number")).toBeNull();
     expect(getChargeAmount(0)).toBeNull();
+  });
+});
+
+describe("payment identity storage contract", () => {
+  const chargeRoute = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+  const providerUploadRoute = fs.readFileSync(path.join(process.cwd(), "app/api/provider/uploads/[id]/route.ts"), "utf8");
+  const practiceQWorker = fs.readFileSync(path.join(process.cwd(), "services/practiceq-worker.ts"), "utf8");
+
+  it("stores checkout identity media through the identity storage service, not base64 upload rows", () => {
+    expect(chargeRoute).toContain("assertIdentityStorageReady");
+    expect(chargeRoute).toContain("buildIdentityUploads");
+    expect(chargeRoute).not.toContain("base64Data: identityUploads.licenseImageData");
+    expect(chargeRoute).not.toContain("base64Data: identityData");
+  });
+
+  it("serves staff upload previews through storage reads instead of redirecting s3 references", () => {
+    expect(providerUploadRoute).toContain("loadIdentityMedia");
+    expect(providerUploadRoute).not.toContain("NextResponse.redirect(upload.storageUrl)");
+  });
+
+  it("lets the PracticeQ worker attach identity media from storage-backed upload rows", () => {
+    expect(practiceQWorker).toContain("loadIdentityMedia");
+    expect(practiceQWorker).toContain("selectPracticeQUploadFile");
   });
 });

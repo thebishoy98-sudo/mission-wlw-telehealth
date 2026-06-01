@@ -109,7 +109,7 @@ async function storeIdentityMedia(input: IdentityMediaInput): Promise<Upload> {
   const decoded = decodeDataUrl(input.dataUrl);
   const storageProvider = getStorageProvider();
 
-  if (storageProvider === "database") {
+  if (storageProvider === "database" || storageProvider === "practiceq") {
     return {
       id: generateId(),
       orderId: input.orderId,
@@ -117,6 +117,7 @@ async function storeIdentityMedia(input: IdentityMediaInput): Promise<Upload> {
       filename: input.filename,
       fileSize: decoded.buffer.byteLength,
       mimeType: decoded.mimeType,
+      storageUrl: storageProvider === "practiceq" ? "practiceq://pending" : undefined,
       base64Data: input.dataUrl,
       uploadedAt: new Date().toISOString(),
       status: "uploaded",
@@ -143,24 +144,22 @@ async function storeIdentityMedia(input: IdentityMediaInput): Promise<Upload> {
   };
 }
 
-// Vercel sets NODE_ENV=production on ALL deployments (including dev/preview branches).
-// Use VERCEL_ENV to distinguish actual production from dev/preview deployments.
-function isVercelProduction() {
-  return process.env.VERCEL_ENV === "production";
+function isProductionRuntime() {
+  return process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
 }
 
-function getStorageProvider(): "database" | "s3" {
+function getStorageProvider(): "database" | "s3" | "practiceq" {
   const provider = process.env.IDENTITY_STORAGE_PROVIDER?.trim().toLowerCase();
   if (!provider) {
-    if (isVercelProduction()) {
+    if (isProductionRuntime()) {
       throw new Error("IDENTITY_STORAGE_PROVIDER is required in production before storing identity media");
     }
     return "database";
   }
-  if (provider === "database" && isVercelProduction()) {
+  if (provider === "database" && isProductionRuntime()) {
     throw new Error("IDENTITY_STORAGE_PROVIDER=database is not allowed in production for identity media");
   }
-  if (provider === "database" || provider === "s3") return provider;
+  if (provider === "database" || provider === "s3" || provider === "practiceq") return provider;
   throw new Error(`Unsupported IDENTITY_STORAGE_PROVIDER: ${provider}`);
 }
 

@@ -55,7 +55,7 @@ services:
 
       # QuickBooks sandbox/payment configuration.
       - key: USE_REAL_QUICKBOOKS
-        value: true
+        value: false
       - key: BYPASS_QB_PAYMENTS
         value: true
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
@@ -63,7 +63,7 @@ services:
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
         value: sandbox
       - key: QB_ALLOW_RAW_CARD_CHARGES
-        value: true
+        value: false
       - key: QB_CLIENT_ID
         sync: false
       - key: QB_CLIENT_SECRET
@@ -81,11 +81,13 @@ services:
       - key: NEXT_PUBLIC_QB_PAYMENTS_APP_KEY
         sync: false
 
-      # Pharmacy dispatch is routed through AppSheet for the PracticeQ completion flow.
+      # Pharmacy dispatch is routed to LifeFile sandbox for pilot testing.
       - key: PHARMACY_PROVIDER
-        value: appsheet
+        value: lifefile
       - key: USE_REAL_LIFEFILE
         value: true
+      - key: LIFEFILE_ENVIRONMENT
+        value: sandbox
       - key: LIFEFILE_BASE_URL
         value: https://host100-7.lifefile.net/lfapi/v1
       - key: LIFEFILE_VENDOR_ID
@@ -155,7 +157,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: IDENTITY_STORAGE_PROVIDER
-        sync: false
+        value: practiceq
 
       # Optional AppSheet mirror/tracking support.
       - key: USE_REAL_APPSHEET
@@ -218,9 +220,45 @@ services:
       - key: SPRUCE_INTERNAL_ENDPOINT_ID
         sync: false
       - key: PHARMACY_PROVIDER
-        value: appsheet
+        value: lifefile
+      - key: USE_REAL_LIFEFILE
+        value: true
+      - key: LIFEFILE_ENVIRONMENT
+        value: sandbox
+      - key: LIFEFILE_BASE_URL
+        value: https://host100-7.lifefile.net/lfapi/v1
+      - key: LIFEFILE_VENDOR_ID
+        sync: false
+      - key: LIFEFILE_LOCATION_ID
+        sync: false
+      - key: LIFEFILE_API_NETWORK_ID
+        sync: false
+      - key: LIFEFILE_API_USERNAME
+        sync: false
+      - key: LIFEFILE_API_PASSWORD
+        sync: false
+      - key: LIFEFILE_PRACTICE_ID
+        sync: false
+      - key: LIFEFILE_ORDER_ENDPOINT
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_NPI
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LICENSE_STATE
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LICENSE_NUMBER
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_FIRST_NAME
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_LAST_NAME
+        sync: false
+      - key: LIFEFILE_PRESCRIBER_EMAIL
+        sync: false
+      - key: LIFEFILE_SHIPPING_SERVICE_ID
+        value: 6230
+      - key: IDENTITY_STORAGE_PROVIDER
+        value: practiceq
       - key: USE_REAL_APPSHEET
-        value: "true"
+        value: "false"
       - key: APPSHEET_ID
         sync: false
       - key: APPSHEET_API_KEY

@@ -60,17 +60,17 @@ describe("pharmacy provider router", () => {
     expect(lifefile.createPharmacyOrder).not.toHaveBeenCalled();
   });
 
-  it("declares AppSheet dispatch settings for the Render PracticeQ worker", () => {
+  it("declares LifeFile sandbox dispatch settings for the Render PracticeQ worker", () => {
     const fs = require("fs");
     const path = require("path");
     const renderSource = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
 
     expect(renderSource).toContain("PHARMACY_PROVIDER");
-    expect(renderSource).toContain("value: appsheet");
-    expect(renderSource).toContain("USE_REAL_APPSHEET");
-    expect(renderSource).toContain('value: "true"');
-    expect(renderSource).toContain("APPSHEET_ID");
-    expect(renderSource).toContain("APPSHEET_API_KEY");
+    expect(renderSource).toContain("value: lifefile");
+    expect(renderSource).toContain("USE_REAL_LIFEFILE");
+    expect(renderSource).toContain("LIFEFILE_ENVIRONMENT");
+    expect(renderSource).toContain("value: sandbox");
+    expect(renderSource).toContain("LIFEFILE_ORDER_ENDPOINT");
   });
 
   it("keeps LifeFile as the default when AppSheet is not configured", async () => {

@@ -26,4 +26,19 @@ describe("payment dispatch safety", () => {
     expect(isRealPharmacyEnabled("appsheet", { USE_REAL_APPSHEET: "true" })).toBe(true);
     expect(isRealPharmacyEnabled("lifefile", { USE_REAL_LIFEFILE: "false" })).toBe(false);
   });
+
+  it("does not treat LifeFile sandbox as real paid pharmacy dispatch", () => {
+    expect(isRealPharmacyEnabled("lifefile", {
+      USE_REAL_LIFEFILE: "true",
+      LIFEFILE_ENVIRONMENT: "sandbox",
+    })).toBe(false);
+    expect(canDispatchPharmacyAfterPayment({
+      identityCanDispatch: true,
+      paymentBypassed: true,
+      realPharmacyEnabled: isRealPharmacyEnabled("lifefile", {
+        USE_REAL_LIFEFILE: "true",
+        LIFEFILE_ENVIRONMENT: "sandbox",
+      }),
+    })).toBe(true);
+  });
 });
