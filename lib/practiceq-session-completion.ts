@@ -2,7 +2,7 @@ import type { Order } from "@/types";
 import * as dbServer from "@/lib/db.server";
 import { getIdentityGate } from "@/lib/identity";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
-import { logPhiDisclosure } from "@/lib/phi-audit";
+import { logPhiAccess, logPhiDisclosure } from "@/lib/phi-audit";
 import * as pharmacy from "@/services/pharmacy";
 import * as practiceq from "@/services/practiceq";
 import * as spruceServer from "@/services/spruce.server";
@@ -18,6 +18,58 @@ function answerHints(answers: Awaited<ReturnType<typeof dbServer.answerDb.getByO
 
 function canTryPharmacyDispatch(order: Order): boolean {
   return getIdentityGate(order).canDispatch && (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error");
+}
+
+async function purgeMissionChartPhi(order: Order) {
+  const [answersDeleted, consentDeleted, mediaBytesPurged] = await Promise.all([
+    dbServer.answerDb.deleteByOrder(order.id).catch(() => 0),
+    dbServer.consentDb.deleteByOrder(order.id).catch(() => 0),
+    dbServer.uploadDb.purgeBase64ByOrder(order.id).catch(() => 0),
+  ]);
+
+  await dbServer.integrationLogDb.create({
+    id: `log_phi_purge_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    timestamp: new Date().toISOString(),
+    integrationName: "practiceq",
+    action: "Local chart PHI purged after PracticeQ attachment",
+    orderId: order.id,
+    patientId: order.patientId,
+    status: "success",
+    details: {
+      answersDeleted,
+      consentDeleted,
+      mediaBytesPurged,
+      sourceOfTruth: "practiceq",
+    },
+  }).catch(() => null);
+
+  logPhiAccess({
+    action: "delete",
+    resource: "questionnaire_answer",
+    resourceId: order.id,
+    patientId: order.patientId,
+    orderId: order.id,
+    actor: "practiceq-remote-worker",
+    outcome: "success",
+  });
+  logPhiAccess({
+    action: "delete",
+    resource: "consent_record",
+    resourceId: order.id,
+    patientId: order.patientId,
+    orderId: order.id,
+    actor: "practiceq-remote-worker",
+    outcome: "success",
+  });
+  logPhiAccess({
+    action: "delete",
+    resource: "upload",
+    resourceId: order.id,
+    patientId: order.patientId,
+    orderId: order.id,
+    actor: "practiceq-remote-worker",
+    outcome: "success",
+  });
 }
 
 async function linkLatestPracticeQIntake(jobId: string, order: Order) {
@@ -42,7 +94,7 @@ async function linkLatestPracticeQIntake(jobId: string, order: Order) {
 
 async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
   const clientId = linkedClientId ?? order.practiceqClientId;
-  if (!clientId) return;
+  if (!clientId) return false;
 
   const [patient, answers, questions, consent, uploads, packet] = await Promise.all([
     dbServer.patientDb.getById(order.patientId).catch(() => null),
@@ -52,7 +104,7 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
     dbServer.uploadDb.getByOrder(order.id).catch(() => []),
     dbServer.practiceqPacketDb.getByOrder(order.id).catch(() => null),
   ]);
-  if (!patient) return;
+  if (!patient) return false;
 
   const files = await practiceq.uploadMissionChartFiles({
     clientId,
@@ -63,15 +115,15 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
     consent,
     uploads,
   }).catch(() => null);
-  if (!files) return;
+  if (!files) return false;
 
   const previousPacketData = packet?.packetData;
   const sanitizedUploads = files.uploads ?? uploads.map((upload) => ({ ...upload, base64Data: "" }));
   const packetPatch = {
     packetData: {
-      patientInfo: previousPacketData?.patientInfo ?? { id: patient.id },
-      questionnaireAnswers: previousPacketData?.questionnaireAnswers ?? answers,
-      consentRecord: previousPacketData?.consentRecord ?? (consent ?? {}),
+      patientInfo: { id: patient.id },
+      questionnaireAnswers: [],
+      consentRecord: consent ? { id: consent.id } : {},
       uploads: sanitizedUploads,
       productRequested: previousPacketData?.productRequested ?? order.productId,
       doseSelected: previousPacketData?.doseSelected ?? order.doseId,
@@ -96,8 +148,8 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
       status: "completed",
       packetData: {
         patientInfo: { id: patient.id },
-        questionnaireAnswers: answers,
-        consentRecord: consent ?? {},
+        questionnaireAnswers: [],
+        consentRecord: consent ? { id: consent.id } : {},
         uploads: sanitizedUploads,
         practiceQAnswerFile: files.answerFile,
         practiceQPdfFile: files.pdfFile,
@@ -107,6 +159,11 @@ async function attachMissionChartFiles(order: Order, linkedClientId?: string) {
       },
     }).catch(() => null);
   }
+
+  if (files.answerFile && files.pdfFile) {
+    await purgeMissionChartPhi(order);
+  }
+  return true;
 }
 
 export async function completePracticeQSession(jobId: string): Promise<CompletionResult> {
@@ -121,19 +178,21 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
     .catch(() => null);
   const dispatchOrder = completedOrder ?? { ...order, practiceQStatus: "completed" as const };
   const linkedIntake = await linkLatestPracticeQIntake(jobId, dispatchOrder).catch(() => null);
+  const dispatchAnswers = await dbServer.answerDb.getByOrder(dispatchOrder.id).catch(() => []);
   await attachMissionChartFiles(dispatchOrder, linkedIntake?.clientId).catch(() => null);
 
   if (!canTryPharmacyDispatch(dispatchOrder)) return { status: "waiting_for_identity" };
 
-  const [patient, product, answers, existingPharmacyOrder] = await Promise.all([
+  const [patient, product, packet, existingPharmacyOrder] = await Promise.all([
     dbServer.patientDb.getById(dispatchOrder.patientId).catch(() => null),
     dbServer.productDb.getById(dispatchOrder.productId).catch(() => null),
-    dbServer.answerDb.getByOrder(dispatchOrder.id).catch(() => []),
+    dbServer.practiceqPacketDb.getByOrder(dispatchOrder.id).catch(() => null),
     dbServer.pharmacyOrderDb.getByOrder(dispatchOrder.id).catch(() => null),
   ]);
   if (existingPharmacyOrder) return { status: "already_dispatched" };
 
-  const normalized = normalizeOrderForPharmacyDispatch(dispatchOrder, product, answerHints(answers));
+  const packetDose = typeof packet?.packetData?.doseSelected === "string" ? packet.packetData.doseSelected : "";
+  const normalized = normalizeOrderForPharmacyDispatch(dispatchOrder, product, [packetDose, ...answerHints(dispatchAnswers)]);
   if (!patient || !normalized.normalizedOrder) {
     const reason = !patient ? "missing patient" : normalized.reason ?? "missing pharmacy order data";
     await dbServer.orderDb.update(dispatchOrder.id, { pharmacyStatus: "error" }).catch(() => null);

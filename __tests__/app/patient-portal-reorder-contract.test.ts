@@ -52,6 +52,7 @@ describe("patient portal reorder and tracking contract", () => {
     expect(paymentRoute).toContain("resolveReusableCheckoutIdentity");
     expect(paymentRoute).toContain("patientOrdersForIdentity");
     expect(paymentRoute).toContain("checkoutIdentityReused");
+    expect(paymentRoute).toContain("reorderSkipsQuestionnaireValidation");
     expect(checkoutIdentityReuse).toContain("Reorder identity reused");
     expect(checkoutIdentityReuse).toContain("previous verified order");
     expect(paymentRoute).toContain("!checkoutIdentityReused");

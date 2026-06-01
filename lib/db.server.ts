@@ -316,6 +316,18 @@ export const uploadDb = {
     `;
     return this.getById(id);
   },
+
+  async purgeBase64ByOrder(orderId: string): Promise<number> {
+    if (!isDbAvailable()) return 0;
+    const { rowCount } = await sql`
+      UPDATE uploads
+      SET base64_data = ''
+      WHERE order_id = ${orderId}
+        AND COALESCE(base64_data, '') <> ''
+        AND storage_url LIKE 'practiceq://files/%'
+    `;
+    return rowCount ?? 0;
+  },
 };
 
 // ── Payments ──────────────────────────────────────────────────────────────────
@@ -375,6 +387,14 @@ export const answerDb = {
     `;
     return a;
   },
+
+  async deleteByOrder(orderId: string): Promise<number> {
+    if (!isDbAvailable()) return 0;
+    const { rowCount } = await sql`
+      DELETE FROM questionnaire_answers WHERE order_id = ${orderId}
+    `;
+    return rowCount ?? 0;
+  },
 };
 
 // ── Consent Records ───────────────────────────────────────────────────────────
@@ -400,6 +420,14 @@ export const consentDb = {
       ON CONFLICT (id) DO NOTHING
     `;
     return c;
+  },
+
+  async deleteByOrder(orderId: string): Promise<number> {
+    if (!isDbAvailable()) return 0;
+    const { rowCount } = await sql`
+      DELETE FROM consent_records WHERE order_id = ${orderId}
+    `;
+    return rowCount ?? 0;
   },
 };
 

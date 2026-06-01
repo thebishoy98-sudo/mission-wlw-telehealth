@@ -153,6 +153,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    const reorderSourceOrderForValidation = isReorder && reorderSourceOrderId
+      ? await dbServer.orderDb.getById(reorderSourceOrderId).catch(() => null)
+      : null;
+    const reorderSkipsQuestionnaireValidation = Boolean(
+      isReorder &&
+      reorderSourceOrderForValidation &&
+      reorderSourceOrderForValidation.patientId === order.patientId &&
+      reorderSourceOrderForValidation.status !== "draft" &&
+      reorderSourceOrderForValidation.status !== "cancelled"
+    );
+
     const productForIntegrations = normalizeProduct(
       persistedProduct ??
       productData ??
@@ -220,23 +231,25 @@ export async function POST(req: NextRequest) {
 
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
-    const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
-    if (!questionnaire.complete) {
-      return NextResponse.json(
-        {
-          error: "Questionnaire answers are required before payment",
-          missingQuestions: questionnaire.missingQuestions,
-        },
-        { status: 422 }
-      );
-    }
+    if (!reorderSkipsQuestionnaireValidation) {
+      const questionnaire = validatePaymentQuestionnaire(fallbackAnswers, fallbackQuestions);
+      if (!questionnaire.complete) {
+        return NextResponse.json(
+          {
+            error: "Questionnaire answers are required before payment",
+            missingQuestions: questionnaire.missingQuestions,
+          },
+          { status: 422 }
+        );
+      }
 
-    const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
-    if (!eligibility.eligible) {
-      return NextResponse.json(
-        { error: "Patient not eligible for this medication", reason: eligibility.reason },
-        { status: 422 }
-      );
+      const eligibility = checkEligibility(fallbackAnswers, fallbackQuestions);
+      if (!eligibility.eligible) {
+        return NextResponse.json(
+          { error: "Patient not eligible for this medication", reason: eligibility.reason },
+          { status: 422 }
+        );
+      }
     }
 
     // 4. Load patient — create from submitted data if not in server DB
@@ -339,9 +352,9 @@ export async function POST(req: NextRequest) {
     // 7. Verify identity when patient submitted usable media. Returning patients with
     // a prior successful order reuse identity server-side so checkout cannot fall
     // back into a new upload reminder just because browser reorder metadata is absent.
-    const reorderSourceOrder = isReorder && reorderSourceOrderId
+    const reorderSourceOrder = reorderSourceOrderForValidation ?? (isReorder && reorderSourceOrderId
       ? await dbServer.orderDb.getById(reorderSourceOrderId).catch(() => null)
-      : null;
+      : null);
     const patientOrdersForIdentity = await dbServer.orderDb.getByPatient(patient.id).catch(() => []);
     const identityCandidateOrders = reorderSourceOrder && !patientOrdersForIdentity.some((candidate) => candidate.id === reorderSourceOrder.id)
       ? [...patientOrdersForIdentity, reorderSourceOrder]

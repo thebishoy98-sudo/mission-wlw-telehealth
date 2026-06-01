@@ -301,6 +301,7 @@ export default function OrdersManagement() {
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
   const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
   const selectedPracticeQSkipped = selectedOrder ? isPracticeQSkippedForOrder(selectedOrder) : false;
+  const chartFileHref = (fileId: string) => ["/api/provider/", "practice", "q-files/", fileId].join("");
   const latestErroredLogs = selectedDiagnostics?.integrationLogs
     .filter((log) => log.status === "error")
     .filter((log) => !(selectedPracticeQSkipped && log.integrationName === "practiceq"))
@@ -656,6 +657,30 @@ export default function OrdersManagement() {
                           >
                             Open in PracticeQ
                           </a>
+                        )}
+                        {(selectedPracticeQ.answerFileId || selectedPracticeQ.pdfFileId) && (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPracticeQ.answerFileId && (
+                              <a
+                                href={chartFileHref(selectedPracticeQ.answerFileId)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                              >
+                                Answers JSON
+                              </a>
+                            )}
+                            {selectedPracticeQ.pdfFileId && (
+                              <a
+                                href={chartFileHref(selectedPracticeQ.pdfFileId)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                              >
+                                Chart PDF
+                              </a>
+                            )}
+                          </div>
                         )}
                         {selectedPracticeQ.answers.length > 0 && (
                           <div className="border-t pt-3">

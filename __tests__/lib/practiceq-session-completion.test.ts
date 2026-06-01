@@ -11,9 +11,9 @@ jest.mock("@/lib/db.server", () => ({
   patientDb: { getById: jest.fn() },
   productDb: { getById: jest.fn() },
   questionDb: { getAll: jest.fn() },
-  answerDb: { getByOrder: jest.fn() },
-  consentDb: { getByOrder: jest.fn() },
-  uploadDb: { getByOrder: jest.fn() },
+  answerDb: { getByOrder: jest.fn(), deleteByOrder: jest.fn() },
+  consentDb: { getByOrder: jest.fn(), deleteByOrder: jest.fn() },
+  uploadDb: { getByOrder: jest.fn(), purgeBase64ByOrder: jest.fn() },
   pharmacyOrderDb: { getByOrder: jest.fn(), create: jest.fn() },
   practiceqPacketDb: { getByOrder: jest.fn(), create: jest.fn(), update: jest.fn() },
   integrationLogDb: { create: jest.fn() },
@@ -111,7 +111,10 @@ describe("completePracticeQSession", () => {
       },
     ]);
     (dbServer.consentDb.getByOrder as jest.Mock).mockResolvedValue(null);
+    (dbServer.answerDb.deleteByOrder as jest.Mock).mockResolvedValue(1);
+    (dbServer.consentDb.deleteByOrder as jest.Mock).mockResolvedValue(1);
     (dbServer.uploadDb.getByOrder as jest.Mock).mockResolvedValue([]);
+    (dbServer.uploadDb.purgeBase64ByOrder as jest.Mock).mockResolvedValue(0);
     (dbServer.pharmacyOrderDb.getByOrder as jest.Mock).mockResolvedValue(null);
     (dbServer.pharmacyOrderDb.create as jest.Mock).mockResolvedValue(null);
     (dbServer.integrationLogDb.create as jest.Mock).mockResolvedValue(null);
@@ -209,10 +212,48 @@ describe("completePracticeQSession", () => {
     }));
     expect(dbServer.practiceqPacketDb.update).toHaveBeenCalledWith("packet_1", expect.objectContaining({
       packetData: expect.objectContaining({
+        questionnaireAnswers: [],
+        consentRecord: {},
         practiceQAnswerFile: expect.objectContaining({ fileId: "file_answers" }),
         practiceQPdfFile: expect.objectContaining({ fileId: "file_pdf" }),
       }),
       status: "completed",
+    }));
+  });
+
+  it("purges local answers, consent, and staged media after PracticeQ files are attached", async () => {
+    (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
+      available: true,
+      completed: [],
+      pending: [],
+      all: [
+        {
+          id: "intake_1",
+          clientId: "client_81",
+          clientEmail: patient.email,
+          clientName: "Bishoy Kamel",
+          status: "Completed",
+          submittedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await completePracticeQSession("job_1");
+
+    expect(dbServer.answerDb.deleteByOrder).toHaveBeenCalledWith(order.id);
+    expect(dbServer.consentDb.deleteByOrder).toHaveBeenCalledWith(order.id);
+    expect(dbServer.uploadDb.purgeBase64ByOrder).toHaveBeenCalledWith(order.id);
+    expect(dbServer.integrationLogDb.create).toHaveBeenCalledWith(expect.objectContaining({
+      integrationName: "practiceq",
+      action: "Local chart PHI purged after PracticeQ attachment",
+      orderId: order.id,
+      patientId: patient.id,
+      status: "success",
+      details: expect.objectContaining({
+        answersDeleted: 1,
+        consentDeleted: 1,
+        mediaBytesPurged: 0,
+      }),
     }));
   });
 
