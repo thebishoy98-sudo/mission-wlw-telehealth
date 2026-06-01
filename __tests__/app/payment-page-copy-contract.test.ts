@@ -13,4 +13,9 @@ describe("payment page launch copy", () => {
     expect(source).toContain("Today's charge");
     expect(source).not.toContain("Testing charge override");
   });
+
+  it("loads the selected product from the server catalog before pricing checkout", () => {
+    expect(source).toContain('fetch("/api/products", { cache: "no-store" })');
+    expect(source).toContain("setProduct(found ?? null)");
+  });
 });

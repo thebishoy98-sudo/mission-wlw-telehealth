@@ -76,6 +76,7 @@ export default function Payment() {
   const doseId = intakeState.doseId;
   const [product, setProduct] = useState<Types.Product | null>(null);
   const [dose, setDose] = useState<Types.DoseOption | null>(null);
+  const [productLoading, setProductLoading] = useState(true);
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvc, setCardCvc] = useState("");
@@ -84,15 +85,43 @@ export default function Payment() {
   const [paymentError, setPaymentError] = useState("");
   const productTotal = dose?.price || product?.startingPrice || 0;
   const total = chargeAmountOverride ?? productTotal;
+  const productReady = !!product && !!dose && total > 0;
 
   useEffect(() => {
-    if (productId) {
-      const p = db.productDb.getById(productId);
-      setProduct(p);
-      if (doseId && p) {
-        setDose(p.doses.find((d) => d.id === doseId) || null);
+    let cancelled = false;
+
+    async function loadSelectedProduct() {
+      setProductLoading(true);
+      if (!productId) {
+        setProduct(null);
+        setDose(null);
+        setProductLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/products", { cache: "no-store" });
+        const payload = await response.json();
+        const found = ((payload.products ?? []) as Types.Product[]).find((item) =>
+          item.id === productId || item.slug === productId
+        ) ?? db.productDb.getById(productId);
+        if (cancelled) return;
+        setProduct(found ?? null);
+        setDose(found && doseId ? found.doses.find((d) => d.id === doseId) ?? null : null);
+      } catch {
+        const fallback = db.productDb.getById(productId);
+        if (cancelled) return;
+        setProduct(fallback);
+        setDose(fallback && doseId ? fallback.doses.find((d) => d.id === doseId) ?? null : null);
+      } finally {
+        if (!cancelled) setProductLoading(false);
       }
     }
+
+    void loadSelectedProduct();
+    return () => {
+      cancelled = true;
+    };
   }, [productId, doseId]);
 
   useEffect(() => {
@@ -105,7 +134,7 @@ export default function Payment() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const digits = cardNumber.replace(/\s/g, "");
-    if (digits.length < 15 || !cardExpiry || cardCvc.length < 3) return;
+    if (!productReady || digits.length < 15 || !cardExpiry || cardCvc.length < 3) return;
     setPaymentError("");
     setProcessing(true);
 
@@ -330,8 +359,8 @@ export default function Payment() {
         <h2 className="text-xl font-bold text-gray-900 mb-5">Order Summary</h2>
         <div className="space-y-3">
           <div className="flex justify-between items-center text-sm">
-            <span className="text-gray-600">{product?.name || "Treatment"}</span>
-            <span className="font-semibold text-gray-900">{formatCurrency(productTotal)}</span>
+            <span className="text-gray-600">{productLoading ? "Loading treatment..." : product?.name || "Treatment"}</span>
+            <span className="font-semibold text-gray-900">{productReady ? formatCurrency(productTotal) : "-"}</span>
           </div>
           {dose && (
             <div className="flex justify-between items-center text-xs text-gray-400">
@@ -340,13 +369,13 @@ export default function Payment() {
           )}
           {chargeAmountOverride !== null && productTotal !== total && (
             <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">Today's charge</span>
+              <span className="text-gray-600">Today's charge</span>
               <span className="font-semibold text-teal-700">{formatCurrency(total)}</span>
             </div>
           )}
           <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
             <span className="font-semibold text-gray-900">Total due today</span>
-            <span className="text-2xl font-bold text-teal-600">{formatCurrency(total)}</span>
+            <span className="text-2xl font-bold text-teal-600">{productReady ? formatCurrency(total) : "-"}</span>
           </div>
         </div>
         <div className="mt-5 p-4 bg-teal-50 rounded-xl text-sm text-gray-600">
@@ -360,7 +389,7 @@ export default function Payment() {
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-              <span>{quickBooksPaymentsEnabled ? "Secure payment" : "Test payment mode"}</span>
+            <span>{quickBooksPaymentsEnabled ? "Secure payment" : "Test payment mode"}</span>
           </div>
         </div>
 
@@ -457,8 +486,8 @@ export default function Payment() {
         >
           Back
         </Button>
-        <Button fullWidth type="submit" disabled={processing || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
-          {processing ? "Processing..." : `Pay ${formatCurrency(total)}`}
+        <Button fullWidth type="submit" disabled={processing || !productReady || cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3}>
+          {processing ? "Processing..." : `Pay ${productReady ? formatCurrency(total) : "-"}`}
         </Button>
       </div>
     </form>
