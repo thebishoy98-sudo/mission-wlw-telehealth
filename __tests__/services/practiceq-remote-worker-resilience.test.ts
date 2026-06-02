@@ -38,6 +38,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).not.toContain("PracticeQ text field fill step timed out.\")\n    );");
   });
 
+  it("caps excessive Render PracticeQ timeouts and fill steps", () => {
+    expect(workerSource).toContain("PRACTICEQ_REMOTE_JOB_TIMEOUT_MS = Math.min");
+    expect(workerSource).toContain("480000");
+    expect(workerSource).toContain("PRACTICEQ_MAX_FILL_STEPS = Math.min");
+    expect(workerSource).toContain("40");
+  });
+
   it("requeues stale running jobs after a Render restart or SIGTERM", () => {
     expect(dbSource).toContain("locked_at < NOW() - INTERVAL '10 minutes'");
     expect(dbSource).toContain("status = 'running' AND attempts < 10");
@@ -77,6 +84,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("negativeAnswerForQuestion");
     expect(workerSource).toContain("question.Answer = negativeAnswer");
     expect(workerSource).toContain("question.isanswered = true");
+  });
+
+  it("falls back to safe answers for still-unanswered required PracticeQ choice groups", () => {
+    expect(workerSource).toContain("setPracticeQFallbackRequiredChoices");
+    expect(workerSource).toContain("chooseFallbackOption");
+    expect(workerSource).toContain("isUnsafeFallback");
+    expect(workerSource).toContain("question.IsAnswered = true");
   });
 
   it("sets PracticeQ Angular choice answers directly from the fill plan", () => {
@@ -198,6 +212,12 @@ describe("PracticeQ remote worker resilience", () => {
     expect(remoteServerSource).toContain('url.pathname === "/wake"');
     expect(remoteServerSource).toContain('req.headers["x-practiceq-api-key"]');
     expect(remoteServerSource).toContain("pollQueuedJobs().catch");
+  });
+
+  it("does not leave a PracticeQ job running forever when the worker throws", () => {
+    expect(remoteServerSource).toContain("startPracticeQRemoteSession({ ...job");
+    expect(remoteServerSource).toContain('status: "failed" as const');
+    expect(remoteServerSource).toContain("error instanceof Error ? error.message : String(error)");
   });
 
   it("polls PracticeQ status after admin Set as Completed", async () => {

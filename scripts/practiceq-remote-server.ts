@@ -176,7 +176,10 @@ async function pollQueuedJobs() {
         attempts: job.attempts + 1,
         lockedAt: new Date().toISOString(),
       });
-      const result = await modules.startPracticeQRemoteSession({ ...job, attempts: job.attempts + 1 }, publicBaseUrl);
+      const result = await modules.startPracticeQRemoteSession({ ...job, attempts: job.attempts + 1 }, publicBaseUrl).catch((error) => ({
+        status: "failed" as const,
+        error: error instanceof Error ? error.message : String(error),
+      }));
       await modules.dbServer.practiceqAutomationJobDb.update(job.id, {
         status: result.status,
         handoffUrl: result.handoffUrl,

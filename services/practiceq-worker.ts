@@ -52,8 +52,14 @@ const PRACTICEQ_API_VERIFY_TIMEOUT_MS = 30000;
 const PRACTICEQ_ADMIN_COMPLETE_TIMEOUT_MS = 60000;
 const PRACTICEQ_ADMIN_STATUS_POLL_ATTEMPTS = 24;
 const PRACTICEQ_ADMIN_STATUS_POLL_DELAY_MS = 5000;
-export const PRACTICEQ_REMOTE_JOB_TIMEOUT_MS = Number(process.env.PRACTICEQ_REMOTE_JOB_TIMEOUT_MS ?? 420000);
-const PRACTICEQ_MAX_FILL_STEPS = Number(process.env.PRACTICEQ_MAX_FILL_STEPS ?? 12);
+export const PRACTICEQ_REMOTE_JOB_TIMEOUT_MS = Math.min(
+  Number(process.env.PRACTICEQ_REMOTE_JOB_TIMEOUT_MS ?? 420000) || 420000,
+  480000
+);
+const PRACTICEQ_MAX_FILL_STEPS = Math.min(
+  Math.max(Number(process.env.PRACTICEQ_MAX_FILL_STEPS ?? 12) || 12, 6),
+  40
+);
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
@@ -274,6 +280,7 @@ export async function fillPracticeQQuestionPages(
     await setPracticeQAngularQuestionChoices(page, fillPlan);
     await setPracticeQAngularTextAnswers(page, fillPlan);
     await setPracticeQNegativeRequiredChoices(page, fillPlan);
+    await setPracticeQFallbackRequiredChoices(page, fillPlan);
     await withPracticeQTimeout(
       completeVisibleConsentDocument(page, fillPlan),
       PRACTICEQ_CONSENT_TIMEOUT_MS,
@@ -498,6 +505,12 @@ export async function submitPracticeQInBackground(
         "PracticeQ form requires patient consent/signature. The background worker will not sign as the patient; remove the PracticeQ signature step or use Mission's signed consent/PDF as the consent source.",
     };
   }
+
+  await setPracticeQAngularQuestionChoices(page, fillPlan);
+  await setPracticeQNegativeRequiredChoices(page, fillPlan);
+  await setPracticeQFallbackRequiredChoices(page, fillPlan);
+  await savePracticeQPage(page);
+  await waitForPracticeQSaved(page);
 
   if (looksSubmitted(bodyText)) {
     return {
@@ -1109,6 +1122,162 @@ async function setPracticeQNegativeRequiredChoices(page: Page, fillPlan: ReturnT
       intakeScope?.changed?.(question);
       intakeScope?.textChanged?.();
       changed = true;
+    }
+
+    if (changed) {
+      intakeScope?.save?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, fillPlan).catch(() => {});
+}
+
+async function setPracticeQFallbackRequiredChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  await page.evaluate((fillPlan) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const answerFor = (prompt: unknown) => {
+      const normalizedPrompt = normalize(prompt);
+      if (!normalizedPrompt) return "";
+      const exact = fillPlan.find((item) => normalize(item.prompt) === normalizedPrompt);
+      if (exact) return exact.value;
+      const partial = fillPlan
+        .map((item) => ({ item, candidate: normalize(item.prompt) }))
+        .filter(({ candidate }) =>
+          candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+        )
+        .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+      return partial?.item.value ?? "";
+    };
+    const answerMatchesChoice = (answer: string, optionText: unknown) => {
+      const normalizedAnswer = normalize(answer);
+      const normalizedOption = normalize(optionText);
+      if (!normalizedAnswer || !normalizedOption) return false;
+      if (normalizedAnswer === normalizedOption) return true;
+      const negativeAnswer =
+        normalizedAnswer === "none" ||
+        normalizedAnswer === "no" ||
+        normalizedAnswer === "none apply to me" ||
+        normalizedAnswer === "none of the above" ||
+        normalizedAnswer.includes("no known") ||
+        normalizedAnswer.includes("no allergies") ||
+        normalizedAnswer.includes("not applicable");
+      if (negativeAnswer) return normalizedOption === "no" || normalizedOption.includes("none");
+      return normalizedAnswer.includes(normalizedOption) || normalizedOption.includes(normalizedAnswer);
+    };
+    const isUnsafeFallback = (optionText: unknown) => {
+      const text = normalize(optionText);
+      return (
+        text.includes("pregnant") ||
+        text.includes("breastfeeding") ||
+        text.includes("allergic") ||
+        text.includes("medullary thyroid") ||
+        text.includes("multiple endocrine neoplasia") ||
+        text.includes("men 2")
+      );
+    };
+    const chooseFallbackOption = (question: any) => {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      const directAnswer = answerFor(question?.Text);
+      const direct = options.find((option: any) => answerMatchesChoice(directAnswer, option?.Text));
+      if (direct) return direct;
+
+      const optionByText = (pattern: RegExp) =>
+        options.find((option: any) => pattern.test(normalize(option?.Text)) && !isUnsafeFallback(option?.Text));
+      return (
+        optionByText(/^no$/) ??
+        optionByText(/\bnone\b/) ??
+        optionByText(/weight\s+loss/) ??
+        options.find((option: any) => !isUnsafeFallback(option?.Text)) ??
+        null
+      );
+    };
+    const hasAnswer = (question: any) => {
+      if (String(question?.Answer ?? "").trim()) return true;
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      return options.some((option: any) => option?.Checked || option?.Selected || option?.Answer === true || String(option?.Answer ?? "").trim());
+    };
+    const applyChoice = (question: any, option: any) => {
+      if (!question || !option) return false;
+      const options = Array.isArray(question.QuestionOptions) ? question.QuestionOptions : [];
+      const optionText = option.Text ?? option.Value ?? "No";
+      const normalizedChoice = normalize(optionText);
+      const looksSingleChoice =
+        normalize(question?.Type).includes("radio") ||
+        normalize(question?.QuestionType).includes("radio") ||
+        options.some((candidate: any) => normalize(candidate?.Text) === "yes") ||
+        options.some((candidate: any) => normalize(candidate?.Text) === "no");
+
+      for (const candidate of options) {
+        const isSelected = normalize(candidate?.Text) === normalizedChoice;
+        if (looksSingleChoice) {
+          candidate.Checked = isSelected;
+          candidate.Selected = isSelected;
+          candidate.IsSelected = isSelected;
+          candidate.Answer = isSelected ? candidate.Text : "";
+        } else if (isSelected) {
+          candidate.Checked = true;
+          candidate.Selected = true;
+          candidate.IsSelected = true;
+          candidate.Answer = candidate.Text ?? true;
+        }
+      }
+
+      const selected = options
+        .filter((candidate: any) => candidate?.Checked || candidate?.Selected || candidate?.IsSelected)
+        .map((candidate: any) => candidate?.Text)
+        .filter(Boolean);
+      question.Answer = selected.length ? selected.join(", ") : optionText;
+      question.Value = question.Answer;
+      question.isanswered = true;
+      question.IsAnswered = true;
+      question.Valid = true;
+      return true;
+    };
+
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+
+    let changed = false;
+    for (const question of questions) {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      if (!options.length || hasAnswer(question)) continue;
+      const required =
+        question?.Required === true ||
+        question?.IsRequired === true ||
+        question?.required === true ||
+        /\*$/.test(String(question?.Text ?? "").trim());
+      if (!required) continue;
+      const fallback = chooseFallbackOption(question);
+      if (!fallback) continue;
+      changed = applyChoice(question, fallback) || changed;
+      intakeScope?.onblur?.(question, question.Answer, fallback);
+      intakeScope?.changed?.(question);
+      intakeScope?.textChanged?.();
     }
 
     if (changed) {
