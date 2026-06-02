@@ -71,6 +71,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).not.toContain("await label.scrollIntoViewIfNeeded({ timeout: 1000 })");
   });
 
+  it("writes negative answers into required PracticeQ checkbox groups without a None option", () => {
+    expect(workerSource).toContain("setPracticeQNegativeRequiredChoices");
+    expect(workerSource).toContain("negativeAnswerForQuestion");
+    expect(workerSource).toContain("question.Answer = negativeAnswer");
+    expect(workerSource).toContain("question.isanswered = true");
+  });
+
   it("prioritizes fresh queued PracticeQ jobs ahead of stale retry backlog", () => {
     expect(dbSource).toContain("WHEN status = 'queued' THEN 0");
     expect(dbSource).toContain("WHEN status = 'running' THEN 1");

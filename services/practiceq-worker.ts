@@ -258,17 +258,18 @@ export async function fillPracticeQQuestionPages(
       "PracticeQ text field fill step timed out."
     );
     filled += await fillPracticeQVitalsPage(page, fillPlan, bodyText).catch(() => 0);
-    await withPracticeQTimeout(
-      clickMatchingChoices(page, fillPlan),
-      PRACTICEQ_CHOICE_TIMEOUT_MS,
-      "PracticeQ choice selection step timed out."
-    );
-    await setPracticeQAngularTextAnswers(page, fillPlan);
-    await withPracticeQTimeout(
-      completeVisibleConsentDocument(page, fillPlan),
-      PRACTICEQ_CONSENT_TIMEOUT_MS,
-      "PracticeQ consent signing step timed out."
-    );
+        await withPracticeQTimeout(
+          clickMatchingChoices(page, fillPlan),
+          PRACTICEQ_CHOICE_TIMEOUT_MS,
+          "PracticeQ choice selection step timed out."
+        );
+        await setPracticeQAngularTextAnswers(page, fillPlan);
+        await setPracticeQNegativeRequiredChoices(page, fillPlan);
+        await withPracticeQTimeout(
+          completeVisibleConsentDocument(page, fillPlan),
+          PRACTICEQ_CONSENT_TIMEOUT_MS,
+          "PracticeQ consent signing step timed out."
+        );
 
     // Upload the patient video for IntakeQ's required upload question when present.
     if (uploadFile) {
@@ -861,6 +862,127 @@ async function setPracticeQAngularTextAnswers(page: Page, fillPlan: ReturnType<t
 
     if (changed) {
       intakeScope?.changed?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, fillPlan).catch(() => {});
+}
+
+async function setPracticeQNegativeRequiredChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  await page.evaluate((fillPlan) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const isNegativeAnswer = (answer: unknown) => {
+      const normalized = normalize(answer);
+      return (
+        normalized === "none" ||
+        normalized === "no" ||
+        normalized === "none apply to me" ||
+        normalized === "none of the above" ||
+        normalized.includes("no known") ||
+        normalized.includes("no allergies") ||
+        normalized.includes("not applicable")
+      );
+    };
+    const answerFor = (prompt: unknown) => {
+      const normalizedPrompt = normalize(prompt);
+      if (!normalizedPrompt) return "";
+      const exact = fillPlan.find((item) => normalize(item.prompt) === normalizedPrompt);
+      if (exact) return exact.value;
+      const partial = fillPlan
+        .map((item) => ({ item, candidate: normalize(item.prompt) }))
+        .filter(({ candidate }) =>
+          candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+        )
+        .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+      return partial?.item.value ?? "";
+    };
+    const looksLikeContraindicationGroup = (question: any) => {
+      const optionsText = Array.isArray(question?.QuestionOptions)
+        ? normalize(question.QuestionOptions.map((option: any) => option?.Text).join(" "))
+        : "";
+      return (
+        optionsText.includes("pregnant") ||
+        optionsText.includes("breastfeeding") ||
+        optionsText.includes("diabetes") ||
+        optionsText.includes("tirzepatide") ||
+        optionsText.includes("medullary thyroid") ||
+        optionsText.includes("multiple endocrine neoplasia") ||
+        optionsText.includes("men 2")
+      );
+    };
+    const negativeAnswerForQuestion = (question: any) => {
+      const direct = answerFor(question?.Text);
+      if (isNegativeAnswer(direct)) return direct;
+      const existing = String(question?.Answer ?? "").trim();
+      if (isNegativeAnswer(existing)) return existing;
+      if (!looksLikeContraindicationGroup(question)) return "";
+      const fallback = fillPlan.find((item) => {
+        const prompt = normalize(item.prompt);
+        return (
+          isNegativeAnswer(item.value) &&
+          (prompt.includes("select any") || prompt.includes("medical condition") || prompt.includes("contraindication"))
+        );
+      });
+      return fallback?.value ?? "";
+    };
+
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+
+    let changed = false;
+    for (const question of questions) {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      if (!options.length) continue;
+      const selected = options.filter((option: any) => option?.Checked);
+      if (selected.length) continue;
+      const negativeAnswer = negativeAnswerForQuestion(question);
+      if (!negativeAnswer) continue;
+
+      question.Answer = negativeAnswer;
+      question.isanswered = true;
+      question.IsAnswered = true;
+      const noneOption = options.find((option: any) => {
+        const optionText = normalize(option?.Text);
+        return optionText === "no" || optionText.includes("none");
+      });
+      if (noneOption) {
+        noneOption.Checked = true;
+        noneOption.Answer = noneOption.Text ?? negativeAnswer;
+        question.Answer = noneOption.Text ?? negativeAnswer;
+      }
+      intakeScope?.onblur?.(question, question.Answer, noneOption);
+      intakeScope?.changed?.(question);
+      intakeScope?.textChanged?.();
+      changed = true;
+    }
+
+    if (changed) {
+      intakeScope?.save?.();
       if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
       intakeScope?.$applyAsync?.();
     }
