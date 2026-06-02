@@ -70,33 +70,34 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
           </p>
         </FadeUp>
 
-        <div className="grid sm:grid-cols-3 gap-5 sm:gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {DOSES.map((d, i) => (
             <FadeUp key={d.id} delay={i * 0.08}>
               <div
-                className={`rounded-2xl p-6 h-full flex flex-col relative ${
+                className={`rounded-2xl p-6 h-full flex flex-col ${
                   d.highlight
                     ? "bg-forest-800 text-white ring-2 ring-forest-700"
                     : "bg-white text-gray-800 border border-gray-100 shadow-sm"
                 }`}
               >
-                <span
-                  className={`absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                    d.highlight
-                      ? "bg-white text-forest-800"
-                      : "bg-forest-800/10 text-forest-800"
-                  }`}
-                >
-                  {d.badge}
-                </span>
-
                 <div className="mb-5">
-                  <div
-                    className={`text-[11px] font-bold uppercase tracking-widest mb-1 ${
-                      d.highlight ? "text-rose-300" : "text-forest-700"
-                    }`}
-                  >
-                    {d.weekly}
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                    <div
+                      className={`min-w-0 pt-1 text-[11px] font-bold uppercase tracking-widest ${
+                        d.highlight ? "text-rose-300" : "text-forest-700"
+                      }`}
+                    >
+                      {d.weekly}
+                    </div>
+                    <span
+                      className={`shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                        d.highlight
+                          ? "bg-white text-forest-800"
+                          : "bg-forest-800/10 text-forest-800"
+                      }`}
+                    >
+                      {d.badge}
+                    </span>
                   </div>
                   <h3
                     className={`text-lg font-bold mb-1 ${
