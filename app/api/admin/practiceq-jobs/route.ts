@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { requireAdmin } from "@/lib/server-auth";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 
 export const dynamic = "force-dynamic";
 
@@ -97,5 +98,12 @@ export async function PATCH(req: NextRequest) {
     await dbServer.orderDb.update(updated.orderId, { practiceQStatus: pqStatus }).catch(() => {});
   }
 
-  return NextResponse.json({ success: true, job: updated });
+  const practiceQCompletion = status === "completed"
+    ? await completePracticeQSession(jobId).catch((completionError) => ({
+        status: "pharmacy_error" as const,
+        error: completionError instanceof Error ? completionError.message : String(completionError),
+      }))
+    : undefined;
+
+  return NextResponse.json({ success: true, job: updated, practiceQCompletion });
 }

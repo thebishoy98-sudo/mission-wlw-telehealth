@@ -17,6 +17,7 @@ import {
   populateAndUpdatePracticeQIntake,
 } from "@/services/practiceq";
 import { loadIdentityMedia } from "@/services/identity-storage";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 
 type WorkerResult = {
   status: PracticeQAutomationJob["status"];
@@ -119,6 +120,13 @@ export async function processQueuedPracticeQAutomationJobs(limit = 5): Promise<W
       intakeId: result.intakeId,
       lastError: result.error,
     });
+    if (result.status === "completed") {
+      await completePracticeQSession(job.id).catch((error) =>
+        dbServer.practiceqAutomationJobDb.update(job.id, {
+          lastError: error instanceof Error ? error.message : String(error),
+        }).catch(() => null)
+      );
+    }
     if (result.status === "failed") {
       await dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
     }

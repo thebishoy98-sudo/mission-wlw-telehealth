@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       orderId: order.id,
       patientId: patient.id,
       phone: patient.phone,
+      uploadUrl,
       messageId: message.id,
       status: message.status,
     });

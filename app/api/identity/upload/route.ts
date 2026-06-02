@@ -1,10 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
-import { hasRequiredIdentityUploads, statusFromAiResult } from "@/lib/identity";
+import { getIdentityGate, hasRequiredIdentityUploads, statusFromAiResult } from "@/lib/identity";
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
+import {
+  buildIdentityUploadOrderUpdate,
+  buildIdentityUploadReviewUpdate,
+  shouldRetryPracticeQCompletionAfterIdentityApproval,
+} from "@/lib/identity-approval";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
+import { sendAdminNotification } from "@/services/admin-notifications";
+import * as spruceServer from "@/services/spruce.server";
+
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("token")?.trim();
+  if (!token) {
+    return NextResponse.json({ error: "token required" }, { status: 400 });
+  }
+
+  const order =
+    (await dbServer.orderDb.getByIdentityUploadToken(token).catch(() => null)) ??
+    db.orderDb.getByIdentityUploadToken(token);
+
+  if (!order) {
+    return NextResponse.json({ error: "Verification link not found" }, { status: 404 });
+  }
+
+  const identityStatus = order.identityStatus ?? "missing";
+  const gate = getIdentityGate({ identityStatus });
+  const uploadNeeded = !gate.canDispatch && identityStatus !== "needs_review";
+
+  return NextResponse.json({
+    valid: true,
+    orderId: order.id,
+    identityStatus,
+    uploadNeeded,
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -69,38 +103,53 @@ export async function POST(req: NextRequest) {
         };
 
     const identityStatus = statusFromAiResult(result);
-    const identityUpdate = {
-      identityStatus,
-      identityReason: result.summary,
-      identityAiResult: result,
-      identityReviewedAt: result.checkedAt ?? now,
-      identityReviewedBy: identityStatus === "verified" ? "anthropic-ai" : undefined,
-    };
+    const identityUpdate = buildIdentityUploadOrderUpdate(order, { identityStatus, result, now });
 
     db.orderDb.update(order.id, identityUpdate);
-    await dbServer.orderDb.update(order.id, identityUpdate).catch(() => {});
+    const updatedOrder = await dbServer.orderDb.update(order.id, identityUpdate).catch(() => null);
 
-    const review = db.providerReviewDb.getByOrder(order.id);
+    const review =
+      (await dbServer.providerReviewDb.getByOrder(order.id).catch(() => null)) ??
+      db.providerReviewDb.getByOrder(order.id);
     if (review) {
-      db.providerReviewDb.update(review.id, {
-        identityAiResult: result,
-        identityReviewRequired: identityStatus !== "verified",
-        notes: identityStatus === "verified" ? review.notes : `${review.notes ?? ""}\nIdentity review required: ${result.summary}`.trim(),
-      });
-      await dbServer.providerReviewDb.update(review.id, {
-        identityAiResult: result,
-        identityReviewRequired: identityStatus !== "verified",
-      }).catch(() => {});
+      const reviewUpdate = buildIdentityUploadReviewUpdate(review, { identityStatus, result, now });
+      db.providerReviewDb.update(review.id, reviewUpdate);
+      await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
     }
 
     const auditCtx = actorFromHeaders(req.headers);
     logPhiDisclosure(order.patientId, order.id, "anthropic", auditCtx.actor ?? "system");
+
+    const dispatchOrder = updatedOrder ?? { ...order, ...identityUpdate };
+    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
+    if (identityStatus === "verified" && shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)) {
+      const job = await dbServer.practiceqAutomationJobDb.getByOrder(order.id).catch(() => null);
+      if (job && (job.status === "completed" || dispatchOrder.practiceQStatus === "completed" || job.intakeId)) {
+        practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
+          status: "pharmacy_error" as const,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+    }
+
+    if (patient) {
+      await spruceServer.sendMessage(patient, "identity_review_received", { orderId: order.id }).catch(() => {});
+      if (identityStatus !== "verified") {
+        const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+        await sendAdminNotification("identity_review_needed", {
+          orderId: order.id,
+          patientId: patient.id,
+          patientName,
+        }).catch(() => {});
+      }
+    }
 
     return NextResponse.json({
       success: true,
       orderId: order.id,
       identityStatus,
       result,
+      practiceQCompletion,
     });
   } catch (error) {
     console.error("Identity upload error:", error);

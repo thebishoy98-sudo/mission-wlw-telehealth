@@ -1,5 +1,7 @@
 import type { Order, ProviderReview } from "@/types";
 import {
+  buildIdentityUploadOrderUpdate,
+  buildIdentityUploadReviewUpdate,
   buildManualIdentityApprovalOrderUpdate,
   buildManualIdentityApprovalReviewUpdate,
   shouldRetryPracticeQCompletionAfterIdentityApproval,
@@ -83,5 +85,52 @@ describe("manual identity approval workflow", () => {
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "error" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "pending" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, pharmacyStatus: "submitted" })).toBe(false);
+  });
+
+  it("approves a pending order when delayed identity upload is AI verified", () => {
+    const result = {
+      status: "verified" as const,
+      confidence: 0.91,
+      summary: "Face and demographics match.",
+      flags: [],
+      checkedAt: now,
+    };
+
+    expect(buildIdentityUploadOrderUpdate(order, { identityStatus: "verified", result, now })).toEqual({
+      identityStatus: "verified",
+      identityReason: "Face and demographics match.",
+      identityAiResult: result,
+      identityReviewedAt: now,
+      identityReviewedBy: "anthropic-ai",
+      status: "approved",
+      approvedAt: now,
+    });
+    expect(buildIdentityUploadReviewUpdate(review, { identityStatus: "verified", result, now })).toMatchObject({
+      status: "approved",
+      reviewedBy: "anthropic-ai",
+      identityReviewRequired: false,
+    });
+  });
+
+  it("keeps delayed identity uploads on manual review when AI is uncertain", () => {
+    const result = {
+      status: "needs_review" as const,
+      confidence: 0.45,
+      summary: "Face comparison is uncertain.",
+      flags: ["facial_match_uncertain"],
+      checkedAt: now,
+    };
+
+    expect(buildIdentityUploadOrderUpdate(order, { identityStatus: "needs_review", result, now })).toEqual({
+      identityStatus: "needs_review",
+      identityReason: "Face comparison is uncertain.",
+      identityAiResult: result,
+      identityReviewedAt: now,
+      identityReviewedBy: undefined,
+    });
+    expect(buildIdentityUploadReviewUpdate(review, { identityStatus: "needs_review", result, now })).toMatchObject({
+      status: "needs_more_info",
+      identityReviewRequired: true,
+    });
   });
 });
