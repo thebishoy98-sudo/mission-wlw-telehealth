@@ -8,9 +8,7 @@ import { TrustMarquee } from "@/components/landing/TrustMarquee";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { WeightLossCalculator } from "@/components/landing/WeightLossCalculator";
 import { LifestyleSection } from "@/components/landing/LifestyleSection";
-import { Testimonials } from "@/components/landing/Testimonials";
 import { Timeline } from "@/components/landing/Timeline";
-import { ReviewsCarousel } from "@/components/landing/ReviewsCarousel";
 import { PricingCards } from "@/components/landing/PricingCards";
 import { LandingFaq } from "@/components/landing/LandingFaq";
 import { LandingFooter } from "@/components/landing/LandingFooter";
@@ -48,9 +46,7 @@ function LandingPage() {
         <HowItWorks ctaUrl={ctaUrl} />
         <WeightLossCalculator ctaUrl={ctaUrl} />
         <LifestyleSection ctaUrl={ctaUrl} />
-        <Testimonials />
         <Timeline />
-        <ReviewsCarousel />
         <PricingCards ctaUrl={ctaUrl} />
         <LandingFaq />
         <LandingFooter ctaUrl={ctaUrl} />
