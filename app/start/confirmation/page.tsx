@@ -53,7 +53,7 @@ export default function Confirmation() {
   if (!order || !patient) {
     return (
       <div className="text-center py-16">
-        <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <div className="w-8 h-8 border-2 border-rose-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-gray-500">Loading your confirmation...</p>
       </div>
     );
@@ -91,7 +91,7 @@ export default function Confirmation() {
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Status</span>
             {isSentToPharmacy ? (
-              <span className="font-semibold text-teal-600 flex items-center gap-1.5">
+              <span className="font-semibold text-rose-600 flex items-center gap-1.5">
                 <Package className="w-3.5 h-3.5" />
                 Sent to Pharmacy
               </span>
@@ -107,11 +107,11 @@ export default function Confirmation() {
           </div>
         </div>
 
-        <div className="bg-teal-50 border border-teal-100 rounded-xl p-5 text-left mb-8">
+        <div className="bg-rose-50 border border-rose-100 rounded-xl p-5 text-left mb-8">
           <p className="text-sm font-semibold text-gray-800 mb-3">What happens next?</p>
           <ul className="space-y-2 text-sm text-gray-600">
             <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5 font-bold">1.</span>
+              <span className="text-rose-500 mt-0.5 font-bold">1.</span>
               {consentAutomation?.handoffUrl
                 ? "Complete the final clinical consent/signature step"
                 : isSentToPharmacy
@@ -119,11 +119,11 @@ export default function Confirmation() {
                   : "We are preparing your clinical consent session"}
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5 font-bold">2.</span>
+              <span className="text-rose-500 mt-0.5 font-bold">2.</span>
               {isSentToPharmacy ? "You'll receive a tracking number via text once it ships" : "Provider review starts after your consent is submitted"}
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5 font-bold">3.</span>
+              <span className="text-rose-500 mt-0.5 font-bold">3.</span>
               Free overnight delivery to your door
             </li>
           </ul>
@@ -142,7 +142,7 @@ export default function Confirmation() {
             </a>
           )}
           {consentAutomation?.status === "running" && (
-            <div className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-800">
+            <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-800">
               Preparing your consent session. This page will update automatically.
             </div>
           )}

@@ -32,9 +32,9 @@ export default function StartLayout({ children }: { children: React.ReactNode })
                       className={[
                         "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-all sm:h-8 sm:w-8",
                         isCompleted
-                          ? "bg-teal-600 text-white"
+                          ? "bg-gradient-to-br from-red-600 to-rose-700 text-white"
                           : isCurrent
-                          ? "bg-teal-50 text-teal-700 border-2 border-teal-500"
+                          ? "bg-rose-50 text-rose-700 border-2 border-rose-500"
                           : "bg-gray-100 text-gray-400",
                       ].join(" ")}
                     >
@@ -43,7 +43,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
                     <span
                       className={[
                         "mt-1 hidden text-xs font-medium sm:block",
-                        isCurrent ? "text-teal-700" : isCompleted ? "text-gray-600" : "text-gray-400",
+                        isCurrent ? "text-rose-700" : isCompleted ? "text-gray-600" : "text-gray-400",
                       ].join(" ")}
                     >
                       {step.label}
@@ -53,7 +53,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
                     <div
                       className={[
                         "mx-1 mb-4 h-0.5 flex-1 rounded-full sm:mx-2",
-                        isCompleted ? "bg-teal-400" : "bg-gray-200",
+                        isCompleted ? "bg-rose-400" : "bg-gray-200",
                       ].join(" ")}
                     />
                   )}

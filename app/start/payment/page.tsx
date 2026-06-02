@@ -372,15 +372,15 @@ export default function Payment() {
           {chargeAmountOverride !== null && productTotal !== total && (
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600">Today's charge</span>
-              <span className="font-semibold text-teal-700">{formatCurrency(total)}</span>
+              <span className="font-semibold text-rose-700">{formatCurrency(total)}</span>
             </div>
           )}
           <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
             <span className="font-semibold text-gray-900">Total due today</span>
-            <span className="text-2xl font-bold text-teal-600">{productReady ? formatCurrency(total) : "-"}</span>
+            <span className="text-2xl font-bold text-rose-600">{productReady ? formatCurrency(total) : "-"}</span>
           </div>
         </div>
-        <div className="mt-5 p-4 bg-teal-50 rounded-xl text-sm text-gray-600">
+        <div className="mt-5 p-4 bg-rose-50 rounded-xl text-sm text-gray-600">
           <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy — no additional approval steps needed.
         </div>
       </div>
@@ -396,7 +396,7 @@ export default function Payment() {
         </div>
 
         {paymentsDisabled ? (
-          <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-sm text-gray-700">
+          <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm text-gray-700">
             Payment collection is disabled for this sandbox order. No card will be charged.
           </div>
         ) : (
@@ -423,7 +423,7 @@ export default function Payment() {
                   const formatted = digits.replace(/(.{4})/g, "$1 ").trim();
                   setCardNumber(formatted);
                 }}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent font-mono text-sm tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400"
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent font-mono text-sm tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400"
               />
             </div>
           </div>
@@ -441,7 +441,7 @@ export default function Payment() {
                   if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
                   setCardExpiry(v);
                 }}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono text-sm"
               />
             </div>
             <div>
@@ -452,7 +452,7 @@ export default function Payment() {
                 maxLength={4}
                 value={cardCvc}
                 onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono text-sm"
               />
             </div>
           </div>
@@ -474,9 +474,9 @@ export default function Payment() {
 
       {/* Processing overlay */}
       {processing && (
-        <div className="bg-white rounded-2xl shadow-sm border border-teal-100 p-6 text-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-rose-100 p-6 text-center">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <svg className="animate-spin w-5 h-5 text-teal-600" viewBox="0 0 24 24" fill="none">
+            <svg className="animate-spin w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
             </svg>
