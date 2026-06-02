@@ -347,6 +347,11 @@ async function seedIdentityCapture(page: Page, identity: {
 }
 
 function requirePracticeQAnswers(practiceq: PracticeQMirror) {
+  const failures = missingPracticeQAnswers(practiceq);
+  if (failures.length) throw new Error(`PracticeQ mirror is missing expected answers: ${failures.join(", ")}`);
+}
+
+function missingPracticeQAnswers(practiceq: PracticeQMirror) {
   const answers = practiceq.answers ?? [];
   const read = (pattern: RegExp) =>
     answers.find((entry) => pattern.test(`${entry.question} ${entry.answer}`))?.answer ?? "";
@@ -359,7 +364,7 @@ function requirePracticeQAnswers(practiceq: PracticeQMirror) {
   if (!/5/.test(height) || !/10/.test(height)) failures.push(`height=${JSON.stringify(height)}`);
   if (!/220/.test(currentWeight)) failures.push(`current body weight=${JSON.stringify(currentWeight)}`);
   if (!/180/.test(idealWeight)) failures.push(`ideal body weight=${JSON.stringify(idealWeight)}`);
-  if (failures.length) throw new Error(`PracticeQ mirror is missing expected answers: ${failures.join(", ")}`);
+  return failures;
 }
 
 function uniquePatient(kind: ScenarioKind, runId: string, index: number): PatientInput {
@@ -496,6 +501,28 @@ async function getPracticeQForms(client: string): Promise<PracticeQFormFeed> {
   });
 }
 
+async function pollPracticeQForms(client: string, label: string) {
+  return poll(
+    label,
+    async () => {
+      const feed = await getPracticeQForms(client).catch((error) => ({
+        available: false,
+        reason: error instanceof Error ? error.message : String(error),
+        all: [],
+        completed: [],
+        pending: [],
+      }));
+      if (!feed.available && /429|too many|rate/i.test(feed.reason ?? "")) {
+        console.log(`  ${label}: PracticeQ feed rate-limited, retrying`);
+        return null;
+      }
+      return feed;
+    },
+    Number(process.env.E2E_PQ_FEED_TIMEOUT_MS ?? 5 * 60 * 1000),
+    20_000
+  );
+}
+
 function exactFormMatches(feed: PracticeQFormFeed, patient: PatientInput, detail?: OrderDetail) {
   const fullName = `${patient.firstName} ${patient.lastName}`.toLowerCase();
   const email = patient.email.toLowerCase();
@@ -551,7 +578,11 @@ async function pollPracticeQDone(result: CheckoutResult, kind: ScenarioKind) {
 
       const practiceq = detail.practiceq;
       if (!practiceq?.available || !/completed/i.test(String(practiceq.status ?? ""))) return null;
-      requirePracticeQAnswers(practiceq);
+      const missingAnswers = missingPracticeQAnswers(practiceq);
+      if (missingAnswers.length) {
+        console.log(`  ${kind}: waiting for PracticeQ answer mirror (${missingAnswers.join(", ")})`);
+        return null;
+      }
       if (detail.order?.pharmacyStatus !== "submitted" || detail.pharmacy?.status !== "submitted") return null;
       if (!detail.pharmacy?.lifeFileOrderId) return null;
       return detail;
@@ -562,9 +593,9 @@ async function pollPracticeQDone(result: CheckoutResult, kind: ScenarioKind) {
 }
 
 async function assertSinglePracticeQEntry(result: CheckoutResult, detail: OrderDetail, kind: ScenarioKind) {
-  const feeds: PracticeQFormFeed[] = [await getPracticeQForms(result.patient.email)];
+  const feeds: PracticeQFormFeed[] = [await pollPracticeQForms(result.patient.email, `${kind} PracticeQ feed by email`)];
   if (detail.practiceq?.clientId) {
-    feeds.push(await getPracticeQForms(detail.practiceq.clientId));
+    feeds.push(await pollPracticeQForms(detail.practiceq.clientId, `${kind} PracticeQ feed by client`));
   }
   const byId = new Map<string, PracticeQFormSummary>();
   for (const feed of feeds) {
