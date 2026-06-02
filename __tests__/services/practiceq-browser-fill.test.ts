@@ -44,6 +44,8 @@ describe("PracticeQ browser fill plan", () => {
         { prompt: "Email", value: "thebishoy98@gmail.com" },
         { prompt: "What is your height?", value: "5 ft 11 in" },
         { prompt: "What is your current body weight?", value: "215" },
+        { prompt: "This intake form is for....", value: "Weight loss" },
+        { prompt: "Purpose of visit", value: "Weight loss" },
         { prompt: "Print your name", value: "Bishoy Kamel" },
         { prompt: "Initials", value: "BK" },
         { prompt: "I consent to treatment", value: "I consent" },

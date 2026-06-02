@@ -48,6 +48,11 @@ export function buildPracticeQFillPlan(
     })
     .filter((item): item is PracticeQFillItem => item !== null);
 
+  const defaultClinicalAnswers: PracticeQFillItem[] = [
+    { prompt: "This intake form is for....", value: "Weight loss" },
+    { prompt: "Purpose of visit", value: "Weight loss" },
+  ];
+
   const consentAnswers: PracticeQFillItem[] = signedName
     ? [
         { prompt: "Print your name", value: signedName },
@@ -59,7 +64,8 @@ export function buildPracticeQFillPlan(
       ]
     : [];
 
-  return [...demographics, ...clinicalAnswers, ...consentAnswers].filter((item) => item.value.trim().length > 0);
+  return [...demographics, ...clinicalAnswers, ...defaultClinicalAnswers, ...consentAnswers]
+    .filter((item) => item.value.trim().length > 0);
 }
 
 function practiceQFallbackPrompt(questionId: string): string | null {
