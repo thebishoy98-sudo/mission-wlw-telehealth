@@ -33,15 +33,15 @@ export function Footer() {
             <ul className="space-y-2 text-sm text-gray-400">
               <li><Link href="/patient" className="hover:text-white transition-colors">Order History</Link></li>
               <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Contact Us</a></li>
-              <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Dosage Instructions</a></li>
+              <li><Link href="/dosage" className="hover:text-white transition-colors">Dosage Instructions</Link></li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold mb-4 text-sm uppercase tracking-widest text-gray-400">Legal</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Privacy Policy</a></li>
-              <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Terms of Service</a></li>
-              <li><a href="mailto:service@missionwlw.com" className="hover:text-white transition-colors">Telehealth Consent</a></li>
+              <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+              <li><Link href="/consent" className="hover:text-white transition-colors">Telehealth Consent</Link></li>
             </ul>
           </div>
         </div>

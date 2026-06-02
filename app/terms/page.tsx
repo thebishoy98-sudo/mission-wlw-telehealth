@@ -5,92 +5,161 @@ export default function TermsPage() {
     <main className="min-h-screen bg-white">
       <Navbar />
       <section className="mx-auto max-w-3xl px-6 py-14 text-gray-800">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-forest-800">Mission WLW</p>
-        <h1 className="mb-4 text-3xl font-bold text-gray-950">Terms of Service and End User License Agreement</h1>
-        <p className="mb-8 text-sm text-gray-500">Last updated: May 26, 2026</p>
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-forest-800">Mission Weight Loss and Wellness</p>
+        <h1 className="mb-4 text-3xl font-bold text-gray-950">Terms and Conditions</h1>
+        <p className="mb-8 text-sm text-gray-500">Last updated: March 1, 2026</p>
 
-        <div className="space-y-6 text-sm leading-6">
+        <div className="space-y-8 text-sm leading-7 text-gray-700">
+
           <p>
-            These Terms of Service and End User License Agreement apply to your use of Mission WLW, including our
-            website, intake tools, patient communications, payment coordination, and connected business software
-            features. By accessing or using Mission WLW, you agree to these terms.
+            Please read these Terms and Conditions carefully before using Mission Weight Loss and Wellness. By
+            accessing or using our service, you agree to be bound by these terms. If you do not agree, do not
+            use the service.
           </p>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Service Description</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">1. About Mission</h2>
             <p>
-              Mission WLW supports online intake, eligibility review workflows, provider review coordination, patient
-              messaging, payment coordination, accounting workflows, and pharmacy order coordination. The platform is an
-              administrative and care coordination tool. Medical decisions, including eligibility, prescriptions,
-              dosage, and follow-up care, are made by qualified healthcare professionals.
+              Mission Weight Loss and Wellness is a telehealth coordination platform. We connect patients with
+              independent, licensed healthcare providers who make all clinical decisions. Mission is not a
+              healthcare provider. Mission staff do not diagnose medical conditions, prescribe medications, or
+              provide medical treatment.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">License and Restrictions</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">2. Scope of Services</h2>
+            <p className="mb-3">
+              Mission provides online intake tools, care coordination, secure patient messaging, payment
+              coordination, pharmacy order coordination, and identity verification workflows. We facilitate
+              connections between patients and licensed providers who operate independently and bear sole
+              responsibility for all clinical decisions, including whether to prescribe medication.
+            </p>
             <p>
-              We grant authorized users a limited, non-exclusive, non-transferable right to access Mission WLW for its
-              intended business, patient intake, and care coordination purposes. You may not copy, resell, reverse
-              engineer, interfere with, or misuse the platform; attempt to bypass security controls; upload malicious
-              content; or use Mission WLW for any unlawful purpose.
+              Prescription medications, including compounded Tirzepatide, are dispensed only through licensed
+              third-party pharmacies pursuant to valid prescriptions issued by independent licensed providers.
+              A consultation does not guarantee a prescription will be issued.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">QuickBooks Connection</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">3. Eligibility</h2>
             <p>
-              When an authorized admin connects a QuickBooks Online company, Mission WLW may access and update the
-              QuickBooks records needed to perform the requested accounting workflow, such as creating customers,
-              preparing invoices, recording payment status, and reconciling order activity. Mission WLW does not use the
-              QuickBooks connection for unrelated purposes. The connection can be revoked from QuickBooks or through the
-              Mission WLW disconnect page.
+              You must be at least 18 years old to use Mission. By using our service, you confirm that you meet
+              this age requirement. You must be located in a state where our provider network operates at the
+              time of your consultation. We reserve the right to decline service in any jurisdiction where
+              required by law.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Third-Party Services</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">4. Your Responsibilities</h2>
+            <p className="mb-3">You agree to:</p>
+            <ul className="list-disc pl-6 space-y-1.5">
+              <li>Provide complete, accurate, and truthful information on all health forms and intake questionnaires.</li>
+              <li>Keep your account credentials secure and notify us immediately of any unauthorized access.</li>
+              <li>Use Mission only for lawful personal health purposes.</li>
+              <li>Not attempt to circumvent any security controls or access systems you are not authorized to use.</li>
+              <li>Follow all instructions provided by your licensed provider, including dosing and storage guidelines.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">5. Medical Emergencies</h2>
             <p>
-              Mission WLW may rely on third-party services for hosting, payment processing, accounting, pharmacy
-              coordination, secure communications, analytics, and support. Payment processing services may be provided
-              by Intuit Payments Inc. Your use of connected services may also be governed by their own terms and
-              policies. Mission WLW is not affiliated with or endorsed by Intuit.
+              Mission is not an emergency service. If you are experiencing a medical emergency, call 911 or go
+              to the nearest emergency room immediately. Do not contact Mission in place of seeking emergency care.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">User Responsibilities</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">6. Prescriptions and Medications</h2>
+            <p className="mb-3">
+              Prescriptions are issued solely at the discretion of the independent licensed provider who reviews
+              your case. Mission does not guarantee that a prescription will be issued. Compounded medications
+              are prepared by licensed 503B pharmacies and are not FDA-approved drug products, though they are
+              prepared under applicable compounding regulations.
+            </p>
             <p>
-              You are responsible for providing accurate information, keeping account credentials secure, maintaining
-              authority to act on behalf of your organization, and ensuring that any third-party account you connect,
-              including QuickBooks, is connected by an authorized user.
+              You are responsible for using medications exactly as directed by your provider. Do not adjust your
+              dose without consulting your provider first. Report any adverse reactions to your provider or to
+              service@missionwlw.com immediately.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Medical and Pharmacy Disclaimer</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">7. Payments and Refunds</h2>
+            <p className="mb-3">
+              All program fees are disclosed before checkout. By completing a purchase you authorize Mission to
+              charge the stated amount. Fees are generally non-refundable once a prescription has been issued
+              and sent to the pharmacy, as clinical work and pharmacy preparation have been completed.
+            </p>
             <p>
-              Mission WLW does not provide medical advice, diagnose conditions, prescribe medication, or operate as a
-              pharmacy. The platform supports administrative workflows used by patients, providers, staff, and pharmacy
-              partners. Clinical decisions and pharmacy fulfillment remain the responsibility of the applicable licensed
-              professionals and third-party providers.
+              If your order has not yet been dispensed by the pharmacy, contact service@missionwlw.com within
+              48 hours of purchase to request a review. Refund eligibility is determined on a case-by-case basis.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Availability and Changes</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">8. No Doctor-Patient Relationship with Mission</h2>
             <p>
-              We may update, suspend, or discontinue parts of Mission WLW as needed for security, maintenance,
-              compliance, legal, operational, or business reasons. We may also update these terms from time to time.
-              Continued use of the service after an update means you accept the updated terms.
+              Your clinical relationship is with the independent licensed provider who reviews your case, not
+              with Mission. Mission does not employ or control the providers in its network. Providers operate
+              as independent contractors and are solely responsible for their clinical judgments.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Contact</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">9. Limitation of Liability</h2>
+            <p className="mb-3">
+              To the fullest extent permitted by law, Mission and its affiliates will not be liable for any
+              indirect, incidental, special, consequential, or punitive damages arising from your use of the
+              service, including adverse medical outcomes, delays in care, or reliance on information provided
+              through the platform.
+            </p>
             <p>
-              Questions about these terms can be sent to service@missionwlw.com.
+              Mission&rsquo;s total aggregate liability for any claim will not exceed USD $1,000 or the amount
+              you paid Mission in the 90 days preceding the claim, whichever is greater.
             </p>
           </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">10. Dispute Resolution</h2>
+            <p>
+              Any dispute arising out of or relating to these Terms or your use of Mission will be resolved by
+              binding arbitration on an individual basis. You waive any right to a jury trial or to participate
+              in a class action. Arbitration will be conducted under the rules of a nationally recognized
+              arbitration body agreed upon by both parties.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">11. Governing Law</h2>
+            <p>
+              These Terms are governed by the laws of the state in which Mission is headquartered, without
+              regard to conflict-of-law provisions.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">12. Changes to These Terms</h2>
+            <p>
+              We may update these Terms from time to time. We will post the updated version with a revised date.
+              Your continued use of Mission after an update constitutes acceptance of the revised Terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">13. Contact</h2>
+            <p>
+              Questions about these Terms can be directed to{" "}
+              <a href="mailto:service@missionwlw.com" className="text-forest-800 underline underline-offset-2">
+                service@missionwlw.com
+              </a>
+              .
+            </p>
+          </section>
+
         </div>
       </section>
     </main>

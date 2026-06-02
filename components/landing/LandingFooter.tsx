@@ -12,13 +12,14 @@ const LINKS = {
   Legal: [
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },
+    { label: "Telehealth Consent", href: "/consent" },
     { label: "HIPAA Notice", href: "/privacy" },
   ],
   Account: [
     { label: "Patient Login", href: "/login" },
     { label: "Start Assessment", href: "/start/info" },
     { label: "Order History", href: "/patient" },
-    { label: "Contact Support", href: "mailto:service@missionwlw.com" },
+    { label: "Dosage Instructions", href: "/dosage" },
   ],
 };
 

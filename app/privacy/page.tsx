@@ -5,95 +5,162 @@ export default function PrivacyPage() {
     <main className="min-h-screen bg-white">
       <Navbar />
       <section className="mx-auto max-w-3xl px-6 py-14 text-gray-800">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-forest-800">Mission WLW</p>
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-forest-800">Mission Weight Loss and Wellness</p>
         <h1 className="mb-4 text-3xl font-bold text-gray-950">Privacy Policy</h1>
-        <p className="mb-8 text-sm text-gray-500">Last updated: May 26, 2026</p>
+        <p className="mb-8 text-sm text-gray-500">Last updated: March 1, 2026</p>
 
-        <div className="space-y-6 text-sm leading-6">
+        <div className="space-y-8 text-sm leading-7 text-gray-700">
+
           <p>
-            Mission WLW provides online intake, care coordination, payment coordination, pharmacy coordination, and
-            patient communication tools. This Privacy Policy explains what information we collect, how we use it, and
-            how we protect it.
+            This Privacy Policy explains how Mission Weight Loss and Wellness collects, uses, shares, and
+            protects your information when you use our platform. By using Mission, you agree to the practices
+            described in this policy.
           </p>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Information We Collect</h2>
-            <p>
-              We collect information you provide directly, information generated through your use of Mission WLW, and
-              information received from connected services. This may include contact details, account information,
-              shipping information, questionnaire responses, consent records, identity verification materials, order
-              details, payment status, messages, support requests, and technical information such as browser, device,
-              log, and request data.
+            <h2 className="mb-3 text-base font-bold text-gray-950">1. Information We Collect</h2>
+            <p className="mb-3 font-semibold text-gray-800">A. Information You Provide Directly</p>
+            <p className="mb-3">
+              When you register, complete your health intake, book a consultation, submit payment, communicate
+              with support, or upload identity verification materials, we collect information including:
+            </p>
+            <ul className="list-disc pl-6 space-y-1.5 mb-4">
+              <li>Contact details (name, email, phone, address)</li>
+              <li>Account credentials</li>
+              <li>Health and medical history from your intake questionnaire</li>
+              <li>Identity verification documents and images</li>
+              <li>Payment and transaction information</li>
+              <li>Messages and support communications</li>
+            </ul>
+            <p className="mb-3 font-semibold text-gray-800">B. Information Collected Automatically</p>
+            <p className="mb-3">
+              When you use our platform, we automatically collect device and usage information including IP
+              address, browser type, pages visited, and session data. We use cookies and similar tracking
+              technologies to operate the service, remember your preferences, and analyze usage.
+            </p>
+            <p className="font-semibold text-gray-800">C. Information From Third Parties</p>
+            <p className="mt-2">
+              We may receive information from payment processors, analytics providers, and clinical partners
+              involved in delivering the service.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">How We Use Information</h2>
-            <p>
-              We use information to operate Mission WLW, manage patient intake, support provider review, coordinate
-              pharmacy orders, send service-related messages, process or record payment activity, maintain accounting
-              records, troubleshoot issues, improve reliability, protect against misuse, and meet legal, regulatory, and
-              contractual obligations.
+            <h2 className="mb-3 text-base font-bold text-gray-950">2. How We Use Your Information</h2>
+            <p className="mb-3">We use your information to:</p>
+            <ul className="list-disc pl-6 space-y-1.5">
+              <li>Operate the Mission platform and manage your account</li>
+              <li>Facilitate provider consultations and prescription workflows</li>
+              <li>Coordinate pharmacy order fulfillment and shipping</li>
+              <li>Process payments and maintain financial records</li>
+              <li>Verify your identity as required for telehealth services</li>
+              <li>Send service-related communications and appointment reminders</li>
+              <li>Send marketing messages where you have given consent or where permitted by law</li>
+              <li>Detect fraud, prevent abuse, and enforce our terms</li>
+              <li>Improve the platform and troubleshoot issues</li>
+              <li>Meet legal, regulatory, and contractual obligations</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">3. How We Share Your Information</h2>
+            <p className="mb-3">We may share your information with:</p>
+            <ul className="list-disc pl-6 space-y-1.5">
+              <li><strong className="text-gray-800">Licensed providers</strong> in our network who review your case and make clinical decisions.</li>
+              <li><strong className="text-gray-800">Licensed pharmacies</strong> that fulfill your prescription and ship medication.</li>
+              <li><strong className="text-gray-800">Service providers</strong> we use to operate the platform (hosting, payment processing, analytics, support tools).</li>
+              <li><strong className="text-gray-800">Legal authorities</strong> when required by law, court order, or to protect the rights and safety of others.</li>
+              <li><strong className="text-gray-800">Successors</strong> in connection with a merger, acquisition, or sale of our business.</li>
+            </ul>
+            <p className="mt-3">
+              We do not sell your personal information to advertisers or unaffiliated third parties.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">QuickBooks Information</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">4. HIPAA and Health Information</h2>
             <p>
-              If an authorized admin connects QuickBooks Online, Mission WLW may receive and use QuickBooks company
-              information needed to support the connected accounting workflow. This can include customer, invoice,
-              payment, transaction, and company identifiers. We use QuickBooks information to create or update accounting
-              records, reconcile payment activity, troubleshoot sync issues, maintain audit records, and support the
-              integration. We do not sell QuickBooks information or use it for advertising.
+              Health information you provide may be considered Protected Health Information under HIPAA. We
+              handle such information in accordance with applicable HIPAA requirements and our Business Associate
+              Agreements with covered entities in our network. Health information is shared only as necessary to
+              facilitate your care and is not used for advertising purposes.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Connected Account Credentials</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">5. Cookies and Tracking</h2>
             <p>
-              Tokens, API keys, and integration credentials are used to operate authorized connections and are restricted
-              to personnel and systems that need access to provide the service. We do not ask users to share QuickBooks
-              passwords with Mission WLW.
+              We use cookies and similar technologies to keep you logged in, remember your preferences, analyze
+              how the platform is used, and support service operations. You can manage cookie preferences through
+              your browser settings, though disabling cookies may affect platform functionality.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Sharing Information</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">6. Data Retention</h2>
             <p>
-              We share information with service providers and partners only as needed to operate Mission WLW and complete
-              requested workflows. These may include hosting, database, payment, accounting, pharmacy, messaging,
-              identity verification, analytics, and support providers. When QuickBooks Payments is used, payment
-              processing services are provided by Intuit Payments Inc. We may also share information when required by law,
-              to protect rights and safety, or as part of a business transaction. Health-related information should be
-              shared only through appropriate workflows and vendor arrangements.
+              We retain your information for as long as necessary to provide services, meet legal and regulatory
+              obligations, resolve disputes, and maintain business records. Health records are retained in
+              accordance with applicable healthcare record retention laws.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Security</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">7. Your Rights and Choices</h2>
+            <ul className="list-disc pl-6 space-y-1.5">
+              <li>You may opt out of promotional emails by clicking &ldquo;unsubscribe&rdquo; in any marketing message.</li>
+              <li>You may request access to or deletion of your personal information by emailing service@missionwlw.com. Requests are subject to identity verification and applicable law.</li>
+              <li>California residents may have additional rights under the CCPA, including the right to know what data is collected and to opt out of certain data sharing.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">8. Security</h2>
             <p>
-              We use safeguards designed to protect information, including encrypted transport, restricted operational
-              access, environment-managed secrets, monitoring, and audit logging where appropriate. No system can be
-              guaranteed completely secure, but we work to maintain controls that are appropriate for the type of
-              information processed and the services we provide.
+              We use administrative, technical, and physical safeguards to protect your information, including
+              encrypted data transmission, access controls, and audit logging. No method of transmission over the
+              internet is completely secure. You are responsible for keeping your login credentials confidential.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Data Retention</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">9. Children&rsquo;s Privacy</h2>
             <p>
-              We retain information for as long as needed to provide services, meet legal obligations, resolve disputes,
-              maintain business records, and enforce agreements. Retention periods may vary by record type and legal
-              requirement.
+              Mission is intended for adults 18 years and older. We do not knowingly collect personal information
+              from children under 13. If you believe we have inadvertently collected such information, contact
+              us at service@missionwlw.com and we will promptly delete it.
             </p>
           </section>
 
           <section>
-            <h2 className="mb-2 text-lg font-semibold text-gray-950">Contact</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-950">10. Third-Party Links</h2>
             <p>
-              Questions about this policy can be sent to service@missionwlw.com.
+              Our platform may contain links to third-party websites or services. We are not responsible for the
+              privacy practices of those sites and encourage you to review their policies before providing any
+              personal information.
             </p>
           </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">11. Changes to This Policy</h2>
+            <p>
+              We may update this Privacy Policy from time to time. We will post the revised version with an
+              updated date. Your continued use of Mission after changes are posted constitutes acceptance of
+              the revised policy.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-bold text-gray-950">12. Contact Us</h2>
+            <p>
+              Questions, concerns, or data requests regarding this Privacy Policy can be sent to{" "}
+              <a href="mailto:service@missionwlw.com" className="text-forest-800 underline underline-offset-2">
+                service@missionwlw.com
+              </a>
+              .
+            </p>
+          </section>
+
         </div>
       </section>
     </main>
