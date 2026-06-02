@@ -1467,12 +1467,20 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
     if (await input.isChecked().catch(() => false)) continue;
     const choice = await input.evaluate((el) => {
       const chunks: string[] = [];
+      const angular = (window as any).angular;
+      const scopes: any[] = [];
+      const scope = angular?.element(el)?.scope?.();
+      for (let current = scope, depth = 0; current && depth < 8; current = current.$parent, depth += 1) scopes.push(current);
+      const optionScope = scopes.find((candidate) => candidate?.o?.Text);
+      const questionScope = scopes.find((candidate) => candidate?.question?.Text);
+      chunks.push(questionScope?.question?.Text ?? "");
       let current: Element | null = el;
       for (let depth = 0; current && depth < 10; depth += 1) {
         chunks.push(current.textContent ?? "");
         current = current.parentElement;
       }
-      const label = el.closest("label")?.textContent
+      const label = optionScope?.o?.Text
+        ?? el.closest("label")?.textContent
         ?? el.parentElement?.textContent
         ?? "";
       const visibleTarget = el.closest("label")
@@ -1606,6 +1614,12 @@ async function bulkClickMatchingChoices(
     };
     const contextForChoice = (input: HTMLInputElement) => {
       const chunks: string[] = [];
+      const angular = (window as any).angular;
+      const scopes: any[] = [];
+      const scope = angular?.element(input)?.scope?.();
+      for (let current = scope, depth = 0; current && depth < 8; current = current.$parent, depth += 1) scopes.push(current);
+      const questionScope = scopes.find((candidate) => candidate?.question?.Text);
+      chunks.push(questionScope?.question?.Text ?? "");
       const block = input.closest("[ng-repeat], .question, .panel, fieldset, .form-group");
       if (block) chunks.push(block.textContent ?? "");
       let current: Element | null = input;

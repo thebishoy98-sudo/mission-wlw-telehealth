@@ -68,6 +68,7 @@ describe("PracticeQ remote worker resilience", () => {
   it("bulk-selects IntakeQ choices without timing out on every label", () => {
     expect(workerSource).toContain("bulkClickMatchingChoices");
     expect(workerSource).toContain("answerMatchesPracticeQChoice");
+    expect(workerSource).toContain("questionScope?.question?.Text");
     expect(workerSource).not.toContain("await label.scrollIntoViewIfNeeded({ timeout: 1000 })");
   });
 
