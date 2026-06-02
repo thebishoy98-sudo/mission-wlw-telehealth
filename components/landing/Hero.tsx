@@ -15,7 +15,7 @@ const STARS = Array.from({ length: 5 });
 
 export function Hero({ ctaUrl }: { ctaUrl: string }) {
   return (
-    <section className="bg-cream-100 pt-10 pb-16 md:pt-20 md:pb-28 overflow-hidden">
+    <section className="bg-cream-100 pt-10 pb-24 md:pt-20 md:pb-28 overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
 

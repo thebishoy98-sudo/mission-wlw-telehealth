@@ -9,6 +9,7 @@ const DOSES = [
     strength: "20mg vial",
     weekly: "2.5mg / week",
     price: 349,
+    monthly: 175,
     badge: "Starter Dose",
     bullets: [
       "8-week supply",
@@ -24,6 +25,7 @@ const DOSES = [
     strength: "40mg vial",
     weekly: "5mg / week",
     price: 479,
+    monthly: 240,
     badge: "Most Popular",
     bullets: [
       "8-week supply",
@@ -39,6 +41,7 @@ const DOSES = [
     strength: "60mg vial",
     weekly: "7.5mg / week",
     price: 799,
+    monthly: 400,
     badge: "Max Dose",
     bullets: [
       "8-week supply",
@@ -122,6 +125,13 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     >
                       / 8 weeks
                     </span>
+                  </div>
+                  <div
+                    className={`text-xs mt-1 ${
+                      d.highlight ? "text-green-300" : "text-forest-700"
+                    }`}
+                  >
+                    ~${d.monthly}/month
                   </div>
                 </div>
 

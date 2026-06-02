@@ -23,13 +23,13 @@ export function Button({
   fullWidth = false,
 }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed select-none touch-manipulation";
+    "inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest-800 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed select-none touch-manipulation";
 
   const variants = {
-    primary:  "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white shadow-md shadow-red-900/20 active:opacity-90",
+    primary:  "bg-forest-800 hover:bg-forest-700 text-white shadow-md shadow-forest-900/20 active:opacity-90",
     secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300",
-    outline:  "border-2 border-rose-600 text-rose-600 hover:bg-rose-50 active:bg-rose-100",
-    ghost:    "text-rose-600 hover:bg-rose-50 active:bg-rose-100",
+    outline:  "border-2 border-forest-800 text-forest-800 hover:bg-forest-50 active:bg-forest-100",
+    ghost:    "text-forest-800 hover:bg-forest-50 active:bg-forest-100",
   };
 
   const sizes = {

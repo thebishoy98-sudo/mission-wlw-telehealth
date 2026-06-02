@@ -211,7 +211,7 @@ export default function Questionnaire() {
 
         {questions.length === 0 ? (
           <div className="text-center py-10">
-            <div className="w-8 h-8 border-2 border-green-300 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-8 h-8 border-2 border-forest-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-gray-400 text-sm">Loading questions...</p>
           </div>
         ) : (
@@ -219,7 +219,7 @@ export default function Questionnaire() {
             {questions.map((question, idx) => (
               <div key={question.id} className="border-b border-gray-50 pb-7 last:border-0 last:pb-0">
                 <label className="block text-sm font-semibold text-gray-800 mb-3">
-                  <span className="text-green-300 mr-1.5">{idx + 1}.</span>
+                  <span className="text-forest-700 mr-1.5">{idx + 1}.</span>
                   {question.text}
                   {question.required && <span className="text-red-400 ml-1">*</span>}
                 </label>

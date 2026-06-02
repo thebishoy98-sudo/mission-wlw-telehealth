@@ -69,13 +69,17 @@ export default function Products() {
                       <h4 className="font-semibold text-gray-900 mb-2">
                         Available Doses
                       </h4>
-                      <ul className="space-y-1 text-sm text-gray-600">
+                      <div className="space-y-2">
                         {product.doses.map((dose) => (
-                          <li key={dose.id}>
-                            - {dose.label}: {dose.patientDescription ?? dose.strength} - {formatCurrency(dose.price)}
-                          </li>
+                          <div key={dose.id} className="flex items-center justify-between bg-cream-100 rounded-lg px-3 py-2">
+                            <div>
+                              <span className="text-sm font-medium text-gray-800">{dose.label}</span>
+                              <p className="text-xs text-gray-500">{dose.patientDescription ?? dose.strength}</p>
+                            </div>
+                            <span className="text-sm font-bold text-forest-800">{formatCurrency(dose.price)}</span>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
 

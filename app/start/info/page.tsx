@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
+import { formatCurrency } from "@/lib/utils";
 
 const US_STATES = [
   ["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],
@@ -111,7 +112,7 @@ export default function PatientInfo() {
               label="Prescription option"
               options={selectedProduct.doses.map((d) => ({
                 value: d.id,
-                label: `${d.label} - ${d.patientDescription ?? d.strength} - $${d.price}`,
+                label: `${d.label} - ${d.patientDescription ?? d.strength} - ${formatCurrency(d.price)}`,
               }))}
               value={selectedDose}
               onChange={(e) => setSelectedDose(e.target.value)}

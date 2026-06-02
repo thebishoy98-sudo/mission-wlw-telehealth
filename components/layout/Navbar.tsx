@@ -56,7 +56,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-forest-800 flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm">M</span>
             </div>
             <span className="text-base font-bold text-gray-900 tracking-tight">Mission WLW</span>
@@ -71,7 +71,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
                 className={cn(
                   "px-3.5 py-2 rounded-lg text-sm font-medium transition-colors",
                   pathname === link.href
-                    ? "bg-rose-50 text-rose-700"
+                    ? "bg-forest-50 text-forest-800"
                     : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
                 )}
               >
@@ -90,7 +90,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
                   </span>
                 </Link>
                 <Link href="/start/info" className="hidden sm:block">
-                  <span className="inline-flex items-center bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all">
+                  <span className="inline-flex items-center bg-forest-800 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all">
                     Get Started
                   </span>
                 </Link>
@@ -134,7 +134,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
               className={cn(
                 "block px-3 py-2.5 rounded-lg text-sm font-medium",
                 pathname === link.href
-                  ? "bg-rose-50 text-rose-700"
+                  ? "bg-forest-50 text-forest-800"
                   : "text-gray-700 hover:bg-gray-50"
               )}
             >
@@ -151,8 +151,8 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
                 Sign in
               </Link>
               <Link href="/start/info" onClick={() => setOpen(false)}>
-                <span className="block mt-2 text-center bg-gradient-to-r from-red-600 to-rose-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg">
-                Get Started
+                <span className="block mt-2 text-center bg-forest-800 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg">
+                  Get Started
                 </span>
               </Link>
             </>
