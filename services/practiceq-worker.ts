@@ -314,11 +314,13 @@ async function fillPracticeQVitalsPage(
   if (!heightVal || !currentWeightVal || !idealWeightVal) return 0;
 
   // Map each value to its exact question text so we can match by label, not position
-  const vitalsMap: Array<{ text: RegExp; value: string }> = [
-    { text: /what is your height/i, value: heightVal },
-    { text: /current body weight/i, value: currentWeightVal },
-    { text: /ideal body weight/i, value: idealWeightVal },
+  const vitalsMap: Array<{ index: number; text: RegExp; value: string }> = [
+    { index: 0, text: /what is your height/i, value: heightVal },
+    { index: 1, text: /current body weight/i, value: currentWeightVal },
+    { index: 2, text: /ideal body weight/i, value: idealWeightVal },
   ];
+  const vals = [heightVal, currentWeightVal, idealWeightVal];
+  const filledVitals = new Set<number>();
 
   let filled = 0;
   const fields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
@@ -333,20 +335,27 @@ async function fillPracticeQVitalsPage(
     const match = vitalsMap.find((v) => v.text.test(prompt));
     if (!match) continue;
     await enterFieldValue(field, match.value, prompt);
+    filledVitals.add(match.index);
     filled += 1;
   }
 
-  // Positional fallback: if label matching found nothing, fill by position (height, weight, ideal)
-  if (filled === 0) {
-    const vals = [heightVal, currentWeightVal, idealWeightVal];
+  // Positional fallback: if label matching only filled part of the vitals page,
+  // fill the remaining empty fields in the expected PracticeQ order.
+  if (filled < vals.length) {
     const posFields = page.locator("input:visible:not([type='hidden']):not([type='checkbox']):not([type='radio']), textarea:visible");
-    const posCount = Math.min(await posFields.count().catch(() => 0), vals.length);
+    const posCount = await posFields.count().catch(() => 0);
     for (let i = 0; i < posCount; i += 1) {
       const field = posFields.nth(i);
       const current = await field.inputValue().catch(() => "");
       if (current.trim()) continue;
-      await enterFieldValue(field, vals[i], `PracticeQ vitals field ${i + 1}`);
+      const prompt = await getPracticeQFieldPrompt(field).catch(() => "");
+      const exact = vitalsMap.find((v) => v.text.test(prompt));
+      const nextIndex = exact?.index ?? vals.findIndex((_value, index) => !filledVitals.has(index));
+      if (nextIndex < 0 || filledVitals.has(nextIndex)) continue;
+      await enterFieldValue(field, vals[nextIndex], `PracticeQ vitals field ${nextIndex + 1}`);
+      filledVitals.add(nextIndex);
       filled += 1;
+      if (filledVitals.size >= vals.length) break;
     }
   }
 
@@ -1201,53 +1210,14 @@ async function checkPracticeQCheckbox(checkbox: ReturnType<Page["locator"]>) {
 }
 
 async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
-  for (const item of fillPlan) {
-    const values = item.value.split(",").map((value) => value.trim()).filter(Boolean);
-    for (const value of values) {
-      const exactChoice = page.getByText(new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i")).first();
-      if (await exactChoice.isVisible().catch(() => false)) {
-        await exactChoice.click({ timeout: 2000 }).catch(async () => {
-          await exactChoice.click({ force: true, timeout: 1000 }).catch(() => {});
-        });
-      }
-    }
-  }
-
-  const labels = page.locator("label");
-  const count = await labels.count();
-  for (let i = 0; i < count; i += 1) {
-    const label = labels.nth(i);
-    await label.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-    if (!(await label.isVisible().catch(() => false))) continue;
-    const text = (await label.innerText().catch(() => "")).trim();
-    if (!text) continue;
-    const context = await label.evaluate((el) => {
-      const chunks: string[] = [];
-      let current: Element | null = el;
-      for (let depth = 0; current && depth < 10; depth += 1) {
-        chunks.push(current.textContent ?? "");
-        current = current.parentElement;
-      }
-      return chunks.join(" ");
-    }).catch(() => text);
-    if (findPracticeQChoiceForLabel(text, context, fillPlan)) {
-      await setPracticeQAngularChoice(page, context, text);
-      const childInput = label.locator("input[type='checkbox'], input[type='radio']").first();
-      if (await childInput.isVisible().catch(() => false)) {
-        await clickPracticeQChoiceInput(childInput);
-        continue;
-      }
-      const followingInput = label.locator("xpath=following::input[@type='checkbox' or @type='radio'][1]").first();
-      if (await followingInput.isVisible().catch(() => false)) {
-        await clickPracticeQChoiceInput(followingInput);
-        continue;
-      }
-      await label.click().catch(() => {});
-    }
+  const bulkClicked = await bulkClickMatchingChoices(page, fillPlan);
+  if (bulkClicked > 0) {
+    await page.waitForTimeout(300);
+    return;
   }
 
   const inputs = page.locator("input[type='checkbox'], input[type='radio']");
-  const inputCount = await inputs.count();
+  const inputCount = Math.min(await inputs.count().catch(() => 0), 30);
   for (let i = 0; i < inputCount; i += 1) {
     const input = inputs.nth(i);
     if (await input.isChecked().catch(() => false)) continue;
@@ -1281,8 +1251,191 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
   }
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function bulkClickMatchingChoices(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>
+): Promise<number> {
+  return page.evaluate((plan: Array<{ prompt: string; value: string }>) => {
+    const normalizePrompt = (value: unknown) => String(value ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cleanText = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").trim();
+    const isConsentPrompt = (text: string) => {
+      const normalized = normalizePrompt(text);
+      return (
+        normalized.includes("signature") ||
+        normalized.includes("sign your consent") ||
+        normalized.includes("telehealth consent") ||
+        normalized.includes("patient consent") ||
+        normalized.includes("consent and signature") ||
+        normalized.includes("consent for medical treatment") ||
+        normalized.includes("i consent to treatment")
+      );
+    };
+    const answerMatchesPracticeQChoice = (answer: string, labelText: string): boolean => {
+      const normalizedAnswer = normalizePrompt(answer);
+      const normalizedLabel = normalizePrompt(labelText);
+      if (!normalizedAnswer || !normalizedLabel) return false;
+      const negativeAnswer = (
+        normalizedAnswer === "none of the above" ||
+        normalizedAnswer === "none apply to me" ||
+        normalizedAnswer === "none" ||
+        normalizedAnswer === "no" ||
+        normalizedAnswer.includes("no known") ||
+        normalizedAnswer.includes("no allergies") ||
+        normalizedAnswer.includes("not applicable")
+      );
+      if (negativeAnswer) return normalizedLabel === "no" || normalizedLabel.includes("none");
+      if (normalizedAnswer === normalizedLabel) return true;
+
+      const selectedValues = normalizedAnswer.split(/\s*,\s*/).map(normalizePrompt).filter(Boolean);
+      if (selectedValues.some((value) => {
+        if (value === normalizedLabel) return true;
+        if (value.length <= 4 || normalizedLabel.length <= 4) return false;
+        return value.includes(normalizedLabel) || normalizedLabel.includes(value);
+      })) {
+        return true;
+      }
+
+      if ((normalizedAnswer.includes("pregnant") || normalizedAnswer.includes("pregnancy")) && normalizedLabel.includes("pregnant")) return true;
+      if (normalizedAnswer.includes("weight loss") && normalizedLabel.includes("tirzepatide")) return true;
+      if (normalizedAnswer.includes("breastfeeding") && normalizedLabel.includes("breastfeeding")) return true;
+      if (normalizedAnswer.includes("diabetes") && normalizedLabel.includes("diabetes")) return true;
+      if (normalizedAnswer.includes("tirzepatide") && normalizedLabel.includes("tirzepatide")) return true;
+      if (normalizedAnswer.includes("vitamin b12") && normalizedLabel.includes("vitamin b12")) return true;
+      if (normalizedAnswer.includes("vitamin b6") && normalizedLabel.includes("vitamin b6")) return true;
+      if ((normalizedAnswer.includes("men 2") || normalizedAnswer.includes("multiple endocrine neoplasia")) &&
+          (normalizedLabel.includes("men 2") || normalizedLabel.includes("multiple endocrine neoplasia"))) return true;
+      if (normalizedAnswer.includes("medullary thyroid cancer") && normalizedLabel.includes("medullary thyroid cancer")) return true;
+      if (normalizedAnswer.includes("intestine") && normalizedLabel.includes("intestine")) return true;
+      if (normalizedAnswer.includes("stomach") && normalizedLabel.includes("stomach")) return true;
+      if (normalizedAnswer.includes("anorexia") && normalizedLabel.includes("anorexia")) return true;
+
+      return false;
+    };
+    const findPracticeQChoiceForLabel = (labelText: string, questionContext: string) => {
+      const label = labelText.trim();
+      if (!label) return false;
+      if (isConsentPrompt(label) && plan.some((item) => isConsentPrompt(item.prompt))) return true;
+
+      const normalizedContext = normalizePrompt(questionContext);
+      const answer = plan.find((item) => {
+        const prompt = normalizePrompt(item.prompt);
+        return prompt.length > 2 && (normalizedContext.includes(prompt) || prompt.includes(normalizedContext));
+      })?.value;
+
+      return answer ? answerMatchesPracticeQChoice(answer, label) : false;
+    };
+    const isVisible = (el: Element | null) => {
+      if (!el) return false;
+      const node = el as HTMLElement;
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const textForChoice = (input: HTMLInputElement) => {
+      const angular = (window as any).angular;
+      const scopes: any[] = [];
+      const scope = angular?.element(input)?.scope?.();
+      for (let current = scope, depth = 0; current && depth < 8; current = current.$parent, depth += 1) scopes.push(current);
+      const optionScope = scopes.find((candidate) => candidate?.o?.Text);
+      const optionText = cleanText(optionScope?.o?.Text);
+      if (optionText) return optionText;
+
+      const labelForInput = input.id
+        ? Array.from(document.querySelectorAll("label")).find((label) => label.htmlFor === input.id)
+        : null;
+      const rawLabel = cleanText(
+        labelForInput?.textContent ??
+        input.closest("label")?.textContent ??
+        input.parentElement?.textContent ??
+        input.getAttribute("aria-label") ??
+        input.getAttribute("title") ??
+        ""
+      );
+      const inputValue = cleanText(input.value && input.value !== "on" ? input.value : "");
+      if (inputValue && (!rawLabel || rawLabel.length > 80)) return inputValue;
+      return rawLabel || inputValue;
+    };
+    const contextForChoice = (input: HTMLInputElement) => {
+      const chunks: string[] = [];
+      const block = input.closest("[ng-repeat], .question, .panel, fieldset, .form-group");
+      if (block) chunks.push(block.textContent ?? "");
+      let current: Element | null = input;
+      for (let depth = 0; current && depth < 8; depth += 1) {
+        chunks.push(current.textContent ?? "");
+        current = current.parentElement;
+      }
+      return cleanText(chunks.join(" "));
+    };
+    const setAngularChoice = (input: HTMLInputElement, labelText: string) => {
+      const angular = (window as any).angular;
+      const normalizedLabel = normalizePrompt(labelText);
+      const scope = angular?.element(input)?.scope?.();
+      const ngModel = angular?.element(input)?.controller?.("ngModel");
+      ngModel?.$setViewValue?.(true);
+      const scopes: any[] = [];
+      for (let current = scope, depth = 0; current && depth < 8; current = current.$parent, depth += 1) scopes.push(current);
+      const optionScope = scopes.find((candidate) => normalizePrompt(candidate?.o?.Text) === normalizedLabel)
+        ?? scopes.find((candidate) => candidate?.o);
+      if (optionScope?.o) optionScope.o.Checked = true;
+      const questionScope = scopes.find((candidate) => Array.isArray(candidate?.question?.QuestionOptions));
+      const options = questionScope?.question?.QuestionOptions;
+      if (Array.isArray(options)) {
+        for (const option of options) {
+          if (normalizePrompt(option?.Text) === normalizedLabel) option.Checked = true;
+        }
+        const selected = options
+          .filter((option: any) => option?.Checked)
+          .map((option: any) => option?.Text)
+          .filter(Boolean);
+        if (questionScope.question) questionScope.question.Answer = selected.join(", ");
+      }
+      scope?.save?.();
+      scope?.changed?.();
+      scope?.$applyAsync?.();
+    };
+    const clickChoice = (input: HTMLInputElement, labelText: string) => {
+      const target = input.closest("label")
+        ?? input.parentElement?.querySelector("ins.iCheck-helper")
+        ?? input.parentElement
+        ?? input;
+      if (target) {
+        const node = target as HTMLElement;
+        node.scrollIntoView({ block: "center", inline: "center" });
+        node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+        node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        node.click();
+      }
+      input.checked = true;
+      input.setAttribute("checked", "checked");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      setAngularChoice(input, labelText);
+    };
+
+    let clicked = 0;
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[type='checkbox'], input[type='radio']"));
+    for (const input of inputs) {
+      if (input.disabled || input.checked) continue;
+      const target = input.closest("label")
+        ?? input.parentElement?.querySelector("ins.iCheck-helper")
+        ?? input.parentElement
+        ?? input;
+      if (!isVisible(target)) continue;
+      const label = textForChoice(input);
+      const context = contextForChoice(input);
+      if (!findPracticeQChoiceForLabel(label, context)) continue;
+      clickChoice(input, label);
+      clicked += 1;
+    }
+    return clicked;
+  }, fillPlan).catch(() => 0);
 }
 
 async function clickPracticeQChoiceInput(input: ReturnType<Page["locator"]>) {

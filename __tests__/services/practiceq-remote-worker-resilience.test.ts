@@ -54,6 +54,23 @@ describe("PracticeQ remote worker resilience", () => {
     expect(dbSource).toContain("COALESCE(last_error, '') NOT LIKE");
   });
 
+  it("does not bulk-auto-retry PracticeQ failures that already created a hosted draft", () => {
+    expect((dbSource.match(/PracticeQ choice selection step timed out.%/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((dbSource.match(/PracticeQ text field fill step timed out.%/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("fills remaining IntakeQ vitals when label matching only fills part of the page", () => {
+    expect(workerSource).toContain("filledVitals");
+    expect(workerSource).toContain("if (filled < vals.length)");
+    expect(workerSource).not.toContain("if (filled === 0) {\r\n    const vals = [heightVal, currentWeightVal, idealWeightVal];");
+  });
+
+  it("bulk-selects IntakeQ choices without timing out on every label", () => {
+    expect(workerSource).toContain("bulkClickMatchingChoices");
+    expect(workerSource).toContain("answerMatchesPracticeQChoice");
+    expect(workerSource).not.toContain("await label.scrollIntoViewIfNeeded({ timeout: 1000 })");
+  });
+
   it("prioritizes fresh queued PracticeQ jobs ahead of stale retry backlog", () => {
     expect(dbSource).toContain("WHEN status = 'queued' THEN 0");
     expect(dbSource).toContain("WHEN status = 'running' THEN 1");

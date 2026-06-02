@@ -871,6 +871,8 @@ export const practiceqAutomationJobDb = {
            AND intake_id IS NULL
            AND attempts < 10
            AND COALESCE(last_error, '') NOT LIKE 'Missing required patient vitals for IntakeQ:%'
+           AND COALESCE(last_error, '') NOT LIKE 'PracticeQ choice selection step timed out.%'
+           AND COALESCE(last_error, '') NOT LIKE 'PracticeQ text field fill step timed out.%'
          )
       ORDER BY
         CASE
@@ -891,6 +893,8 @@ export const practiceqAutomationJobDb = {
       WHERE status = 'failed'
         AND intake_id IS NULL
         AND COALESCE(last_error, '') NOT LIKE 'Missing required patient vitals for IntakeQ:%'
+        AND COALESCE(last_error, '') NOT LIKE 'PracticeQ choice selection step timed out.%'
+        AND COALESCE(last_error, '') NOT LIKE 'PracticeQ text field fill step timed out.%'
       ORDER BY created_at ASC
     `;
     return rows.map(rowToPracticeQAutomationJob);
