@@ -9,6 +9,7 @@ import {
 } from "@/lib/identity-approval";
 import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import { requireAdmin } from "@/lib/server-auth";
+import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,14 @@ export async function POST(req: NextRequest) {
           status: "pharmacy_error" as const,
           error: error instanceof Error ? error.message : String(error),
         }));
+      } else {
+        // No PracticeQ job exists for this order (blocked by dedup at checkout).
+        // Create one now so the automation worker fills the form.
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          const newJob = createPracticeQAutomationJob(dispatchOrder, patient);
+          await dbServer.practiceqAutomationJobDb.create(newJob).catch(() => {});
+        }
       }
     }
 
