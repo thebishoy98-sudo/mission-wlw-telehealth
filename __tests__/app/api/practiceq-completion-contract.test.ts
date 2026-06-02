@@ -10,6 +10,11 @@ describe("PracticeQ completion contract", () => {
     expect(adminRoute).toContain("practiceQCompletion");
   });
 
+  it("does not mark deferred identity PracticeQ failures as order errors", () => {
+    expect(adminRoute).toContain("PracticeQ deferred until verified identity");
+    expect(adminRoute).toContain('error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error"');
+  });
+
   it("runs order completion/dispatch when the background worker completes a PracticeQ job", () => {
     expect(workerSource).toContain("completePracticeQSession(job.id)");
     expect(workerSource).toContain("result.status === \"completed\"");

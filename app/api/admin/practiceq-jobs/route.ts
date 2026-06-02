@@ -15,6 +15,14 @@ import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 
 export const dynamic = "force-dynamic";
 
+const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
+
+function getPracticeQStatusForJobUpdate(status: string, error?: string) {
+  if (status === "completed") return "completed";
+  if (status === "failed") return error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error";
+  return "pending";
+}
+
 // ── GET ──────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -94,7 +102,7 @@ export async function PATCH(req: NextRequest) {
   if (!updated) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
   if (updated.orderId) {
-    const pqStatus = status === "completed" ? "completed" : status === "failed" ? "error" : "pending";
+    const pqStatus = getPracticeQStatusForJobUpdate(status, error);
     await dbServer.orderDb.update(updated.orderId, { practiceQStatus: pqStatus }).catch(() => {});
   }
 
