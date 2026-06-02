@@ -26,3 +26,16 @@ describe("identity upload route contract", () => {
     expect(source).toContain("sendAdminNotification(\"identity_review_needed\"");
   });
 });
+
+describe("identity reminder public URL contract", () => {
+  const paymentRoute = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+  const resendRoute = fs.readFileSync(path.join(process.cwd(), "app/api/identity/resend/route.ts"), "utf8");
+  const reminderRoute = fs.readFileSync(path.join(process.cwd(), "app/api/cron/identity-reminders/route.ts"), "utf8");
+
+  it("does not build patient SMS links from Render's internal request origin", () => {
+    for (const route of [paymentRoute, resendRoute, reminderRoute]) {
+      expect(route).toContain("getPublicBaseUrl(req)");
+      expect(route).not.toContain("buildIdentityUploadUrl(req.nextUrl.origin");
+    }
+  });
+});

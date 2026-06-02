@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import * as spruceServer from "@/services/spruce.server";
 import { buildIdentityUploadUrl, createIdentityUploadToken } from "@/lib/identity";
+import { getPublicBaseUrl } from "@/lib/public-url";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
         uploadToken = createIdentityUploadToken(row.id);
         await sql`UPDATE orders SET identity_upload_token = ${uploadToken} WHERE id = ${row.id}`.catch(() => {});
       }
-      const uploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, uploadToken);
+      const uploadUrl = buildIdentityUploadUrl(getPublicBaseUrl(req), uploadToken);
 
       const patient = {
         id: row.patient_id as string,

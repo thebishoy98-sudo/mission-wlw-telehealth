@@ -7,6 +7,7 @@ import { resolvePatient } from "@/lib/patient-resolver";
 import * as spruceServer from "@/services/spruce.server";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { requireProviderOrAdmin } from "@/lib/server-auth";
+import { getPublicBaseUrl } from "@/lib/public-url";
 
 export async function POST(req: NextRequest) {
   const denied = requireProviderOrAdmin(req);
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       await dbServer.orderDb.update(order.id, update).catch(() => {});
     }
 
-    const uploadUrl = buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken);
+    const uploadUrl = buildIdentityUploadUrl(getPublicBaseUrl(req), identityUploadToken);
     const message = await spruceServer.sendMessage(patient, "identity_upload_reminder", {
       orderId: order.id,
       uploadUrl,

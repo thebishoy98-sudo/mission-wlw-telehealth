@@ -48,6 +48,7 @@ import {
   getRequestIp,
 } from "@/lib/consent";
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
+import { getPublicBaseUrl } from "@/lib/public-url";
 import type { Payment } from "@/types";
 
 async function wakePracticeQRemoteWorker() {
@@ -451,7 +452,7 @@ export async function POST(req: NextRequest) {
     };
     let updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
-    const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(req.nextUrl.origin, identityUploadToken) : "";
+    const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(getPublicBaseUrl(req), identityUploadToken) : "";
     const skipPracticeQAutomation = checkoutIdentityReused;
     let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
 
