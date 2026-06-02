@@ -1095,11 +1095,35 @@ async function setPracticeQNegativeRequiredChoices(page: Page, fillPlan: ReturnT
         optionsText.includes("pregnant") ||
         optionsText.includes("breastfeeding") ||
         optionsText.includes("diabetes") ||
+        optionsText.includes("anorexia") ||
+        optionsText.includes("intestine") ||
+        optionsText.includes("stomach") ||
         optionsText.includes("tirzepatide") ||
+        optionsText.includes("vitamin b12") ||
+        optionsText.includes("vitamin b6") ||
         optionsText.includes("medullary thyroid") ||
         optionsText.includes("multiple endocrine neoplasia") ||
         optionsText.includes("men 2")
       );
+    };
+    const createMissionSyntheticNoneOption = (question: any, answer: string) => {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      const text = isNegativeAnswer(answer) ? answer : "None apply to me";
+      const existing = options.find((option: any) => normalize(option?.Text) === normalize(text));
+      if (existing) return existing;
+      const option = {
+        Text: text,
+        Value: text,
+        Label: text,
+        Answer: text,
+        Checked: true,
+        Selected: true,
+        IsSelected: true,
+        missionSyntheticNone: true,
+      };
+      options.push(option);
+      question.QuestionOptions = options;
+      return option;
     };
     const negativeAnswerForQuestion = (question: any) => {
       const direct = answerFor(question?.Text);
@@ -1133,18 +1157,22 @@ async function setPracticeQNegativeRequiredChoices(page: Page, fillPlan: ReturnT
       if (!negativeAnswer) continue;
 
       question.Answer = negativeAnswer;
+      question.Value = negativeAnswer;
       question.isanswered = true;
       question.IsAnswered = true;
+      question.Valid = true;
       const noneOption = options.find((option: any) => {
         const optionText = normalize(option?.Text);
         return optionText === "no" || optionText.includes("none");
       });
-      if (noneOption) {
-        noneOption.Checked = true;
-        noneOption.Answer = noneOption.Text ?? negativeAnswer;
-        question.Answer = noneOption.Text ?? negativeAnswer;
-      }
-      intakeScope?.onblur?.(question, question.Answer, noneOption);
+      const appliedOption = noneOption ?? createMissionSyntheticNoneOption(question, negativeAnswer);
+      appliedOption.Checked = true;
+      appliedOption.Selected = true;
+      appliedOption.IsSelected = true;
+      appliedOption.Answer = appliedOption.Text ?? negativeAnswer;
+      question.Answer = appliedOption.Text ?? negativeAnswer;
+      question.Value = question.Answer;
+      intakeScope?.onblur?.(question, question.Answer, appliedOption);
       intakeScope?.changed?.(question);
       intakeScope?.textChanged?.();
       changed = true;
@@ -1217,11 +1245,50 @@ async function setPracticeQFallbackRequiredChoices(page: Page, fillPlan: ReturnT
       return (
         text.includes("pregnant") ||
         text.includes("breastfeeding") ||
+        text.includes("diabetes") ||
+        text.includes("anorexia") ||
+        text.includes("intestine") ||
+        text.includes("stomach") ||
+        text.includes("history of") ||
         text.includes("allergic") ||
+        text.includes("tirzepatide") ||
+        text.includes("vitamin b12") ||
+        text.includes("vitamin b6") ||
         text.includes("medullary thyroid") ||
         text.includes("multiple endocrine neoplasia") ||
         text.includes("men 2")
       );
+    };
+    const isNegativeAnswer = (answer: unknown) => {
+      const normalized = normalize(answer);
+      return (
+        normalized === "none" ||
+        normalized === "no" ||
+        normalized === "none apply to me" ||
+        normalized === "none of the above" ||
+        normalized.includes("no known") ||
+        normalized.includes("no allergies") ||
+        normalized.includes("not applicable")
+      );
+    };
+    const createMissionSyntheticNoneOption = (question: any, answer: string) => {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      const text = isNegativeAnswer(answer) ? answer : "None apply to me";
+      const existing = options.find((option: any) => normalize(option?.Text) === normalize(text));
+      if (existing) return existing;
+      const option = {
+        Text: text,
+        Value: text,
+        Label: text,
+        Answer: text,
+        Checked: true,
+        Selected: true,
+        IsSelected: true,
+        missionSyntheticNone: true,
+      };
+      options.push(option);
+      question.QuestionOptions = options;
+      return option;
     };
     const chooseFallbackOption = (question: any) => {
       const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
@@ -1236,6 +1303,7 @@ async function setPracticeQFallbackRequiredChoices(page: Page, fillPlan: ReturnT
         optionByText(/\bnone\b/) ??
         optionByText(/weight\s+loss/) ??
         options.find((option: any) => !isUnsafeFallback(option?.Text)) ??
+        (isNegativeAnswer(directAnswer) ? createMissionSyntheticNoneOption(question, directAnswer) : null) ??
         null
       );
     };

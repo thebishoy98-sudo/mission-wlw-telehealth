@@ -85,12 +85,17 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("negativeAnswerForQuestion");
     expect(workerSource).toContain("question.Answer = negativeAnswer");
     expect(workerSource).toContain("question.isanswered = true");
+    expect(workerSource).toContain("createMissionSyntheticNoneOption");
+    expect(workerSource).toContain("missionSyntheticNone");
+    expect(workerSource).toContain("question.Valid = true");
   });
 
   it("falls back to safe answers for still-unanswered required PracticeQ choice groups", () => {
     expect(workerSource).toContain("setPracticeQFallbackRequiredChoices");
     expect(workerSource).toContain("chooseFallbackOption");
     expect(workerSource).toContain("isUnsafeFallback");
+    expect(workerSource).toContain('text.includes("diabetes")');
+    expect(workerSource).toContain('text.includes("history of")');
     expect(workerSource).toContain("question.IsAnswered = true");
   });
 
