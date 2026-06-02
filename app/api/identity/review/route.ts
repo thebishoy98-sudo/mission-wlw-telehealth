@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { getIdentityReviewUpdate } from "@/lib/identity";
+import {
+  buildManualIdentityApprovalOrderUpdate,
+  buildManualIdentityApprovalReviewUpdate,
+  shouldRetryPracticeQCompletionAfterIdentityApproval,
+} from "@/lib/identity-approval";
+import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import { requireAdmin } from "@/lib/server-auth";
-import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 
 export const dynamic = "force-dynamic";
 
@@ -59,25 +64,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const update = getIdentityReviewUpdate({ action, reviewedBy, notes });
+    const now = new Date().toISOString();
+    const update =
+      action === "approve"
+        ? buildManualIdentityApprovalOrderUpdate(order, { reviewedBy, notes, now })
+        : getIdentityReviewUpdate({ action, reviewedBy, notes, now });
     db.orderDb.update(orderId, update);
-    await dbServer.orderDb.update(orderId, update).catch(() => {});
+    const updatedOrder = await dbServer.orderDb.update(orderId, update).catch(() => null);
 
     const review =
       (await dbServer.providerReviewDb.getByOrder(orderId).catch(() => null)) ??
       db.providerReviewDb.getByOrder(orderId);
     if (review) {
-      const reviewUpdate = {
-        identityReviewRequired: action !== "approve",
-        notes: notes ?? review.notes,
-      };
+      const reviewUpdate =
+        action === "approve"
+          ? buildManualIdentityApprovalReviewUpdate(review, { reviewedBy, notes, now })
+          : {
+              status: "rejected" as const,
+              reviewedAt: now,
+              reviewedBy,
+              rejectionReason: notes ?? review.rejectionReason,
+              notes: notes ?? review.notes,
+              identityReviewRequired: true,
+            };
       db.providerReviewDb.update(review.id, reviewUpdate);
       await dbServer.providerReviewDb.update(review.id, reviewUpdate).catch(() => {});
     }
 
     await dbServer.integrationLogDb.create({
       id: `log_identity_review_${Date.now()}`,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       integrationName: "system",
       action: `Identity ${action === "approve" ? "approved" : "denied"} by admin`,
       orderId,
@@ -86,31 +102,19 @@ export async function POST(req: NextRequest) {
       details: { action, reviewedBy, notes },
     }).catch(() => {});
 
-    // When identity is approved, trigger PracticeQ if it was deferred waiting for identity
-    if (action === "approve" && order.practiceQStatus === "waiting_identity") {
-      try {
-        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
-        if (patient) {
-          const existingJob = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
-          if (!existingJob) {
-            const automationJob = createPracticeQAutomationJob(order, patient);
-            await dbServer.practiceqAutomationJobDb.create(automationJob).catch(() => {});
-            db.practiceqAutomationJobDb.create(automationJob);
-          } else if (existingJob.status === "failed") {
-            await dbServer.practiceqAutomationJobDb.update(existingJob.id, {
-              status: "queued",
-              attempts: 0,
-              lastError: undefined,
-              lockedAt: undefined,
-            }).catch(() => {});
-          }
-          db.orderDb.update(orderId, { practiceQStatus: "pending" });
-          await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" }).catch(() => {});
-        }
-      } catch { /* PracticeQ trigger failure is non-fatal */ }
+    const dispatchOrder = updatedOrder ?? { ...order, ...update };
+    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
+    if (action === "approve" && shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)) {
+      const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
+      if (job) {
+        practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
+          status: "pharmacy_error" as const,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
     }
 
-    return NextResponse.json({ success: true, orderId, update });
+    return NextResponse.json({ success: true, orderId, update, practiceQCompletion });
   } catch (error) {
     console.error("Identity review action error:", error);
     return NextResponse.json({ error: "Identity review action failed" }, { status: 500 });
