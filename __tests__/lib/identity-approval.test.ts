@@ -79,12 +79,26 @@ describe("manual identity approval workflow", () => {
     });
   });
 
-  it("retries dispatch after identity approval regardless of PracticeQ status", () => {
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval(order)).toBe(true);
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "submitted" })).toBe(true);
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "error" })).toBe(true);
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, practiceQStatus: "pending" })).toBe(true);
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...order, pharmacyStatus: "submitted" })).toBe(false);
+  it("retries PracticeQ only after identity is verified", () => {
+    const verifiedOrder = { ...order, identityStatus: "verified" as const };
+
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval(order)).toBe(false);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval(verifiedOrder)).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "submitted" })).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "error" })).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "pending" })).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, pharmacyStatus: "submitted" })).toBe(false);
+  });
+
+  it("does not resume PracticeQ for an admin manual approval without verified identity", () => {
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({
+      ...order,
+      identityStatus: "manual_approved",
+    })).toBe(false);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({
+      ...order,
+      identityStatus: "missing",
+    })).toBe(false);
   });
 
   it("approves a pending order when delayed identity upload is AI verified", () => {

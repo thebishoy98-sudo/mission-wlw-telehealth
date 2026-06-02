@@ -43,8 +43,9 @@ export function buildManualIdentityApprovalReviewUpdate(
   };
 }
 
-export function shouldRetryPracticeQCompletionAfterIdentityApproval(order: Pick<Order, "practiceQStatus" | "pharmacyStatus">) {
+export function shouldRetryPracticeQCompletionAfterIdentityApproval(order: Pick<Order, "identityStatus" | "practiceQStatus" | "pharmacyStatus">) {
   return (
+    order.identityStatus === "verified" &&
     (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error")
   );
 }

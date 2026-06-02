@@ -1,6 +1,6 @@
 import { chromium, type Browser, type Page } from "playwright";
 import * as dbServer from "@/lib/db.server";
-import type { PracticeQAutomationJob } from "@/types";
+import type { Order, PracticeQAutomationJob } from "@/types";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -45,6 +45,7 @@ type RemoteSession = {
 };
 
 const remoteSessions = new Map<string, RemoteSession>();
+export const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
 const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
 const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
 const PRACTICEQ_CONSENT_TIMEOUT_MS = 60000;
@@ -61,10 +62,24 @@ const PRACTICEQ_MAX_FILL_STEPS = Math.min(
   40
 );
 
+function shouldDeferPracticeQForIdentity(order: Pick<Order, "identityStatus">) {
+  return order.identityStatus !== "verified";
+}
+
+export function getPracticeQStatusAfterWorkerResult(
+  result: Pick<WorkerResult, "status" | "error">
+): Order["practiceQStatus"] | null {
+  if (result.status !== "failed") return null;
+  return result.error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error";
+}
+
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {
   const order = await dbServer.orderDb.getById(job.orderId);
   if (!order || order.paymentStatus !== "completed") {
     return { status: "failed", error: "Order is missing or payment is not complete" };
+  }
+  if (shouldDeferPracticeQForIdentity(order)) {
+    return { status: "failed", error: PRACTICEQ_IDENTITY_DEFERRED_ERROR };
   }
 
   const [patient, answers, questions, consent, uploads] = await Promise.all([
@@ -134,7 +149,10 @@ export async function processQueuedPracticeQAutomationJobs(limit = 5): Promise<W
       );
     }
     if (result.status === "failed") {
-      await dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+      const practiceQStatus = getPracticeQStatusAfterWorkerResult(result);
+      if (practiceQStatus) {
+        await dbServer.orderDb.update(job.orderId, { practiceQStatus }).catch(() => {});
+      }
     }
     results.push(result);
   }
@@ -149,6 +167,9 @@ export async function startPracticeQRemoteSession(
   const order = await dbServer.orderDb.getById(job.orderId);
   if (!order || order.paymentStatus !== "completed") {
     return { status: "failed", error: "Order is missing or payment is not complete" };
+  }
+  if (shouldDeferPracticeQForIdentity(order)) {
+    return { status: "failed", error: PRACTICEQ_IDENTITY_DEFERRED_ERROR };
   }
 
   const [patient, answers, questions, consent, uploads] = await Promise.all([
@@ -497,6 +518,13 @@ export async function submitPracticeQInBackground(
       error: "PracticeQ is asking whether to resume an old partial intake or start a new intake. The worker could not get past that prompt.",
     };
   }
+  if (looksSubmitted(bodyText)) {
+    return {
+      status: "completed",
+      handoffUrl: undefined,
+      intakeId: extractPracticeQIntakeId(page.url()),
+    };
+  }
   const hasUnhandledConsent = requiresUnhandledPatientConsent(bodyText, fillPlan);
   if (fillOutcome.stoppedForPatientConsent || hasUnhandledConsent) {
     return {
@@ -511,14 +539,6 @@ export async function submitPracticeQInBackground(
   await setPracticeQFallbackRequiredChoices(page, fillPlan);
   await savePracticeQPage(page);
   await waitForPracticeQSaved(page);
-
-  if (looksSubmitted(bodyText)) {
-    return {
-      status: "completed",
-      handoffUrl: undefined,
-      intakeId: extractPracticeQIntakeId(page.url()),
-    };
-  }
 
   const submitted = await clickFinalSubmit(page);
   if (!submitted) {

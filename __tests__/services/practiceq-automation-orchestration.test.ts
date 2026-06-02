@@ -134,4 +134,22 @@ describe("PracticeQ automation orchestration", () => {
     expect(wakeRemoteWorker).toHaveBeenCalled();
     expect(mockCompletePracticeQSession).not.toHaveBeenCalled();
   });
+
+  it("does not queue PracticeQ after admin manual approval without verified identity", async () => {
+    const wakeRemoteWorker = jest.fn().mockResolvedValue(undefined);
+    const manuallyApproved = { ...order, identityStatus: "manual_approved" as const };
+
+    await expect(
+      resumePracticeQAfterIdentityApproval({
+        order: manuallyApproved,
+        source: "identity_approval",
+        wakeRemoteWorker,
+      })
+    ).resolves.toEqual({ status: "not_ready" });
+
+    expect(mockDbServer.practiceqAutomationJobDb.getByOrder).not.toHaveBeenCalled();
+    expect(mockCreatePracticeQAutomationJob).not.toHaveBeenCalled();
+    expect(mockDbServer.practiceqAutomationJobDb.create).not.toHaveBeenCalled();
+    expect(wakeRemoteWorker).not.toHaveBeenCalled();
+  });
 });

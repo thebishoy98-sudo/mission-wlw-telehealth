@@ -15,6 +15,7 @@ type RemoteServerModules = {
   completePracticeQSession: typeof import("@/lib/practiceq-session-completion").completePracticeQSession;
   closePracticeQRemoteSession: typeof import("@/services/practiceq-worker").closePracticeQRemoteSession;
   completePracticeQIntakeInAdmin: typeof import("@/services/practiceq-worker").completePracticeQIntakeInAdmin;
+  getPracticeQStatusAfterWorkerResult: typeof import("@/services/practiceq-worker").getPracticeQStatusAfterWorkerResult;
   getPracticeQRemoteSession: typeof import("@/services/practiceq-worker").getPracticeQRemoteSession;
   startPracticeQRemoteSession: typeof import("@/services/practiceq-worker").startPracticeQRemoteSession;
 };
@@ -32,6 +33,7 @@ function loadRemoteServerModules(): Promise<RemoteServerModules> {
       completePracticeQSession: sessionCompletion.completePracticeQSession,
       closePracticeQRemoteSession: practiceQWorker.closePracticeQRemoteSession,
       completePracticeQIntakeInAdmin: practiceQWorker.completePracticeQIntakeInAdmin,
+      getPracticeQStatusAfterWorkerResult: practiceQWorker.getPracticeQStatusAfterWorkerResult,
       getPracticeQRemoteSession: practiceQWorker.getPracticeQRemoteSession,
       startPracticeQRemoteSession: practiceQWorker.startPracticeQRemoteSession,
     }));
@@ -187,7 +189,10 @@ async function pollQueuedJobs() {
         lastError: result.error,
       });
       if (result.status === "failed") {
-        await modules.dbServer.orderDb.update(job.orderId, { practiceQStatus: "error" }).catch(() => {});
+        const practiceQStatus = modules.getPracticeQStatusAfterWorkerResult(result);
+        if (practiceQStatus) {
+          await modules.dbServer.orderDb.update(job.orderId, { practiceQStatus }).catch(() => {});
+        }
       } else if (result.status === "completed") {
         await modules.completePracticeQSession(job.id).catch((error) => {
           console.error("PracticeQ completion follow-up failed:", error instanceof Error ? error.message : error);

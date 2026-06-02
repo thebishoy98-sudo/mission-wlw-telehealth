@@ -121,6 +121,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("question?.Attachments");
   });
 
+  it("does not submit PracticeQ jobs until identity is actually verified", () => {
+    expect(workerSource).toContain('order.identityStatus !== "verified"');
+    expect(workerSource).toContain("PracticeQ deferred until verified identity");
+    expect(workerSource).toContain("getPracticeQStatusAfterWorkerResult");
+    expect(remoteServerSource).toContain("getPracticeQStatusAfterWorkerResult(result)");
+  });
+
   it("reads IntakeQ prompts from ancestor headings for standalone text inputs", () => {
     expect(workerSource).toContain('querySelector?.("h1,h2,h3,h4,h5,h6,label")');
   });
