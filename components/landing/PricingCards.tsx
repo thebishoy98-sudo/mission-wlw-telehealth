@@ -93,7 +93,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                 <div className="mb-5">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-widest mb-1 ${
-                      d.highlight ? "text-green-300" : "text-forest-700"
+                      d.highlight ? "text-rose-300" : "text-forest-700"
                     }`}
                   >
                     {d.weekly}
@@ -128,7 +128,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   </div>
                   <div
                     className={`text-xs mt-1 ${
-                      d.highlight ? "text-green-300" : "text-forest-700"
+                      d.highlight ? "text-rose-300" : "text-forest-700"
                     }`}
                   >
                     ~${d.monthly}/month
@@ -145,7 +145,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     >
                       <span
                         className={`shrink-0 font-bold mt-0.5 ${
-                          d.highlight ? "text-green-300" : "text-forest-700"
+                          d.highlight ? "text-rose-300" : "text-forest-700"
                         }`}
                       >
                         ✓

@@ -26,7 +26,7 @@ export function Button({
     "inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest-800 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed select-none touch-manipulation";
 
   const variants = {
-    primary:  "bg-forest-800 hover:bg-forest-700 text-white shadow-md shadow-forest-900/20 active:opacity-90",
+    primary:  "bg-gradient-to-r from-[#bf0536] to-[#d90b57] hover:from-[#a5042f] hover:to-[#c0084d] text-white shadow-md active:opacity-90",
     secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300",
     outline:  "border-2 border-forest-800 text-forest-800 hover:bg-forest-50 active:bg-forest-100",
     ghost:    "text-forest-800 hover:bg-forest-50 active:bg-forest-100",

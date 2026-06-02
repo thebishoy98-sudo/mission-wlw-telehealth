@@ -7,7 +7,7 @@ export function PromoBar({ ctaUrl }: { ctaUrl: string }) {
       Free provider consultation included this month.{" "}
       <Link
         href={ctaUrl}
-        className="font-semibold underline underline-offset-2 hover:text-green-200 transition-colors"
+        className="font-semibold underline underline-offset-2 hover:text-white/80 transition-colors"
       >
         Claim your spot →
       </Link>

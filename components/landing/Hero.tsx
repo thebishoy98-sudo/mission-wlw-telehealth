@@ -81,14 +81,14 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             <div className="bg-forest-800 rounded-2xl sm:rounded-3xl p-6 sm:p-8 text-white overflow-hidden relative">
               <div className="absolute inset-0 bg-gradient-to-br from-forest-700/30 to-transparent pointer-events-none" />
               <div className="relative">
-                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-green-300 mb-5">
+                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-rose-300 mb-5">
                   Real Patient Outcomes
                 </p>
                 <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-7">
                   {STATS.map((s) => (
                     <div key={s.label}>
                       <div className="text-2xl sm:text-3xl font-bold leading-none mb-0.5">{s.value}</div>
-                      <div className="text-[11px] text-green-300 mb-0.5">{s.sub}</div>
+                      <div className="text-[11px] text-rose-300 mb-0.5">{s.sub}</div>
                       <div className="text-[11px] text-white/50">{s.label}</div>
                     </div>
                   ))}

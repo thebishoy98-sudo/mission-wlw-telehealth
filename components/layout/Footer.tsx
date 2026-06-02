@@ -19,7 +19,7 @@ export function Footer() {
             <p className="text-gray-400 text-sm leading-relaxed">
               Medical weight management with GLP-1 therapy. Board-certified providers, FDA-regulated pharmacies, direct-to-door delivery.
             </p>
-            <a href="mailto:service@missionwlw.com" className="block mt-3 text-sm text-green-300 hover:text-green-200">
+            <a href="mailto:service@missionwlw.com" className="block mt-3 text-sm text-blue-300 hover:text-blue-200">
               service@missionwlw.com
             </a>
           </div>

@@ -12,15 +12,15 @@ export function LandingHeader({ ctaUrl }: LandingHeaderProps) {
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
       {/* Trust strip */}
-      <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white text-center text-xs font-medium py-2 px-4">
+      <div className="bg-gradient-to-r from-[#022859] to-[#0d3d87] text-white text-center text-xs font-medium py-2 px-4">
         <span className="flex items-center justify-center gap-3 flex-wrap">
           <span className="flex items-center gap-1.5">
             <Shield className="w-3 h-3" aria-hidden="true" />
             US-licensed providers
           </span>
-          <span className="text-red-300" aria-hidden="true">·</span>
+          <span className="text-white/50" aria-hidden="true">·</span>
           <span>No insurance needed</span>
-          <span className="text-red-300" aria-hidden="true">·</span>
+          <span className="text-white/50" aria-hidden="true">·</span>
           <span className="flex items-center gap-1.5">
             <Stethoscope className="w-3 h-3" aria-hidden="true" />
             FDA-regulated pharmacy
@@ -42,7 +42,7 @@ export function LandingHeader({ ctaUrl }: LandingHeaderProps) {
         </Link>
 
         <Link href={ctaUrl}>
-          <span className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-red-900/20 focus-visible:outline-2 focus-visible:outline-rose-400">
+          <span className="inline-flex items-center gap-2 bg-gradient-to-r from-[#bf0536] to-[#d90b57] hover:from-[#a5042f] hover:to-[#c0084d] text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md active:opacity-90">
             Check My Eligibility
             <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
           </span>
