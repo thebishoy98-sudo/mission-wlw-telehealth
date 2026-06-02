@@ -10,7 +10,7 @@ export const tirzepatideProduct: Product = {
   longDescription:
     "A provider-reviewed 8-week compounded Tirzepatide prescription. Choose the dose that matches your prescribed weekly amount.",
   startingPrice: 349,
-  image: "/product-tirzepatide.svg",
+  image: "/tirzepatide-vial.jpg",
   doses: [
     {
       id: "tirzepatide_20mg_8_week",
