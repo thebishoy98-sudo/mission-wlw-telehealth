@@ -31,6 +31,21 @@ body {
   }
 }
 
+/* Marquee */
+.marquee-track { overflow: hidden; width: 100%; }
+.marquee-content { display: flex; animation: marquee 35s linear infinite; width: max-content; }
+.marquee-content:hover { animation-play-state: paused; }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+/* Reviews carousel (faster scroll, separate instance) */
+.reviews-track { overflow: hidden; width: 100%; }
+.reviews-content { display: flex; gap: 1.5rem; animation: marquee 40s linear infinite; width: max-content; }
+/* pb for mobile sticky CTA */
+.landing-body { padding-bottom: 5rem; }
+@media (min-width: 768px) { .landing-body { padding-bottom: 0; } }
+
 *:focus-visible {
   outline: 2px solid #0d9488;
   outline-offset: 2px;

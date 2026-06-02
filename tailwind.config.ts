@@ -8,6 +8,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        forest: {
+          50:  "#f0fdf4",
+          100: "#dcfce7",
+          200: "#bbf7d0",
+          300: "#86efac",
+          400: "#4ade80",
+          500: "#22c55e",
+          600: "#16a34a",
+          700: "#2d6a4f",
+          800: "#1b4332",
+          900: "#081c15",
+        },
+        cream: {
+          50:  "#fefdfb",
+          100: "#f8f6f1",
+          200: "#f0ebe0",
+          300: "#e8dfd0",
+        },
         teal: {
           50:  "#f0fdfa",
           100: "#ccfbf1",
