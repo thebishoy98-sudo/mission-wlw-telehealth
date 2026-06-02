@@ -19,11 +19,11 @@ export function LandingNav({ ctaUrl }: { ctaUrl: string }) {
         {/* Logo */}
         <Link href="/" className="flex items-center shrink-0">
           <Image
-            src="/mission-logo.jpeg"
+            src="/mission-logo-full.jpeg"
             alt="Mission Weight Loss & Wellness"
-            width={130}
-            height={40}
-            className="h-8 sm:h-10 w-auto object-contain ring-[3px] ring-inset ring-white rounded-sm"
+            width={200}
+            height={62}
+            className="h-9 sm:h-11 w-auto object-contain"
             priority
           />
         </Link>

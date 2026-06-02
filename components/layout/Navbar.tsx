@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -55,11 +56,15 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
         <div className="flex items-center justify-between h-16">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-forest-800 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">M</span>
-            </div>
-            <span className="text-base font-bold text-gray-900 tracking-tight">Mission WLW</span>
+          <Link href="/" className="flex items-center shrink-0">
+            <Image
+              src="/mission-logo-full.jpeg"
+              alt="Mission Weight Loss & Wellness"
+              width={160}
+              height={50}
+              className="h-9 w-auto object-contain"
+              priority
+            />
           </Link>
 
           {/* Desktop nav */}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export function Footer() {
   return (
@@ -6,11 +7,14 @@ export function Footer() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div className="sm:col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-forest-800 flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-sm">M</span>
-              </div>
-              <span className="text-base font-bold text-white tracking-tight">Mission WLW</span>
+            <div className="mb-4">
+              <Image
+                src="/mission-logo-icon.jpeg"
+                alt="Mission Weight Loss & Wellness"
+                width={48}
+                height={48}
+                className="w-10 h-10 object-contain rounded-lg"
+              />
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
               Medical weight management with GLP-1 therapy. Board-certified providers, FDA-regulated pharmacies, direct-to-door delivery.

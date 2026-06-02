@@ -48,11 +48,11 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
             <Image
-              src="/mission-logo.jpeg"
+              src="/mission-logo-icon.jpeg"
               alt="Mission Weight Loss and Wellness"
-              width={120}
-              height={40}
-              className="h-10 w-auto object-contain mb-4 brightness-0 invert"
+              width={48}
+              height={48}
+              className="w-10 h-10 object-contain rounded-lg mb-4"
             />
             <p className="text-sm text-white/55 leading-relaxed mb-4">
               Board-certified providers. FDA-regulated compounded Tirzepatide.
