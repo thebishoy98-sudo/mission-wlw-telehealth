@@ -29,7 +29,7 @@ export function buildPracticeQFillPlan(
     { prompt: "Last Name", value: patient.lastName },
     { prompt: "Full Name", value: [patient.firstName, patient.lastName].filter(Boolean).join(" ") },
     { prompt: "Email", value: patient.email },
-    { prompt: "Phone Number", value: patient.phone },
+    { prompt: "Phone Number", value: formatPracticeQPhone(patient.phone) },
     { prompt: "Date of Birth", value: formatPracticeQDate(patient.dateOfBirth) },
     { prompt: "Gender", value: patient.gender },
     { prompt: "Address", value: shippingAddress.street1 },
@@ -176,6 +176,13 @@ export function formatPracticeQDate(value: string): string {
   const slashDate = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (slashDate) return `${pad(slashDate[1])}/${pad(slashDate[2])}/${slashDate[3]}`;
   return trimmed;
+}
+
+export function formatPracticeQPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  const tenDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (tenDigits.length !== 10) return value.trim();
+  return `(${tenDigits.slice(0, 3)}) ${tenDigits.slice(3, 6)}-${tenDigits.slice(6)}`;
 }
 
 function isConsentPrompt(text: string): boolean {

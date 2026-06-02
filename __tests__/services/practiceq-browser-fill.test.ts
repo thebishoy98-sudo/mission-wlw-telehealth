@@ -2,6 +2,7 @@ import {
   answerMatchesPracticeQChoice,
   buildPracticeQFillPlan,
   formatPracticeQDate,
+  formatPracticeQPhone,
   findPracticeQChoiceForLabel,
   findPracticeQAnswerForPrompt,
   requiresUnhandledPatientConsent,
@@ -42,6 +43,7 @@ describe("PracticeQ browser fill plan", () => {
         { prompt: "Last Name", value: "Kamel" },
         { prompt: "Date of Birth", value: "04/14/1998" },
         { prompt: "Email", value: "thebishoy98@gmail.com" },
+        { prompt: "Phone Number", value: "(732) 822-8376" },
         { prompt: "What is your height?", value: "5 ft 11 in" },
         { prompt: "What is your current body weight?", value: "215" },
         { prompt: "This intake form is for....", value: "Weight loss" },
@@ -57,13 +59,19 @@ describe("PracticeQ browser fill plan", () => {
     const plan = buildPracticeQFillPlan(patient, answers, questions);
 
     expect(findPracticeQAnswerForPrompt("What is your current body weight?", plan)).toBe("215");
-    expect(findPracticeQAnswerForPrompt("Phone Number", plan)).toBe("7328228376");
+    expect(findPracticeQAnswerForPrompt("Phone Number", plan)).toBe("(732) 822-8376");
     expect(findPracticeQAnswerForPrompt("Unknown prompt", plan)).toBeNull();
   });
 
   it("formats browser date input values for PracticeQ's MM/DD/YYYY field", () => {
     expect(formatPracticeQDate("1998-04-14")).toBe("04/14/1998");
     expect(formatPracticeQDate("4/14/1998")).toBe("04/14/1998");
+  });
+
+  it("formats US phone numbers for PracticeQ phone validation", () => {
+    expect(formatPracticeQPhone("7328228376")).toBe("(732) 822-8376");
+    expect(formatPracticeQPhone("+1 (732) 822-8376")).toBe("(732) 822-8376");
+    expect(formatPracticeQPhone("449-8740")).toBe("449-8740");
   });
 
   it("matches radio and checkbox labels against the answer for their containing PracticeQ question", () => {
