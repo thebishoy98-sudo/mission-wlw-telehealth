@@ -232,6 +232,63 @@ describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
       })
     );
   });
+
+  it("marks matching PracticeQ checkbox options selected when applying Mission answers", () => {
+    const intakeQuestions = [
+      {
+        Id: "practiceq_conditions",
+        Text: "Select any that apply to you?",
+        Answer: "",
+        QuestionOptions: [
+          { Text: "I'm Pregnant", Checked: false },
+          { Text: "History of Diabetes", Checked: false },
+          { Text: "None apply to me", Checked: false },
+        ],
+      },
+    ];
+    const conditionQuestions: Question[] = [
+      {
+        id: "pq_conditions",
+        category: "medical_history",
+        text: "Select any that apply to you?",
+        type: "checkbox",
+        required: true,
+        options: ["None apply to me"],
+        displayOrder: 3,
+      },
+    ];
+    const conditionAnswers: QuestionnaireAnswer[] = [
+      {
+        id: "a_conditions",
+        orderId: "o1",
+        questionId: "pq_conditions",
+        answer: "None apply to me",
+        createdAt: "2026-05-27T00:00:00.000Z",
+      },
+    ];
+
+    const changed = practiceq.applyMissionAnswersToPracticeQQuestions(intakeQuestions, {
+      patient: makePatient(),
+      answers: conditionAnswers,
+      questions: conditionQuestions,
+    });
+
+    expect(changed).toBe(true);
+    expect(intakeQuestions[0]).toMatchObject({
+      Answer: "None apply to me",
+      QuestionOptions: [
+        expect.objectContaining({ Text: "I'm Pregnant", Checked: false }),
+        expect.objectContaining({ Text: "History of Diabetes", Checked: false }),
+        expect.objectContaining({
+          Text: "None apply to me",
+          Checked: true,
+          Selected: true,
+          IsSelected: true,
+          Answer: "None apply to me",
+        }),
+      ],
+    });
+  });
 });
 
 describe("practiceq API retry handling", () => {

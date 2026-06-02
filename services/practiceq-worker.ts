@@ -2263,12 +2263,13 @@ async function verifyPracticeQSavedSubmission(
     startedAt: string;
   }
 ): Promise<WorkerResult> {
-  if (result.status === "failed") return result;
+  const recoverableSubmitRejection = isRecoverablePracticeQSubmitRejection(result);
+  if (result.status === "failed" && !recoverableSubmitRejection) return result;
 
   // If no API key is configured, trust the browser submit result directly.
   if (!process.env.PRACTICEQ_API_KEY) {
     console.warn("PRACTICEQ_API_KEY not set — skipping API verification, trusting browser submit.");
-    return { ...result, status: "completed" };
+    return result.status === "failed" ? result : { ...result, status: "completed" };
   }
 
   const matchedIntake = await withPracticeQTimeout(
@@ -2277,6 +2278,7 @@ async function verifyPracticeQSavedSubmission(
     "PracticeQ API verification timed out."
   ).catch(() => null);
   if (!matchedIntake) {
+    if (recoverableSubmitRejection) return result;
     return {
       ...result,
       status: "failed",
@@ -2299,7 +2301,7 @@ async function verifyPracticeQSavedSubmission(
 
   const beforeStats = countPracticeQAnswers(intake);
   const beforeStatus = String((intake as any)?.Status ?? matchedIntake.status ?? "");
-  if (beforeStats.answered < beforeStats.total || !/completed/i.test(beforeStatus)) {
+  if (recoverableSubmitRejection || beforeStats.answered < beforeStats.total || !/completed/i.test(beforeStatus)) {
     intake = await withPracticeQTimeout(
       populateAndUpdatePracticeQIntake(intake, {
         patient: context.patient as any,
@@ -2353,6 +2355,13 @@ async function verifyPracticeQSavedSubmission(
   }
 
   return { ...result, status: "completed", intakeId: matchedIntake.id };
+}
+
+function isRecoverablePracticeQSubmitRejection(result: WorkerResult) {
+  if (result.status !== "failed") return false;
+  const error = result.error ?? "";
+  return /PracticeQ rejected the background submit/i.test(error) &&
+    /required|not done|please answer|please complete|unanswered/i.test(error);
 }
 
 export async function waitForPracticeQCompletedStatus(

@@ -1160,9 +1160,70 @@ export function applyMissionAnswersToPracticeQQuestions(
       );
     if (!answer) continue;
     entry.Answer = answer;
+    applyPracticeQChoiceAnswer(entry, answer);
     changed = true;
   }
   return changed;
+}
+
+function applyPracticeQChoiceAnswer(entry: Record<string, unknown>, answer: string) {
+  const options = Array.isArray(entry.QuestionOptions)
+    ? entry.QuestionOptions
+    : Array.isArray(entry.Options)
+      ? entry.Options
+      : null;
+  if (!options) return;
+
+  let matched = false;
+  for (const rawOption of options) {
+    if (!rawOption || typeof rawOption !== "object") continue;
+    const option = rawOption as Record<string, unknown>;
+    const optionText = firstString(option.Text, option.Label, option.Value, option.Name);
+    const selected = practiceQAnswerMatchesOption(answer, optionText);
+    option.Checked = selected;
+    option.Selected = selected;
+    option.IsSelected = selected;
+    option.Answer = selected ? optionText || answer : "";
+    matched ||= selected;
+  }
+
+  if (!matched && isNegativePracticeQAnswer(answer)) {
+    const option = {
+      Text: answer,
+      Value: answer,
+      Label: answer,
+      Answer: answer,
+      Checked: true,
+      Selected: true,
+      IsSelected: true,
+      missionSyntheticNone: true,
+    };
+    options.push(option);
+  }
+}
+
+function practiceQAnswerMatchesOption(answer: string, optionText: string) {
+  const normalizedAnswer = normalizeQuestionText(answer);
+  const normalizedOption = normalizeQuestionText(optionText);
+  if (!normalizedAnswer || !normalizedOption) return false;
+  if (normalizedAnswer === normalizedOption) return true;
+  if (isNegativePracticeQAnswer(answer)) {
+    return normalizedOption === "no" || normalizedOption.includes("none");
+  }
+  return normalizedAnswer.includes(normalizedOption) || normalizedOption.includes(normalizedAnswer);
+}
+
+function isNegativePracticeQAnswer(answer: string) {
+  const normalized = normalizeQuestionText(answer);
+  return (
+    normalized === "none" ||
+    normalized === "no" ||
+    normalized === "none apply to me" ||
+    normalized === "none of the above" ||
+    normalized.includes("no known") ||
+    normalized.includes("no allergies") ||
+    normalized.includes("not applicable")
+  );
 }
 
 function buildPracticeQProfileAnswers(patient: Types.Patient) {

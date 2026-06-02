@@ -67,6 +67,13 @@ describe("PracticeQ remote worker resilience", () => {
     expect((dbSource.match(/PracticeQ rejected%background submit:%/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("recovers hosted PracticeQ drafts through the API when browser submit hits required-field validation", () => {
+    expect(workerSource).toContain("isRecoverablePracticeQSubmitRejection");
+    expect(workerSource).toContain("PracticeQ rejected the background submit");
+    expect(workerSource).toContain("populateAndUpdatePracticeQIntake(intake");
+    expect(workerSource).toContain("recoverableSubmitRejection");
+  });
+
   it("fills remaining IntakeQ vitals when label matching only fills part of the page", () => {
     expect(workerSource).toContain("filledVitals");
     expect(workerSource).toContain("if (filled < vals.length)");
