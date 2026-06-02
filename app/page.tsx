@@ -1,7 +1,6 @@
 "use client";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { PromoBar } from "@/components/landing/PromoBar";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { Hero } from "@/components/landing/Hero";
@@ -57,15 +56,7 @@ function LandingPage() {
         <LandingFooter ctaUrl={ctaUrl} />
       </main>
 
-      {/* Sticky mobile CTA bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur border-t border-gray-200 px-4 py-3">
-        <Link
-          href={ctaUrl}
-          className="block bg-forest-800 hover:bg-forest-700 active:scale-[.98] text-white font-bold text-center py-3.5 rounded-full w-full transition-all"
-        >
-          Start Free Assessment
-        </Link>
-      </div>
+
     </div>
   );
 }
