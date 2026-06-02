@@ -860,6 +860,21 @@ export const practiceqAutomationJobDb = {
     return rows[0] ? rowToPracticeQAutomationJob(rows[0]) : null;
   },
 
+  // Returns any non-totally-failed job for this patient across all their orders.
+  // Used to prevent creating duplicate PracticeQ charts when a patient
+  // has multiple checkout attempts or retries.
+  async getActiveByPatient(patientId: string): Promise<PracticeQAutomationJob | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM practiceq_automation_jobs
+      WHERE patient_id = ${patientId}
+        AND NOT (status = 'failed' AND intake_id IS NULL)
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    return rows[0] ? rowToPracticeQAutomationJob(rows[0]) : null;
+  },
+
   async getQueued(limit = 10): Promise<PracticeQAutomationJob[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`

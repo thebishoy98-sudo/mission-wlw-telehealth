@@ -453,10 +453,9 @@ export async function POST(req: NextRequest) {
     let updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(getPublicBaseUrl(req), identityUploadToken) : "";
-    // Skip PracticeQ for reorders that reuse prior identity (chart already exists),
-    // and for new orders where identity was not submitted — the job will be created
-    // when admin approves identity (practiceQStatus = "waiting_identity" signals this).
-    const skipPracticeQAutomation = checkoutIdentityReused || identityStatus === "missing";
+    // Skip PracticeQ only for reorders that reuse a prior verified identity
+    // (chart already exists in PracticeQ for that patient).
+    const skipPracticeQAutomation = checkoutIdentityReused;
     let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
 
     if (pharmacyDispatchHeldForPayment) {
@@ -522,29 +521,32 @@ export async function POST(req: NextRequest) {
     // 9. PracticeQ — queue browser automation for new intakes only. Reorders that
     // reuse a previous verified order keep the prior chart and skip a duplicate form.
     if (skipPracticeQAutomation) {
-      const pqSkipStatus = checkoutIdentityReused ? "skipped" : "waiting_identity";
-      const pqSkipReason = checkoutIdentityReused
-        ? "PracticeQ automation skipped for returning-patient reorder"
-        : "PracticeQ automation deferred until identity is verified";
-      updatedOrder = { ...updatedOrder, practiceQStatus: pqSkipStatus };
-      db.orderDb.update(orderId, { practiceQStatus: pqSkipStatus });
-      await dbServer.orderDb.update(orderId, { practiceQStatus: pqSkipStatus }).catch(() => {});
+      updatedOrder = { ...updatedOrder, practiceQStatus: "skipped" };
+      db.orderDb.update(orderId, { practiceQStatus: "skipped" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "skipped" }).catch(() => {});
       await dbServer.integrationLogDb.create({
         id: generateId(),
         timestamp: new Date().toISOString(),
         integrationName: "practiceq",
-        action: pqSkipReason,
+        action: "PracticeQ automation skipped for returning-patient reorder",
         orderId,
         patientId: patient.id,
         status: "success",
         details: { source: "payment_charge", reason: identityAiResult.summary },
       }).catch(() => {});
     } else try {
-      // Guard: only one job per order. If a job already exists (e.g. from a prior
-      // checkout retry) reuse it rather than inserting a duplicate row.
+      // Guard 1: only one job per order (handles checkout retries for the same order).
       const existingPqJob = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
+
+      // Guard 2: only one active chart per patient across all orders. If the patient
+      // already has a queued/running/completed job — or a failed job that already created
+      // an intake — reuse it rather than creating a duplicate form in IntakeQ.
+      const activePatientJob = existingPqJob
+        ? null
+        : await dbServer.practiceqAutomationJobDb.getActiveByPatient(patient.id).catch(() => null);
+
       if (existingPqJob) {
-        // Already has a job — requeue it if it failed, otherwise leave it alone.
+        // Same order retry — requeue if failed, otherwise leave alone.
         if (existingPqJob.status === "failed") {
           await dbServer.practiceqAutomationJobDb.update(existingPqJob.id, {
             status: "queued",
@@ -553,6 +555,18 @@ export async function POST(req: NextRequest) {
             lockedAt: undefined,
           }).catch(() => {});
         }
+      } else if (activePatientJob) {
+        // Patient already has a chart being created or completed — don't create another.
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "practiceq",
+          action: "PracticeQ job skipped — patient already has an active job",
+          orderId,
+          patientId: patient.id,
+          status: "success",
+          details: { existingJobId: activePatientJob.id, existingJobStatus: activePatientJob.status },
+        }).catch(() => {});
       } else {
         const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
         await dbServer.practiceqAutomationJobDb.create(automationJob);
