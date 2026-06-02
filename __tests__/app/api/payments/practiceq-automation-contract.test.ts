@@ -3,19 +3,30 @@ import path from "path";
 
 describe("payment to PracticeQ automation contract", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+  const orchestrationSource = fs.readFileSync(
+    path.join(process.cwd(), "services/practiceq-automation-orchestration.ts"),
+    "utf8"
+  );
   const legacyIntakeSource = fs.readFileSync(path.join(process.cwd(), "app/api/intake/submit/route.ts"), "utf8");
 
   it("queues browser automation after payment instead of directly submitting PracticeQ from checkout", () => {
-    expect(source).toContain("createPracticeQAutomationJob");
-    expect(source).toContain("practiceqAutomationJobDb.create");
+    expect(source).toContain("queuePracticeQAutomationForOrder");
+    expect(orchestrationSource).toContain("createPracticeQAutomationJob");
+    expect(orchestrationSource).toContain("practiceqAutomationJobDb.create");
     expect(source).not.toContain("practiceq.submitIntakePacket");
   });
 
   it("skips PracticeQ automation when checkout reused a previous verified order", () => {
-    expect(source).toContain("skipPracticeQAutomation");
+    expect(source).toContain('practiceQAutomationDecision === "skip_reorder"');
     expect(source).toContain("checkoutIdentityReused");
     expect(source).toContain('practiceQStatus: "skipped"');
     expect(source).toContain("PracticeQ automation skipped for returning-patient reorder");
+  });
+
+  it("defers PracticeQ automation when payment completes but identity is missing", () => {
+    expect(source).toContain("getPracticeQAutomationAfterPaymentDecision");
+    expect(source).toContain("defer_identity");
+    expect(source).toContain("PracticeQ automation deferred pending identity verification");
   });
 
   it("does not dispatch to a real pharmacy when payment was bypassed", () => {
@@ -25,16 +36,16 @@ describe("payment to PracticeQ automation contract", () => {
   });
 
   it("does not swallow failed server PracticeQ job inserts as a pending state", () => {
-    expect(source).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
+    expect(orchestrationSource).toContain("await dbServer.practiceqAutomationJobDb.create(automationJob);");
     expect(source).toContain("PracticeQ automation queue failed");
   });
 
   it("wakes the remote PracticeQ worker immediately after queueing the job", () => {
     expect(source).toContain("wakePracticeQRemoteWorker");
-    expect(source).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
-    expect(source).toContain('new URL(process.env.PRACTICEQ_API_KEY ? "/wake" : "/health"');
-    expect(source).toContain("PRACTICEQ_REMOTE_WAKE_TIMEOUT_MS ?? 90000");
-    expect(source).toContain('"x-practiceq-api-key": process.env.PRACTICEQ_API_KEY');
+    expect(orchestrationSource).toContain("PRACTICEQ_REMOTE_PUBLIC_URL");
+    expect(orchestrationSource).toContain('new URL(process.env.PRACTICEQ_API_KEY ? "/wake" : "/health"');
+    expect(orchestrationSource).toContain("PRACTICEQ_REMOTE_WAKE_TIMEOUT_MS ?? 90000");
+    expect(orchestrationSource).toContain('"x-practiceq-api-key": process.env.PRACTICEQ_API_KEY');
   });
 
   it("temporarily bypasses live QuickBooks payment and accounting while the intake automation is tested", () => {

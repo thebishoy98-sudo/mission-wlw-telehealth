@@ -25,7 +25,10 @@ import * as quickbooks from "@/services/quickbooks";
 import * as pharmacy from "@/services/pharmacy";
 import * as spruceServer from "@/services/spruce.server";
 import { sendAdminNotification } from "@/services/admin-notifications";
-import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
+import {
+  queuePracticeQAutomationForOrder,
+  wakePracticeQRemoteWorker,
+} from "@/services/practiceq-automation-orchestration";
 import { checkEligibility } from "@/lib/eligibility";
 import { seedQuestions } from "@/data/seed-data";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
@@ -38,7 +41,11 @@ import { validatePaymentQuestionnaire } from "@/lib/payment-questionnaire";
 import { ensurePracticeQRequiredQuestions } from "@/lib/questionnaire-catalog";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { shouldBypassQuickBooksPayment } from "@/lib/payment-bypass";
-import { canDispatchPharmacyAfterPayment, isRealPharmacyEnabled } from "@/lib/payment-dispatch-safety";
+import {
+  canDispatchPharmacyAfterPayment,
+  getPracticeQAutomationAfterPaymentDecision,
+  isRealPharmacyEnabled,
+} from "@/lib/payment-dispatch-safety";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
 import {
@@ -49,28 +56,6 @@ import {
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { Payment } from "@/types";
-
-async function wakePracticeQRemoteWorker() {
-  const remoteBase = process.env.PRACTICEQ_REMOTE_PUBLIC_URL;
-  if (!remoteBase) return;
-
-  const wakeUrl = new URL(process.env.PRACTICEQ_API_KEY ? "/wake" : "/health", remoteBase).toString();
-  const timeoutMs = Number(process.env.PRACTICEQ_REMOTE_WAKE_TIMEOUT_MS ?? 90000);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    await fetch(wakeUrl, {
-      cache: "no-store",
-      method: process.env.PRACTICEQ_API_KEY ? "POST" : "GET",
-      headers: process.env.PRACTICEQ_API_KEY
-        ? { "x-practiceq-api-key": process.env.PRACTICEQ_API_KEY }
-        : undefined,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -452,10 +437,16 @@ export async function POST(req: NextRequest) {
     let updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(getPublicBaseUrl(req), identityUploadToken) : "";
-    // Skip PracticeQ only for reorders that reuse a prior verified identity
-    // (chart already exists in PracticeQ for that patient).
-    const skipPracticeQAutomation = checkoutIdentityReused;
-    let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
+    const practiceQAutomationDecision = getPracticeQAutomationAfterPaymentDecision({
+      identityCanDispatch: dispatchGate.canDispatch,
+      checkoutIdentityReused,
+    });
+    let practiceQAutomationStatus: "queued" | "error" | "skipped" | "deferred" =
+      practiceQAutomationDecision === "skip_reorder"
+        ? "skipped"
+        : practiceQAutomationDecision === "defer_identity"
+          ? "deferred"
+          : "queued";
 
     if (pharmacyDispatchHeldForPayment) {
       const holdMessage = "Real pharmacy dispatch held because payment was bypassed";
@@ -517,9 +508,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 9. PracticeQ — queue browser automation for new intakes only. Reorders that
-    // reuse a previous verified order keep the prior chart and skip a duplicate form.
-    if (skipPracticeQAutomation) {
+    // 9. PracticeQ — queue browser automation only when the chart has enough
+    // verified identity context to complete without repeated worker failures.
+    if (practiceQAutomationDecision === "skip_reorder") {
       updatedOrder = { ...updatedOrder, practiceQStatus: "skipped" };
       db.orderDb.update(orderId, { practiceQStatus: "skipped" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "skipped" }).catch(() => {});
@@ -533,46 +524,26 @@ export async function POST(req: NextRequest) {
         status: "success",
         details: { source: "payment_charge", reason: identityAiResult.summary },
       }).catch(() => {});
-    } else try {
-      // Guard 1: only one job per order (handles checkout retries for the same order).
-      const existingPqJob = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
-
-      // Guard 2: only one active chart per patient across all orders. If the patient
-      // already has a queued/running/completed job — or a failed job that already created
-      // an intake — reuse it rather than creating a duplicate form in IntakeQ.
-      const activePatientJob = existingPqJob
-        ? null
-        : await dbServer.practiceqAutomationJobDb.getActiveByPatient(patient.id).catch(() => null);
-
-      if (existingPqJob) {
-        // Same order retry — requeue if failed, otherwise leave alone.
-        if (existingPqJob.status === "failed") {
-          await dbServer.practiceqAutomationJobDb.update(existingPqJob.id, {
-            status: "queued",
-            attempts: 0,
-            lastError: undefined,
-            lockedAt: undefined,
-          }).catch(() => {});
-        }
-      } else if (activePatientJob) {
-        // Patient already has a chart being created or completed — don't create another.
-        await dbServer.integrationLogDb.create({
-          id: generateId(),
-          timestamp: new Date().toISOString(),
-          integrationName: "practiceq",
-          action: "PracticeQ job skipped — patient already has an active job",
-          orderId,
-          patientId: patient.id,
-          status: "success",
-          details: { existingJobId: activePatientJob.id, existingJobStatus: activePatientJob.status },
-        }).catch(() => {});
-      } else {
-        const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
-        await dbServer.practiceqAutomationJobDb.create(automationJob);
-        db.practiceqAutomationJobDb.create(automationJob);
-      }
+    } else if (practiceQAutomationDecision === "defer_identity") {
+      updatedOrder = { ...updatedOrder, practiceQStatus: "pending" };
       db.orderDb.update(orderId, { practiceQStatus: "pending" });
-      await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" }).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "practiceq",
+        action: "PracticeQ automation deferred pending identity verification",
+        orderId,
+        patientId: patient.id,
+        status: "success",
+        details: { source: "payment_charge", reason: identityAiResult.summary },
+      }).catch(() => {});
+    } else try {
+      await queuePracticeQAutomationForOrder({
+        order: updatedOrder,
+        patient,
+        source: "payment_charge",
+      });
       await wakePracticeQRemoteWorker().catch(() => {});
     } catch (e) {
       const errorMessage = (e as Error).message;

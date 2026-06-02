@@ -4,9 +4,8 @@ import * as dbServer from "@/lib/db.server";
 import {
   buildManualIdentityApprovalOrderUpdate,
   buildManualIdentityApprovalReviewUpdate,
-  shouldRetryPracticeQCompletionAfterIdentityApproval,
 } from "@/lib/identity-approval";
-import { completePracticeQSession } from "@/lib/practiceq-session-completion";
+import { resumePracticeQAfterIdentityApproval } from "@/services/practiceq-automation-orchestration";
 import { requireAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
@@ -43,16 +42,17 @@ export async function POST(req: NextRequest) {
     }
 
     const dispatchOrder = updatedOrder ?? { ...order, ...update };
-    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
-    if (shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)) {
-      const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
-      if (job) {
-        practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
-          status: "pharmacy_error" as const,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      }
-    }
+    const patient =
+      (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+      db.patientDb.getById(order.patientId);
+    const practiceQCompletion = await resumePracticeQAfterIdentityApproval({
+      order: dispatchOrder,
+      patient,
+      source: "identity_approval",
+    }).catch((error) => ({
+      status: "pharmacy_error" as const,
+      error: error instanceof Error ? error.message : String(error),
+    }));
 
     return NextResponse.json({
       success: true,

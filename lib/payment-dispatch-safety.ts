@@ -34,3 +34,20 @@ export function canDispatchPharmacyAfterPayment({
 }) {
   return identityCanDispatch && !(paymentBypassed && realPharmacyEnabled);
 }
+
+export type PracticeQAutomationAfterPaymentDecision =
+  | "queue"
+  | "skip_reorder"
+  | "defer_identity";
+
+export function getPracticeQAutomationAfterPaymentDecision({
+  identityCanDispatch,
+  checkoutIdentityReused,
+}: {
+  identityCanDispatch: boolean;
+  checkoutIdentityReused: boolean;
+}): PracticeQAutomationAfterPaymentDecision {
+  if (checkoutIdentityReused) return "skip_reorder";
+  if (!identityCanDispatch) return "defer_identity";
+  return "queue";
+}

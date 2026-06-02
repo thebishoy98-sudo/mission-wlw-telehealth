@@ -8,9 +8,8 @@ import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/ide
 import {
   buildIdentityUploadOrderUpdate,
   buildIdentityUploadReviewUpdate,
-  shouldRetryPracticeQCompletionAfterIdentityApproval,
 } from "@/lib/identity-approval";
-import { completePracticeQSession } from "@/lib/practiceq-session-completion";
+import { resumePracticeQAfterIdentityApproval } from "@/services/practiceq-automation-orchestration";
 import { sendAdminNotification } from "@/services/admin-notifications";
 import * as spruceServer from "@/services/spruce.server";
 
@@ -121,15 +120,16 @@ export async function POST(req: NextRequest) {
     logPhiDisclosure(order.patientId, order.id, "anthropic", auditCtx.actor ?? "system");
 
     const dispatchOrder = updatedOrder ?? { ...order, ...identityUpdate };
-    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
-    if (identityStatus === "verified" && shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)) {
-      const job = await dbServer.practiceqAutomationJobDb.getByOrder(order.id).catch(() => null);
-      if (job && (job.status === "completed" || dispatchOrder.practiceQStatus === "completed" || job.intakeId)) {
-        practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
-          status: "pharmacy_error" as const,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      }
+    let practiceQCompletion: Awaited<ReturnType<typeof resumePracticeQAfterIdentityApproval>> | undefined;
+    if (identityStatus === "verified") {
+      practiceQCompletion = await resumePracticeQAfterIdentityApproval({
+        order: dispatchOrder,
+        patient,
+        source: "identity_upload",
+      }).catch((error) => ({
+        status: "pharmacy_error" as const,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
 
     if (patient) {

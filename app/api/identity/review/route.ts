@@ -5,11 +5,9 @@ import { getIdentityReviewUpdate } from "@/lib/identity";
 import {
   buildManualIdentityApprovalOrderUpdate,
   buildManualIdentityApprovalReviewUpdate,
-  shouldRetryPracticeQCompletionAfterIdentityApproval,
 } from "@/lib/identity-approval";
-import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import { requireAdmin } from "@/lib/server-auth";
-import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
+import { resumePracticeQAfterIdentityApproval } from "@/services/practiceq-automation-orchestration";
 
 export const dynamic = "force-dynamic";
 
@@ -104,23 +102,19 @@ export async function POST(req: NextRequest) {
     }).catch(() => {});
 
     const dispatchOrder = updatedOrder ?? { ...order, ...update };
-    let practiceQCompletion: Awaited<ReturnType<typeof completePracticeQSession>> | undefined;
-    if (action === "approve" && shouldRetryPracticeQCompletionAfterIdentityApproval(dispatchOrder)) {
-      const job = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
-      if (job) {
-        practiceQCompletion = await completePracticeQSession(job.id).catch((error) => ({
-          status: "pharmacy_error" as const,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      } else {
-        // No PracticeQ job exists for this order (blocked by dedup at checkout).
-        // Create one now so the automation worker fills the form.
-        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
-        if (patient) {
-          const newJob = createPracticeQAutomationJob(dispatchOrder, patient);
-          await dbServer.practiceqAutomationJobDb.create(newJob).catch(() => {});
-        }
-      }
+    let practiceQCompletion: Awaited<ReturnType<typeof resumePracticeQAfterIdentityApproval>> | undefined;
+    if (action === "approve") {
+      const patient =
+        (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
+        db.patientDb.getById(order.patientId);
+      practiceQCompletion = await resumePracticeQAfterIdentityApproval({
+        order: dispatchOrder,
+        patient,
+        source: "identity_review",
+      }).catch((error) => ({
+        status: "pharmacy_error" as const,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
 
     return NextResponse.json({ success: true, orderId, update, practiceQCompletion });

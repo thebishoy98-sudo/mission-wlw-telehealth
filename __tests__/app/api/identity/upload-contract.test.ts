@@ -3,6 +3,10 @@ import path from "path";
 
 describe("identity upload route contract", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/api/identity/upload/route.ts"), "utf8");
+  const orchestrationSource = fs.readFileSync(
+    path.join(process.cwd(), "services/practiceq-automation-orchestration.ts"),
+    "utf8"
+  );
   const pageSource = fs.readFileSync(path.join(process.cwd(), "app/verify-identity/[token]/page.tsx"), "utf8");
 
   it("validates identity upload tokens before patients record media", () => {
@@ -16,9 +20,10 @@ describe("identity upload route contract", () => {
   it("resumes the PracticeQ completion workflow after delayed verified identity", () => {
     expect(source).toContain("buildIdentityUploadOrderUpdate");
     expect(source).toContain("buildIdentityUploadReviewUpdate");
-    expect(source).toContain("shouldRetryPracticeQCompletionAfterIdentityApproval");
-    expect(source).toContain("dbServer.practiceqAutomationJobDb.getByOrder(order.id)");
-    expect(source).toContain("completePracticeQSession(job.id)");
+    expect(source).toContain("resumePracticeQAfterIdentityApproval");
+    expect(orchestrationSource).toContain("shouldRetryPracticeQCompletionAfterIdentityApproval");
+    expect(orchestrationSource).toContain("dbServer.practiceqAutomationJobDb.getByOrder(order.id)");
+    expect(orchestrationSource).toContain("completePracticeQSession(job.id)");
   });
 
   it("sends a receipt text and flags staff when delayed identity still needs review", () => {

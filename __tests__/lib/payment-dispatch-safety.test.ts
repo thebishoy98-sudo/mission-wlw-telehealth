@@ -1,4 +1,8 @@
-import { canDispatchPharmacyAfterPayment, isRealPharmacyEnabled } from "@/lib/payment-dispatch-safety";
+import {
+  canDispatchPharmacyAfterPayment,
+  getPracticeQAutomationAfterPaymentDecision,
+  isRealPharmacyEnabled,
+} from "@/lib/payment-dispatch-safety";
 
 describe("payment dispatch safety", () => {
   it("holds real pharmacy dispatch when payment was bypassed", () => {
@@ -40,5 +44,30 @@ describe("payment dispatch safety", () => {
         LIFEFILE_ENVIRONMENT: "sandbox",
       }),
     })).toBe(true);
+  });
+
+  it("defers PracticeQ automation after payment when identity is still missing", () => {
+    expect(
+      getPracticeQAutomationAfterPaymentDecision({
+        identityCanDispatch: false,
+        checkoutIdentityReused: false,
+      })
+    ).toBe("defer_identity");
+  });
+
+  it("queues PracticeQ automation only when identity is ready and skips duplicate reorder charts", () => {
+    expect(
+      getPracticeQAutomationAfterPaymentDecision({
+        identityCanDispatch: true,
+        checkoutIdentityReused: false,
+      })
+    ).toBe("queue");
+
+    expect(
+      getPracticeQAutomationAfterPaymentDecision({
+        identityCanDispatch: true,
+        checkoutIdentityReused: true,
+      })
+    ).toBe("skip_reorder");
   });
 });
