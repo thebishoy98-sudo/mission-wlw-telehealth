@@ -453,7 +453,10 @@ export async function POST(req: NextRequest) {
     let updatedOrder = { ...orderForIntegrations, ...orderUpdates };
     const errors: string[] = [];
     const identityUploadUrl = identityUploadToken ? buildIdentityUploadUrl(getPublicBaseUrl(req), identityUploadToken) : "";
-    const skipPracticeQAutomation = checkoutIdentityReused;
+    // Skip PracticeQ for reorders that reuse prior identity (chart already exists),
+    // and for new orders where identity was not submitted — the job will be created
+    // when admin approves identity (practiceQStatus = "waiting_identity" signals this).
+    const skipPracticeQAutomation = checkoutIdentityReused || identityStatus === "missing";
     let practiceQAutomationStatus: "queued" | "error" | "skipped" = skipPracticeQAutomation ? "skipped" : "queued";
 
     if (pharmacyDispatchHeldForPayment) {
@@ -519,14 +522,18 @@ export async function POST(req: NextRequest) {
     // 9. PracticeQ — queue browser automation for new intakes only. Reorders that
     // reuse a previous verified order keep the prior chart and skip a duplicate form.
     if (skipPracticeQAutomation) {
-      updatedOrder = { ...updatedOrder, practiceQStatus: "skipped" };
-      db.orderDb.update(orderId, { practiceQStatus: "skipped" });
-      await dbServer.orderDb.update(orderId, { practiceQStatus: "skipped" }).catch(() => {});
+      const pqSkipStatus = checkoutIdentityReused ? "skipped" : "waiting_identity";
+      const pqSkipReason = checkoutIdentityReused
+        ? "PracticeQ automation skipped for returning-patient reorder"
+        : "PracticeQ automation deferred until identity is verified";
+      updatedOrder = { ...updatedOrder, practiceQStatus: pqSkipStatus };
+      db.orderDb.update(orderId, { practiceQStatus: pqSkipStatus });
+      await dbServer.orderDb.update(orderId, { practiceQStatus: pqSkipStatus }).catch(() => {});
       await dbServer.integrationLogDb.create({
         id: generateId(),
         timestamp: new Date().toISOString(),
         integrationName: "practiceq",
-        action: "PracticeQ automation skipped for returning-patient reorder",
+        action: pqSkipReason,
         orderId,
         patientId: patient.id,
         status: "success",

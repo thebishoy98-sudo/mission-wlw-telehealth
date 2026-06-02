@@ -3,6 +3,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { getIdentityReviewUpdate } from "@/lib/identity";
 import { requireAdmin } from "@/lib/server-auth";
+import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,30 @@ export async function POST(req: NextRequest) {
       status: "success",
       details: { action, reviewedBy, notes },
     }).catch(() => {});
+
+    // When identity is approved, trigger PracticeQ if it was deferred waiting for identity
+    if (action === "approve" && order.practiceQStatus === "waiting_identity") {
+      try {
+        const patient = await dbServer.patientDb.getById(order.patientId).catch(() => null);
+        if (patient) {
+          const existingJob = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
+          if (!existingJob) {
+            const automationJob = createPracticeQAutomationJob(order, patient);
+            await dbServer.practiceqAutomationJobDb.create(automationJob).catch(() => {});
+            db.practiceqAutomationJobDb.create(automationJob);
+          } else if (existingJob.status === "failed" || existingJob.status === "skipped") {
+            await dbServer.practiceqAutomationJobDb.update(existingJob.id, {
+              status: "queued",
+              attempts: 0,
+              lastError: undefined,
+              lockedAt: undefined,
+            }).catch(() => {});
+          }
+          db.orderDb.update(orderId, { practiceQStatus: "pending" });
+          await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" }).catch(() => {});
+        }
+      } catch { /* PracticeQ trigger failure is non-fatal */ }
+    }
 
     return NextResponse.json({ success: true, orderId, update });
   } catch (error) {
