@@ -3,40 +3,34 @@ import { FadeUp } from "./FadeUp";
 
 const MILESTONES = [
   {
-    period: "Day 1–3",
-    title: "Consultation & Prescription",
+    period: "Day 1 to 3",
+    title: "Consultation and Prescription",
     desc: "Complete your intake, meet your provider, and get a personalized prescription written the same week.",
-    icon: "📋",
   },
   {
     period: "Week 1",
     title: "Medication Arrives",
-    desc: "Your GLP-1 medication is shipped from a licensed pharmacy and delivered to your door, discreetly.",
-    icon: "📦",
+    desc: "Your Tirzepatide is shipped from a licensed 503B pharmacy and delivered to your door, discreetly.",
   },
   {
-    period: "Month 1–2",
+    period: "Month 1 to 2",
     title: "Low-Dose Start",
-    desc: "Begin at a low starting dose. Your appetite begins to decrease. Most patients see 5–8 lbs lost.",
-    icon: "💊",
+    desc: "Begin at a low starting dose. Your appetite begins to decrease. Most patients see 5 to 8 lbs lost.",
   },
   {
-    period: "Month 2–4",
-    title: "Titration & Momentum",
-    desc: "Dose increases gradually. Weight loss accelerates. Patients typically lose 12–20 lbs by this point.",
-    icon: "📉",
+    period: "Month 2 to 4",
+    title: "Titration and Momentum",
+    desc: "Dose increases gradually. Weight loss accelerates. Patients typically lose 12 to 20 lbs by this point.",
   },
   {
-    period: "Month 4–6",
+    period: "Month 4 to 6",
     title: "Significant Results",
-    desc: "Most patients hit 10–18% body weight loss. Energy improves, cravings are minimal.",
-    icon: "🏆",
+    desc: "Most patients hit 10 to 18 percent body weight loss. Energy improves and cravings are minimal.",
   },
   {
     period: "Month 6+",
-    title: "Goal & Maintenance",
-    desc: "Reach your target weight. Work with your provider on a maintenance plan to keep results for life.",
-    icon: "🌿",
+    title: "Goal and Maintenance",
+    desc: "Reach your target weight. Work with your provider on a maintenance plan to keep results long-term.",
   },
 ];
 
@@ -52,23 +46,24 @@ export function Timeline() {
             What to Expect
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            A transparent look at your treatment timeline from first day to goal weight.
+            A transparent look at your treatment timeline from the first day to goal weight.
           </p>
         </FadeUp>
 
         <div className="relative">
-          {/* Vertical line (desktop) */}
-          <div className="hidden sm:block absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-200 -translate-x-1/2" />
+          {/* Vertical line desktop */}
+          <div className="hidden sm:block absolute left-1/2 top-0 bottom-0 w-px bg-gray-200 -translate-x-1/2" />
 
           <div className="space-y-6 sm:space-y-0">
             {MILESTONES.map((m, i) => (
               <FadeUp key={m.period} delay={i * 0.07}>
                 <div className={`relative flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-0 ${i % 2 === 0 ? "sm:flex-row" : "sm:flex-row-reverse"}`}>
-                  {/* Card */}
                   <div className={`sm:w-[calc(50%-2.5rem)] ${i % 2 === 0 ? "sm:pr-10" : "sm:pl-10"}`}>
                     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
                       <div className="flex items-center gap-3 mb-2">
-                        <span className="text-xl">{m.icon}</span>
+                        <div className="w-7 h-7 rounded-full bg-forest-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                          {i + 1}
+                        </div>
                         <span className="text-[11px] font-bold text-forest-700 uppercase tracking-wider">{m.period}</span>
                       </div>
                       <h3 className="font-bold text-forest-800 mb-1.5 text-sm sm:text-base">{m.title}</h3>
@@ -77,9 +72,8 @@ export function Timeline() {
                   </div>
 
                   {/* Center dot */}
-                  <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-forest-800 border-4 border-cream-100 z-10" />
+                  <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-forest-800 border-4 border-cream-100 z-10" />
 
-                  {/* Empty spacer on other side */}
                   <div className="hidden sm:block sm:w-[calc(50%-2.5rem)]" />
                 </div>
               </FadeUp>

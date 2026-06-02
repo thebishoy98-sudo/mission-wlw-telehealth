@@ -27,7 +27,7 @@ export function Input({
         disabled={disabled}
         className={cn(
           "w-full px-4 py-3 border border-gray-200 rounded-xl bg-white",
-          "focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent",
+          "focus:outline-none focus:ring-2 focus:ring-forest-800 focus:border-transparent",
           "placeholder:text-gray-400 text-gray-900",
           "disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500",
           "transition-shadow duration-150",

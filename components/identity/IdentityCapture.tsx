@@ -214,10 +214,10 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
   return (
     <div className="space-y-6">
       {showIntro && (
-        <div className="rounded-lg border border-teal-100 bg-teal-50 p-4">
+        <div className="rounded-lg border border-green-50 bg-green-50 p-4">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-700" />
-            <p className="text-sm text-teal-900">
+            <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-forest-800" />
+            <p className="text-sm text-forest-900">
               Take a clear ID photo, then record a 10-second identity video in good lighting.
             </p>
           </div>
@@ -292,7 +292,7 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
               <span>{RECORDING_SECONDS}s</span>
             </div>
             <div className="h-2 rounded-full bg-gray-100">
-              <div className="h-2 rounded-full bg-teal-600 transition-all" style={{ width: `${progress}%` }} />
+              <div className="h-2 rounded-full bg-forest-800 transition-all" style={{ width: `${progress}%` }} />
             </div>
           </div>
         )}

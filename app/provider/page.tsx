@@ -132,7 +132,7 @@ function ProviderDashboardContent() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
           <Card>
             <CardContent className="p-5 sm:p-6">
-              <div className="text-3xl font-bold text-teal-600 mb-2">
+              <div className="text-3xl font-bold text-forest-800 mb-2">
                 {orders.length}
               </div>
               <p className="text-gray-600">Total Orders</p>

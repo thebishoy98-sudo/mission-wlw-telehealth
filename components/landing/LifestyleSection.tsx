@@ -3,12 +3,30 @@ import Link from "next/link";
 import { FadeUp } from "./FadeUp";
 
 const BENEFITS = [
-  { icon: "🩺", title: "Dedicated Provider Care", desc: "Monthly check-ins with a board-certified provider who adjusts your plan as you progress." },
-  { icon: "💊", title: "Personalized Dosage", desc: "We start low and titrate carefully — maximizing results while minimizing side effects." },
-  { icon: "🚚", title: "Delivered to Your Door", desc: "Licensed pharmacy ships directly to you in discreet packaging, every 30 days." },
-  { icon: "📱", title: "Always-On Support", desc: "Message your care team anytime. Our patient coordinators respond within hours." },
-  { icon: "🧬", title: "Science-Backed Approach", desc: "GLP-1 medications are clinically proven — not supplements, not fad diets." },
-  { icon: "🔒", title: "Private & Secure", desc: "All health data is HIPAA-encrypted. We never sell your data or share with employers." },
+  {
+    title: "Dedicated Provider Care",
+    desc: "Monthly check-ins with a board-certified provider who adjusts your plan as you progress.",
+  },
+  {
+    title: "Personalized Dosage",
+    desc: "We start at a low dose and titrate carefully, maximizing results while keeping side effects minimal.",
+  },
+  {
+    title: "Delivered to Your Door",
+    desc: "A licensed 503B pharmacy ships your medication directly to you every 8 weeks in discreet packaging.",
+  },
+  {
+    title: "Always-On Support",
+    desc: "Message your care team anytime. Patient coordinators respond within 24 hours.",
+  },
+  {
+    title: "Clinically Proven",
+    desc: "Tirzepatide is clinically proven to reduce appetite and support significant long-term weight loss.",
+  },
+  {
+    title: "Private and Secure",
+    desc: "All health data is HIPAA-encrypted. We never sell your data or share it with employers.",
+  },
 ];
 
 const METRICS = [
@@ -27,21 +45,18 @@ export function LifestyleSection({ ctaUrl }: { ctaUrl: string }) {
             Why Mission WLW
           </span>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-forest-800 tracking-tight mb-4">
-            More Than a Medication.
-            <span className="block">A Complete Wellness System.</span>
+            More Than a Medication. A Complete Wellness System.
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            We combine medical expertise, personalized care, and clinical-grade medication
-            into one seamless program.
+            We combine medical expertise, personalized care, and clinical-grade medication into one seamless program.
           </p>
         </FadeUp>
 
-        {/* Benefits grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 mb-16">
           {BENEFITS.map((b, i) => (
             <FadeUp key={b.title} delay={i * 0.06}>
               <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm h-full">
-                <span className="text-2xl block mb-3">{b.icon}</span>
+                <div className="w-2 h-2 rounded-full bg-forest-800 mb-4" />
                 <h3 className="font-bold text-forest-800 mb-1.5 text-sm sm:text-base">{b.title}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">{b.desc}</p>
               </div>
@@ -49,7 +64,6 @@ export function LifestyleSection({ ctaUrl }: { ctaUrl: string }) {
           ))}
         </div>
 
-        {/* Metrics bar */}
         <FadeUp>
           <div className="bg-forest-800 rounded-2xl sm:rounded-3xl p-6 sm:p-10">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 text-white text-center">
@@ -68,7 +82,7 @@ export function LifestyleSection({ ctaUrl }: { ctaUrl: string }) {
             href={ctaUrl}
             className="inline-block bg-forest-800 hover:bg-forest-700 active:scale-[.98] text-white font-bold px-8 py-4 rounded-full transition-all shadow-lg shadow-forest-800/20"
           >
-            Join the Mission Community →
+            Join the Mission Community
           </Link>
         </FadeUp>
       </div>

@@ -372,7 +372,7 @@ export default function OrdersManagement() {
                             <tr
                               key={order.id}
                               onClick={() => setSelectedOrder(order)}
-                              className={`cursor-pointer hover:bg-gray-50 ${selectedOrder?.id === order.id ? "bg-teal-50" : ""}`}
+                              className={`cursor-pointer hover:bg-gray-50 ${selectedOrder?.id === order.id ? "bg-green-50" : ""}`}
                             >
                               <td className="px-4 py-4 text-sm">
                                 <p className="max-w-[11rem] truncate font-semibold text-gray-900">{patientDisplayName(patient, order)}</p>
@@ -500,7 +500,7 @@ export default function OrdersManagement() {
                                   href={selectedDiagnostics.practiceqAutomation.handoffUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="mt-1 inline-flex font-medium text-teal-700 hover:text-teal-800"
+                                  className="mt-1 inline-flex font-medium text-forest-800 hover:text-forest-900"
                                 >
                                   Open PracticeQ consent handoff
                                 </a>
@@ -542,7 +542,7 @@ export default function OrdersManagement() {
                   <Card>
                     <CardContent className="p-6">
                       <h3 className="font-bold text-gray-900 mb-4">Consent Certificate</h3>
-                      <div className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
+                      <div className="rounded-xl border border-green-50 bg-green-50 p-3 text-sm text-forest-900">
                         {buildConsentCertificate(selectedConsent, selectedPatient)}
                       </div>
                       <div className="mt-4 space-y-2 text-sm">
@@ -653,7 +653,7 @@ export default function OrdersManagement() {
                             href={selectedPracticeQ.practiceQUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex text-sm font-medium text-teal-600 hover:text-teal-700"
+                            className="inline-flex text-sm font-medium text-forest-800 hover:text-forest-800"
                           >
                             Open in PracticeQ
                           </a>
@@ -665,7 +665,7 @@ export default function OrdersManagement() {
                                 href={chartFileHref(selectedPracticeQ.answerFileId)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-forest-800 hover:bg-green-50"
                               >
                                 Answers JSON
                               </a>
@@ -675,7 +675,7 @@ export default function OrdersManagement() {
                                 href={chartFileHref(selectedPracticeQ.pdfFileId)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-forest-800 hover:bg-green-50"
                               >
                                 Chart PDF
                               </a>
@@ -736,7 +736,7 @@ export default function OrdersManagement() {
                   <Card>
                     <CardContent className="p-6">
                       <h3 className="font-bold text-gray-900 mb-2">Payment</h3>
-                      <p className="text-2xl font-bold text-teal-600">{formatCurrency(selectedPayment.amount)}</p>
+                      <p className="text-2xl font-bold text-forest-800">{formatCurrency(selectedPayment.amount)}</p>
                       <p className="text-xs text-gray-500 mb-2">
                         Card ending {selectedPayment.cardLast4}
                         {selectedPayment.transactionId ? ` - ${selectedPayment.transactionId}` : ""}

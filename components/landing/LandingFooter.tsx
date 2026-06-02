@@ -5,7 +5,6 @@ import Image from "next/image";
 const LINKS = {
   Program: [
     { label: "How It Works", href: "#how-it-works" },
-    { label: "Medications", href: "#pricing" },
     { label: "Pricing", href: "#pricing" },
     { label: "Reviews", href: "#reviews" },
     { label: "FAQ", href: "#faq" },
@@ -13,14 +12,13 @@ const LINKS = {
   Legal: [
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },
-    { label: "HIPAA Notice", href: "/hipaa" },
-    { label: "Accessibility", href: "/accessibility" },
+    { label: "HIPAA Notice", href: "/privacy" },
   ],
   Account: [
     { label: "Patient Login", href: "/login" },
     { label: "Start Assessment", href: "/start/info" },
-    { label: "Track My Order", href: "/orders" },
-    { label: "Contact Support", href: "/contact" },
+    { label: "Order History", href: "/patient" },
+    { label: "Contact Support", href: "mailto:service@missionwlw.com" },
   ],
 };
 
@@ -38,7 +36,7 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
             href={ctaUrl}
             className="bg-white text-forest-800 hover:bg-cream-200 font-bold px-7 py-3.5 rounded-full transition-colors whitespace-nowrap active:scale-[.98] shrink-0"
           >
-            Start Free Assessment →
+            Start Free Assessment
           </Link>
         </div>
       </div>
@@ -50,18 +48,21 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
           <div className="sm:col-span-2 lg:col-span-1">
             <Image
               src="/mission-logo.jpeg"
-              alt="Mission Weight Loss & Wellness"
+              alt="Mission Weight Loss and Wellness"
               width={120}
               height={40}
               className="h-10 w-auto object-contain mb-4 brightness-0 invert"
             />
             <p className="text-sm text-white/55 leading-relaxed mb-4">
-              Board-certified providers. FDA-approved medications.
+              Board-certified providers. FDA-regulated compounded Tirzepatide.
               Delivered to your door.
             </p>
-            <div className="flex items-center gap-1.5 text-xs text-white/40">
-              <span>🔒 HIPAA Compliant</span>
-            </div>
+            <a
+              href="mailto:service@missionwlw.com"
+              className="text-sm text-white/60 hover:text-white transition-colors"
+            >
+              service@missionwlw.com
+            </a>
           </div>
 
           {/* Links */}
@@ -86,15 +87,22 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
 
         <div className="border-t border-white/10 mt-12 pt-8 space-y-3">
           <p className="text-[11px] text-white/35 leading-relaxed">
-            <strong className="text-white/50">Important Safety Information:</strong> GLP-1 medications are
-            prescription-only and require a medical evaluation. Results vary. These medications may not be
-            appropriate for everyone. Compounded medications are not FDA-approved but are prepared by
-            licensed 503B compounding pharmacies. Mission Weight Loss & Wellness is a telehealth platform
-            connecting patients with independent licensed providers.
+            <strong className="text-white/50">Important Safety Information:</strong> Tirzepatide is
+            a prescription medication requiring a medical evaluation. Results vary. Compounded
+            Tirzepatide is prepared at licensed 503B pharmacies and is not an FDA-approved drug
+            product. Mission Weight Loss and Wellness is a telehealth platform connecting patients
+            with independent licensed providers.
           </p>
-          <p className="text-[11px] text-white/30">
-            © {new Date().getFullYear()} Mission Weight Loss & Wellness. All rights reserved.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-[11px] text-white/30">
+              &copy; {new Date().getFullYear()} Mission Weight Loss and Wellness. All rights reserved.
+            </p>
+            <div className="flex gap-4">
+              <a href="https://instagram.com/missionwlw" target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/40 hover:text-white transition-colors">Instagram</a>
+              <a href="https://tiktok.com/@missionwlw" target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/40 hover:text-white transition-colors">TikTok</a>
+              <a href="https://facebook.com/missionwlw" target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/40 hover:text-white transition-colors">Facebook</a>
+            </div>
+          </div>
         </div>
       </div>
     </footer>

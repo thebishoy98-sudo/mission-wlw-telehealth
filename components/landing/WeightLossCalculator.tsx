@@ -35,7 +35,7 @@ export function WeightLossCalculator({ ctaUrl }: { ctaUrl: string }) {
               {[
                 "Average 18% body weight lost in 6 months",
                 "Results start within 4–8 weeks",
-                "Clinically proven — not a crash diet",
+                "Clinically proven, not a crash diet",
               ].map((t) => (
                 <li key={t} className="flex items-start gap-2">
                   <span className="text-forest-700 font-bold shrink-0">✓</span>

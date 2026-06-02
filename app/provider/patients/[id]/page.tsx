@@ -108,7 +108,7 @@ export default function PatientDetail() {
         <Navbar variant="provider" />
         <div className="container-max py-12 text-center">
           <p className="text-red-600 font-semibold">{loadError}</p>
-          <button onClick={() => router.back()} className="mt-4 text-teal-600 hover:text-teal-700 text-sm font-medium">
+          <button onClick={() => router.back()} className="mt-4 text-forest-800 hover:text-forest-800 text-sm font-medium">
             Back to Dashboard
           </button>
         </div>
@@ -121,7 +121,7 @@ export default function PatientDetail() {
       <div className="min-h-screen bg-gray-50">
         <Navbar variant="provider" />
         <div className="container-max py-12 text-center">
-          <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-8 h-8 border-2 border-green-300 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-gray-500">Loading patient...</p>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function PatientDetail() {
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="provider" />
       <div className="container-max py-6 sm:py-10">
-        <button onClick={() => router.back()} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 mb-6 sm:mb-8 text-sm font-medium">
+        <button onClick={() => router.back()} className="flex items-center gap-1 text-forest-800 hover:text-forest-800 mb-6 sm:mb-8 text-sm font-medium">
           <ChevronLeft size={18} />
           Back to Dashboard
         </button>
@@ -169,7 +169,7 @@ export default function PatientDetail() {
               <Card>
                 <CardContent className="p-5 sm:p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-teal-500" />
+                    <FileText className="w-5 h-5 text-forest-700" />
                     Health Questionnaire
                   </h3>
                   <div className="space-y-4">
@@ -192,7 +192,7 @@ export default function PatientDetail() {
                 <CardContent className="p-5 sm:p-6">
                   <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                     <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-teal-500" />
+                      <FileText className="w-5 h-5 text-forest-700" />
                       Clinical Chart
                     </h3>
                     {selectedPracticeQ.status && <Badge variant="success">{selectedPracticeQ.status}</Badge>}
@@ -207,7 +207,7 @@ export default function PatientDetail() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       {selectedPracticeQ.answerFileId && (
                         <a
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-forest-800 hover:bg-green-50"
                           href={chartFileHref(selectedPracticeQ.answerFileId)}
                           target="_blank"
                           rel="noreferrer"
@@ -217,7 +217,7 @@ export default function PatientDetail() {
                       )}
                       {selectedPracticeQ.pdfFileId && (
                         <a
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-forest-800 hover:bg-green-50"
                           href={chartFileHref(selectedPracticeQ.pdfFileId)}
                           target="_blank"
                           rel="noreferrer"
@@ -247,8 +247,8 @@ export default function PatientDetail() {
               <Card>
                 <CardContent className="p-5 sm:p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-3">Consent Record</h3>
-                  <div className="mb-4 rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
-                    <p className="font-semibold text-teal-950">Consent Certificate</p>
+                  <div className="mb-4 rounded-lg border border-green-50 bg-green-50 p-3 text-sm text-forest-900">
+                    <p className="font-semibold text-forest-900">Consent Certificate</p>
                     <p className="mt-1">{consentCertificate}</p>
                   </div>
                   <div className="text-sm space-y-2">

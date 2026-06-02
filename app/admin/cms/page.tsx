@@ -15,7 +15,7 @@ export default function CMSEditorDisabled() {
         <Card>
           <CardContent className="p-6 sm:p-8 space-y-5">
             <div>
-              <p className="text-sm font-semibold text-teal-700 mb-2">Admin content</p>
+              <p className="text-sm font-semibold text-forest-800 mb-2">Admin content</p>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                 Website content editing is not enabled
               </h1>

@@ -23,8 +23,8 @@ export function ProgressBar({
               <div
                 className={cn(
                   "w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm",
-                  isCompleted && "bg-teal-600 text-white",
-                  isCurrent && "bg-teal-100 text-teal-600 border-2 border-teal-600",
+                  isCompleted && "bg-forest-800 text-white",
+                  isCurrent && "bg-green-50 text-forest-800 border-2 border-forest-800",
                   !isCompleted && !isCurrent && "bg-gray-200 text-gray-600"
                 )}
               >
@@ -34,7 +34,7 @@ export function ProgressBar({
                 <div
                   className={cn(
                     "flex-1 h-1 mx-2",
-                    isCompleted ? "bg-teal-600" : "bg-gray-300"
+                    isCompleted ? "bg-forest-800" : "bg-gray-300"
                   )}
                 />
               )}

@@ -152,7 +152,7 @@ function AdminDashboardContent() {
           <Card>
             <CardContent className="p-6">
               <p className="text-gray-600 text-sm mb-1">Total Revenue</p>
-              <p className="text-2xl sm:text-3xl font-bold text-teal-600">
+              <p className="text-2xl sm:text-3xl font-bold text-forest-800">
                 {formatCurrency(stats.totalRevenue)}
               </p>
             </CardContent>

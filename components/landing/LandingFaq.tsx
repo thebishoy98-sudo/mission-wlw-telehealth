@@ -4,16 +4,16 @@ import { FadeUp } from "./FadeUp";
 
 const FAQS = [
   {
-    q: "Am I eligible for GLP-1 medications?",
-    a: "Most adults with a BMI of 27+ and at least one weight-related health condition (like high blood pressure, pre-diabetes, or high cholesterol) or a BMI of 30+ qualify. Your provider reviews your full health history during the intake process.",
+    q: "Am I eligible for Tirzepatide?",
+    a: "Most adults with a BMI of 27 or higher and at least one weight-related health condition (such as high blood pressure, pre-diabetes, or high cholesterol) or a BMI of 30 or higher qualify. Your provider reviews your full health history during the intake process.",
   },
   {
     q: "How quickly will I see results?",
-    a: "Most patients notice reduced appetite within the first 1–2 weeks. Visible weight loss typically begins in weeks 3–6. Significant results (10%+ body weight lost) are usually seen by month 3–5 of consistent treatment.",
+    a: "Most patients notice reduced appetite within the first 1 to 2 weeks. Visible weight loss typically begins in weeks 3 to 6. Significant results such as 10 percent or more body weight lost are usually seen by month 3 to 5 of consistent treatment.",
   },
   {
     q: "Is this covered by insurance?",
-    a: "Our compounded semaglutide and tirzepatide programs are self-pay, starting at $149/month — far below insurance-billed brand prices. Brand medications (Ozempic®, Wegovy®, etc.) may have insurance coverage depending on your plan.",
+    a: "Our compounded Tirzepatide program is self-pay. The starting dose is $349 for an 8-week supply, which works out to around $175 per month. All supplies are included and there are no hidden fees.",
   },
   {
     q: "Do I need to come in person?",
@@ -21,11 +21,11 @@ const FAQS = [
   },
   {
     q: "What are the side effects?",
-    a: "The most common side effects are mild nausea, reduced appetite, and occasional fatigue — especially in the first few weeks. These typically pass as your body adjusts. We start at a low dose and increase gradually to minimize discomfort.",
+    a: "The most common side effects are mild nausea, reduced appetite, and occasional fatigue, especially in the first few weeks. These typically pass as your body adjusts. We start at a low dose and increase gradually to keep you comfortable.",
   },
   {
     q: "Can I cancel anytime?",
-    a: "Yes. There are no contracts or cancellation fees. You can pause or cancel your program at any time from your patient portal. Monthly subscriptions are billed on a rolling basis.",
+    a: "Yes. There are no contracts or cancellation fees. You can pause or cancel your program at any time from your patient portal. Orders are placed on an 8-week cycle with no automatic renewals.",
   },
   {
     q: "How is my health data protected?",

@@ -23,7 +23,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   if (isLoading || !user || user.role !== requiredRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-forest-800 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

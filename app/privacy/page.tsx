@@ -5,7 +5,7 @@ export default function PrivacyPage() {
     <main className="min-h-screen bg-white">
       <Navbar />
       <section className="mx-auto max-w-3xl px-6 py-14 text-gray-800">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-teal-700">Mission WLW</p>
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-forest-800">Mission WLW</p>
         <h1 className="mb-4 text-3xl font-bold text-gray-950">Privacy Policy</h1>
         <p className="mb-8 text-sm text-gray-500">Last updated: May 26, 2026</p>
 

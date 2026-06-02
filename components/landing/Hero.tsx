@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { FadeUp } from "./FadeUp";
 
 const STATS = [
-  { value: "42 lbs", sub: "avg. lost in 6 mo.", label: "Weight Lost" },
+  { value: "42 lbs", sub: "avg. lost in 6 months", label: "Weight Lost" },
   { value: "94%", sub: "would recommend", label: "Satisfaction" },
-  { value: "18%", sub: "avg. of body weight", label: "% Body Weight" },
+  { value: "18%", sub: "avg. of body weight", label: "Body Weight" },
   { value: "3,200+", sub: "patients helped", label: "Community" },
 ];
 
@@ -17,25 +18,26 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
     <section className="bg-cream-100 pt-10 pb-16 md:pt-20 md:pb-28 overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
-          {/* ── Left ── */}
+
+          {/* Left */}
           <div>
             <FadeUp>
               <span className="inline-flex items-center gap-1.5 bg-forest-800/10 text-forest-800 text-[11px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-4">
-                FDA-Approved GLP-1 Medications
+                FDA-Regulated Compounded Tirzepatide
               </span>
             </FadeUp>
 
             <FadeUp delay={0.08}>
               <h1 className="text-[2.1rem] leading-[1.1] sm:text-5xl md:text-[3rem] lg:text-[3.4rem] font-bold text-forest-800 tracking-tight mb-4">
-                Lose 15–20% of Your Body Weight
-                <span className="block text-forest-700 mt-1">with Medical Support</span>
+                Your Journey to a Healthier, Happier You Starts Here
               </h1>
             </FadeUp>
 
             <FadeUp delay={0.15}>
               <p className="text-base sm:text-lg text-gray-600 mb-7 leading-relaxed">
-                Board-certified providers prescribe personalized GLP-1 programs.
-                Medication delivered discreetly to your door — no office visits required.
+                Mission Weight Loss and Wellness connects you with board-certified providers who
+                prescribe personalized Tirzepatide programs. Medication delivered to your door
+                with no office visits required.
               </p>
             </FadeUp>
 
@@ -74,7 +76,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             </FadeUp>
           </div>
 
-          {/* ── Right — Stats Card ── */}
+          {/* Right */}
           <FadeUp delay={0.18} className="relative">
             <div className="bg-forest-800 rounded-2xl sm:rounded-3xl p-6 sm:p-8 text-white overflow-hidden relative">
               <div className="absolute inset-0 bg-gradient-to-br from-forest-700/30 to-transparent pointer-events-none" />
@@ -91,13 +93,21 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-white/20 pt-5 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-base shrink-0">
-                    👩‍⚕️
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">Dr. Sarah Thompson, MD</div>
-                    <div className="text-[11px] text-white/55">Board-Certified Obesity Medicine</div>
+                <div className="border-t border-white/20 pt-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <Image
+                        src="/tirzepatide-vial.jpg"
+                        alt="Tirzepatide"
+                        width={36}
+                        height={36}
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">Compounded Tirzepatide</div>
+                      <div className="text-[11px] text-white/55">Licensed 503B Pharmacy</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -110,7 +120,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
               className="absolute -bottom-3 -left-3 sm:-bottom-4 sm:-left-4 bg-white rounded-xl sm:rounded-2xl shadow-xl px-3.5 py-2.5"
             >
               <div className="text-[10px] text-gray-400 mb-0.5">Latest result</div>
-              <div className="font-bold text-forest-800 text-sm">Sarah M. lost 52 lbs 🎉</div>
+              <div className="font-bold text-forest-800 text-sm">Sarah M. lost 52 lbs</div>
             </motion.div>
           </FadeUp>
         </div>

@@ -64,7 +64,7 @@ export function AiChat({ patientId, orderId }: AiChatProps) {
       {/* Floating button */}
       <button
         onClick={() => setOpen(true)}
-        className={`fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-teal-600 text-white shadow-lg flex items-center justify-center hover:bg-teal-700 transition-all sm:bottom-6 sm:right-6 ${open ? "hidden" : "flex"}`}
+        className={`fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-forest-800 text-white shadow-lg flex items-center justify-center hover:bg-forest-800 transition-all sm:bottom-6 sm:right-6 ${open ? "hidden" : "flex"}`}
         aria-label="Open chat assistant"
       >
         <MessageCircle className="w-6 h-6" />
@@ -74,15 +74,15 @@ export function AiChat({ patientId, orderId }: AiChatProps) {
       {open && (
         <div className="fixed inset-x-3 bottom-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[360px] sm:max-h-[520px]">
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-teal-600 text-white">
+          <div className="flex items-center gap-3 px-4 py-3 bg-forest-800 text-white">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
               <Bot className="w-4 h-4" />
             </div>
             <div>
               <p className="text-sm font-semibold">Mission WLW Support</p>
-              <p className="text-xs text-teal-100">AI Assistant · Always here</p>
+              <p className="text-xs text-green-50">AI Assistant · Always here</p>
             </div>
-            <button onClick={() => setOpen(false)} className="ml-auto hover:text-teal-200">
+            <button onClick={() => setOpen(false)} className="ml-auto hover:text-green-100">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -94,7 +94,7 @@ export function AiChat({ patientId, orderId }: AiChatProps) {
                 <div
                   className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                     m.role === "user"
-                      ? "bg-teal-600 text-white rounded-br-sm"
+                      ? "bg-forest-800 text-white rounded-br-sm"
                       : "bg-gray-100 text-gray-800 rounded-bl-sm"
                   }`}
                 >
@@ -120,13 +120,13 @@ export function AiChat({ patientId, orderId }: AiChatProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
               placeholder="Ask anything..."
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-teal-500 sm:text-sm"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-forest-700 sm:text-sm"
               disabled={loading}
             />
             <button
               onClick={send}
               disabled={loading || !input.trim()}
-              className="w-9 h-9 rounded-lg bg-teal-600 text-white flex items-center justify-center hover:bg-teal-700 disabled:opacity-40"
+              className="w-9 h-9 rounded-lg bg-forest-800 text-white flex items-center justify-center hover:bg-forest-800 disabled:opacity-40"
             >
               <Send className="w-4 h-4" />
             </button>

@@ -86,7 +86,7 @@ export function LoginForm({ role }: { role: UserRole }) {
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-8 sm:py-12">
       <div className="mx-auto flex w-full max-w-md flex-col">
-        <Link href="/login" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-teal-700">
+        <Link href="/login" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-forest-800">
           <ArrowLeft className="h-4 w-4" />
           All portals
         </Link>
@@ -94,12 +94,12 @@ export function LoginForm({ role }: { role: UserRole }) {
         <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-5 py-5 sm:px-7">
             <div className="mb-4 flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-forest-800">
                 <span className="text-sm font-bold text-white">M</span>
               </div>
               <span className="text-base font-bold tracking-tight text-gray-900">Mission WLW</span>
             </div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">{config.eyebrow}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-forest-800">{config.eyebrow}</p>
             <h1 className="mt-1 text-2xl font-bold text-gray-900">{config.title}</h1>
             <p className="mt-2 text-sm leading-6 text-gray-600">{config.description}</p>
           </div>
@@ -116,7 +116,7 @@ export function LoginForm({ role }: { role: UserRole }) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder={config.emailPlaceholder}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-teal-500 sm:text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-forest-700 sm:text-sm"
               />
             </div>
 
@@ -133,7 +133,7 @@ export function LoginForm({ role }: { role: UserRole }) {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder={role === "patient" ? "Enter 6-digit code" : "Enter your password"}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-teal-500 sm:text-sm"
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-3 text-base text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-forest-700 sm:text-sm"
                 />
               </div>
             )}
@@ -151,7 +151,7 @@ export function LoginForm({ role }: { role: UserRole }) {
             {role === "patient" && patientOtpRequested && (
               <button
                 type="button"
-                className="w-full text-center text-sm font-semibold text-teal-700 hover:text-teal-800"
+                className="w-full text-center text-sm font-semibold text-forest-800 hover:text-forest-900"
                 onClick={() => {
                   setPassword("");
                   setPatientOtpRequested(false);
@@ -166,7 +166,7 @@ export function LoginForm({ role }: { role: UserRole }) {
         {role === "patient" && (
           <p className="mt-5 text-center text-sm text-gray-600">
             New patient?{" "}
-            <Link href="/start/info" className="font-semibold text-teal-700 hover:text-teal-800">
+            <Link href="/start/info" className="font-semibold text-forest-800 hover:text-forest-900">
               Start your intake
             </Link>
           </p>

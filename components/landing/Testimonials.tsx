@@ -10,7 +10,7 @@ const STORIES = [
     after: 216,
     months: 7,
     quote:
-      "I had tried every diet under the sun. Within 8 weeks on semaglutide I stopped craving junk food entirely. My provider was so attentive — adjusted my dose twice to keep me on track.",
+      "I had tried every diet under the sun. Within 8 weeks on Tirzepatide I stopped craving junk food entirely. My provider was so attentive and adjusted my dose twice to keep me on track.",
     stars: 5,
   },
   {
@@ -32,7 +32,7 @@ const STORIES = [
     after: 162,
     months: 5,
     quote:
-      "The process was incredibly easy. Intake form took 10 minutes, I had a consultation the same day, and my medication arrived 4 days later. Down 36 lbs and feeling incredible.",
+      "The process was incredibly easy. Intake took 10 minutes, I had a consultation the same day, and my medication arrived 4 days later. Down 36 lbs and feeling incredible.",
     stars: 5,
   },
 ];
@@ -51,7 +51,7 @@ export function Testimonials() {
             Real People. Real Results.
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            These are genuine patient outcomes from Mission WLW members.
+            Genuine patient outcomes from Mission WLW members.
           </p>
         </FadeUp>
 
@@ -78,7 +78,7 @@ export function Testimonials() {
                     <div className="text-xs text-gray-400 mb-0.5">Before</div>
                     <div className="text-lg font-bold text-gray-700">{s.before} lbs</div>
                   </div>
-                  <div className="text-2xl">→</div>
+                  <div className="text-gray-300 text-lg font-light">to</div>
                   <div className="text-center">
                     <div className="text-xs text-gray-400 mb-0.5">After</div>
                     <div className="text-lg font-bold text-forest-800">{s.after} lbs</div>
@@ -89,7 +89,6 @@ export function Testimonials() {
                   </div>
                 </div>
 
-                {/* Author */}
                 <div className="flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-full ${COLORS[i]} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
                     {s.initials}

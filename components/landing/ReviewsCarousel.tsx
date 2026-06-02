@@ -2,16 +2,15 @@
 
 const REVIEWS = [
   { name: "Maria R.", loc: "Georgia", rating: 5, text: "Down 38 lbs in 5 months. My confidence is back and I actually enjoy exercise now. The provider team is so caring." },
-  { name: "Tom B.", loc: "Ohio", rating: 5, text: "Lost 29 lbs without feeling deprived. Semaglutide finally quieted the food noise I've dealt with my whole life." },
-  { name: "Lisa C.", loc: "New York", rating: 5, text: "Tried Ozempic from my GP but couldn't afford it. Mission WLW's compounded version works just as well at a fraction of the price." },
+  { name: "Tom B.", loc: "Ohio", rating: 5, text: "Lost 29 lbs without feeling deprived. Tirzepatide finally quieted the food noise I have dealt with my whole life." },
+  { name: "Lisa C.", loc: "New York", rating: 5, text: "Was paying so much more at a different provider. Mission WLW's program works just as well at a fraction of the price. So glad I switched." },
   { name: "James W.", loc: "Arizona", rating: 5, text: "52 lbs down in 8 months. My blood pressure normalized, my sleep improved, and I came off two medications. Life-changing." },
   { name: "Priya S.", loc: "Illinois", rating: 5, text: "As a nurse, I was skeptical but the science is clear. Lost 24 lbs in 4 months. Provider checks in every month without fail." },
   { name: "Michael T.", loc: "Nevada", rating: 4, text: "Had mild nausea the first week but it passed. Now in month 4, down 31 lbs. Provider helped me through the adjustment quickly." },
-  { name: "Angela D.", loc: "North Carolina", rating: 5, text: "I'm 58 and had given up on losing weight. Mission WLW changed that. Down 44 lbs and shopping for new clothes every month." },
+  { name: "Angela D.", loc: "North Carolina", rating: 5, text: "I am 58 and had given up on losing weight. Mission WLW changed that. Down 44 lbs and shopping for new clothes every month." },
   { name: "Carlos M.", loc: "Colorado", rating: 5, text: "The intake process was super easy. Had my prescription the next day, medication arrived in 3 days. Results speak for themselves." },
 ];
 
-// Triple for seamless loop
 const TRIPLED = [...REVIEWS, ...REVIEWS, ...REVIEWS];
 
 function StarRow({ rating }: { rating: number }) {
@@ -40,18 +39,13 @@ export function ReviewsCarousel() {
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-forest-800 tracking-tight mb-3">
           What Our Patients Say
         </h2>
-        <p className="text-gray-500 text-sm">
-          Verified reviews from active Mission WLW patients
-        </p>
+        <p className="text-gray-500 text-sm">Verified reviews from active Mission WLW patients</p>
       </div>
 
       <div className="reviews-track">
         <div className="reviews-content py-2">
           {TRIPLED.map((r, i) => (
-            <div
-              key={i}
-              className="bg-cream-100 rounded-2xl p-5 flex-shrink-0 w-72 sm:w-80"
-            >
+            <div key={i} className="bg-cream-100 rounded-2xl p-5 flex-shrink-0 w-72 sm:w-80">
               <StarRow rating={r.rating} />
               <p className="text-sm text-gray-700 leading-relaxed mb-4 line-clamp-4">
                 &ldquo;{r.text}&rdquo;

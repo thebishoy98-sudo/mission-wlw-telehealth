@@ -89,7 +89,7 @@ export default function AdminNotificationsPage() {
       <div className="container-max py-8 sm:py-12">
         <div className="mb-8">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-forest-800">
               <Bell className="h-5 w-5" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Notifications</h1>
@@ -158,7 +158,7 @@ export default function AdminNotificationsPage() {
                       checked={settings.events[event]}
                       onChange={() => toggleEvent(event)}
                       disabled={saving}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-forest-800 focus:ring-forest-700"
                     />
                     <span className="text-sm font-medium text-gray-800">{EVENT_LABELS[event]}</span>
                   </label>

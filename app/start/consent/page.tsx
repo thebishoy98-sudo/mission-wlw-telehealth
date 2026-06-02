@@ -43,8 +43,8 @@ export default function Consent() {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
-            <Shield className="w-5 h-5 text-teal-600" />
+          <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
+            <Shield className="w-5 h-5 text-forest-800" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">Consent & Privacy</h2>
@@ -57,12 +57,12 @@ export default function Consent() {
         </div>
 
         <div className="space-y-4">
-          <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all">
+          <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-green-200 has-[:checked]:bg-green-50 transition-all">
             <input
               type="checkbox"
               checked={acknowledged}
               onChange={(e) => setAcknowledged(e.target.checked)}
-              className="mt-0.5 accent-teal-600"
+              className="mt-0.5 accent-forest-800"
             />
             <span className="text-sm text-gray-700 leading-relaxed">
               I have carefully read and agree to the consent terms above. I understand my rights and consent to this treatment.

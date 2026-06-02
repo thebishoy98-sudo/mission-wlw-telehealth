@@ -138,7 +138,7 @@ function ReorderContent() {
                 />
 
                 {selectedDoseOption && (
-                  <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-sm text-gray-700">
+                  <div className="rounded-xl border border-green-50 bg-green-50 p-4 text-sm text-gray-700">
                     Checkout will use {formatDoseOptionSummary(selectedDoseOption)}.
                   </div>
                 )}

@@ -7,7 +7,7 @@ export function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div className="sm:col-span-2 md:col-span-1">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-forest-800 flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-sm">M</span>
               </div>
               <span className="text-base font-bold text-white tracking-tight">Mission WLW</span>
@@ -15,7 +15,7 @@ export function Footer() {
             <p className="text-gray-400 text-sm leading-relaxed">
               Medical weight management with GLP-1 therapy. Board-certified providers, FDA-regulated pharmacies, direct-to-door delivery.
             </p>
-            <a href="mailto:service@missionwlw.com" className="block mt-3 text-sm text-teal-400 hover:text-teal-300">
+            <a href="mailto:service@missionwlw.com" className="block mt-3 text-sm text-green-300 hover:text-green-200">
               service@missionwlw.com
             </a>
           </div>

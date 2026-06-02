@@ -10,7 +10,7 @@ import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
 
-const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm bg-white appearance-none";
+const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 text-sm bg-white appearance-none";
 const noneOptionLabels = new Set(["None apply to me", "None of the above"]);
 
 function isNoneOption(option: string) {
@@ -56,7 +56,7 @@ function WeightInput({ value, onChange, placeholder = "e.g. 185" }: { value: str
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 pr-14 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+        className="w-full px-4 pr-14 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 text-sm"
       />
       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium pointer-events-none">lbs</span>
     </div>
@@ -211,7 +211,7 @@ export default function Questionnaire() {
 
         {questions.length === 0 ? (
           <div className="text-center py-10">
-            <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-8 h-8 border-2 border-green-300 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-gray-400 text-sm">Loading questions...</p>
           </div>
         ) : (
@@ -219,7 +219,7 @@ export default function Questionnaire() {
             {questions.map((question, idx) => (
               <div key={question.id} className="border-b border-gray-50 pb-7 last:border-0 last:pb-0">
                 <label className="block text-sm font-semibold text-gray-800 mb-3">
-                  <span className="text-teal-400 mr-1.5">{idx + 1}.</span>
+                  <span className="text-green-300 mr-1.5">{idx + 1}.</span>
                   {question.text}
                   {question.required && <span className="text-red-400 ml-1">*</span>}
                 </label>
@@ -242,7 +242,7 @@ export default function Questionnaire() {
                       <label key={option} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                         answers[question.id] === option && question.disqualifying === option
                           ? "border-red-300 bg-red-50"
-                          : "border-gray-100 hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50"
+                          : "border-gray-100 hover:bg-gray-50 has-[:checked]:border-green-200 has-[:checked]:bg-green-50"
                       }`}>
                         <input
                           type="radio"
@@ -250,7 +250,7 @@ export default function Questionnaire() {
                           value={option}
                           checked={answers[question.id] === option}
                           onChange={(e) => setAnswer(question.id, e.target.value)}
-                          className="accent-teal-600"
+                          className="accent-forest-800"
                         />
                         <span className="text-sm text-gray-700">{option}</span>
                       </label>
@@ -262,12 +262,12 @@ export default function Questionnaire() {
                     {(question.options?.length ? question.options : ["Yes"]).map((option) => {
                       const selected = (answers[question.id] || "").split(",").map((item) => item.trim()).includes(option);
                       return (
-                        <label key={option} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-teal-300 has-[:checked]:bg-teal-50 transition-all">
+                        <label key={option} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-green-200 has-[:checked]:bg-green-50 transition-all">
                           <input
                             type="checkbox"
                             checked={selected}
                             onChange={(e) => toggleMultiAnswer(question.id, option, e.target.checked)}
-                            className="accent-teal-600"
+                            className="accent-forest-800"
                           />
                           <span className="text-sm text-gray-700">{option}</span>
                         </label>

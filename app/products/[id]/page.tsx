@@ -51,7 +51,7 @@ export default function ProductDetail() {
       <div className="container-max py-8 sm:py-12">
         <button
           onClick={() => router.back()}
-          className="flex items-center text-teal-600 hover:text-teal-700 mb-8"
+          className="flex items-center text-forest-800 hover:text-forest-800 mb-8"
         >
           <ChevronLeft size={20} />
           Back
@@ -78,7 +78,7 @@ export default function ProductDetail() {
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               {product.name}
             </h1>
-            <p className="text-3xl font-bold text-teal-600 mb-6">
+            <p className="text-3xl font-bold text-forest-800 mb-6">
               Starting at {formatCurrency(product.startingPrice)}
             </p>
 
@@ -95,7 +95,7 @@ export default function ProductDetail() {
                   {product.doses.map((dose) => (
                     <div
                       key={dose.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-teal-600"
+                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-forest-800"
                     >
                       <div>
                         <p className="font-semibold text-gray-900">
@@ -105,7 +105,7 @@ export default function ProductDetail() {
                           {dose.patientDescription ?? `${dose.quantity} units`}
                         </p>
                       </div>
-                      <p className="text-lg font-bold text-teal-600">
+                      <p className="text-lg font-bold text-forest-800">
                         {formatCurrency(dose.price)}
                       </p>
                     </div>
@@ -114,7 +114,7 @@ export default function ProductDetail() {
               </CardContent>
             </Card>
 
-            <div className="bg-teal-50 border border-teal-200 rounded-lg p-6 mb-8">
+            <div className="bg-green-50 border border-green-100 rounded-lg p-6 mb-8">
               <p className="text-sm text-gray-700">
                 <strong>Important:</strong> {product.eligibilityNote}
               </p>

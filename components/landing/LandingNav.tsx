@@ -23,7 +23,7 @@ export function LandingNav({ ctaUrl }: { ctaUrl: string }) {
             alt="Mission Weight Loss & Wellness"
             width={130}
             height={40}
-            className="h-8 sm:h-10 w-auto object-contain"
+            className="h-8 sm:h-10 w-auto object-contain ring-[3px] ring-inset ring-white rounded-sm"
             priority
           />
         </Link>

@@ -47,7 +47,7 @@ body {
 @media (min-width: 768px) { .landing-body { padding-bottom: 0; } }
 
 *:focus-visible {
-  outline: 2px solid #0d9488;
+  outline: 2px solid #1b4332;
   outline-offset: 2px;
   border-radius: 6px;
 }

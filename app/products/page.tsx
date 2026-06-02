@@ -59,7 +59,7 @@ export default function Products() {
                   <h2 className="text-2xl font-semibold text-gray-900 mb-2">
                     {product.name}
                   </h2>
-                  <p className="text-teal-600 font-bold text-lg mb-4">
+                  <p className="text-forest-800 font-bold text-lg mb-4">
                     Starting at {formatCurrency(product.startingPrice)}
                   </p>
                   <p className="text-gray-600 mb-4">{product.description}</p>
