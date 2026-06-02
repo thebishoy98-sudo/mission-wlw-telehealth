@@ -44,7 +44,6 @@ import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
 import {
   buildTreatmentConsentText,
   CONSENT_VERSION,
-  doesSignatureMatchPatient,
   getRequestIp,
 } from "@/lib/consent";
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
@@ -211,9 +210,9 @@ export async function POST(req: NextRequest) {
       await Promise.all(submittedAnswerRows.map((a) => dbServer.answerDb.create(a).catch(() => {}))).catch(() => {});
     }
     if (consentData?.signedName) {
-      if (!effectivePatient || !doesSignatureMatchPatient(consentData.signedName, effectivePatient)) {
+      if (!consentData.signedName.trim() || consentData.signedName.trim().split(/\s+/).length < 2) {
         return NextResponse.json(
-          { error: "Consent signature must match the patient's legal name." },
+          { error: "Consent signature must include first and last name." },
           { status: 422 }
         );
       }
