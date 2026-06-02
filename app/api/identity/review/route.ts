@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
             const automationJob = createPracticeQAutomationJob(order, patient);
             await dbServer.practiceqAutomationJobDb.create(automationJob).catch(() => {});
             db.practiceqAutomationJobDb.create(automationJob);
-          } else if (existingJob.status === "failed" || existingJob.status === "skipped") {
+          } else if (existingJob.status === "failed") {
             await dbServer.practiceqAutomationJobDb.update(existingJob.id, {
               status: "queued",
               attempts: 0,

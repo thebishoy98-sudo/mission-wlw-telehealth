@@ -88,7 +88,7 @@ export function normalizeProduct(product: Product): Product {
     description: tirzepatideProduct.description,
     longDescription: tirzepatideProduct.longDescription,
     startingPrice: tirzepatideProduct.startingPrice,
-    image: product.image || tirzepatideProduct.image,
+    image: tirzepatideProduct.image,
     doses: tirzepatideProduct.doses,
     eligibilityNote: tirzepatideProduct.eligibilityNote,
     faqs: tirzepatideProduct.faqs,

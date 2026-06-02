@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Lock } from "lucide-react";
 import { useAuth, UserRole } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
@@ -94,8 +95,14 @@ export function LoginForm({ role }: { role: UserRole }) {
         <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-5 py-5 sm:px-7">
             <div className="mb-4 flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-forest-800">
-                <span className="text-sm font-bold text-white">M</span>
+              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-gray-100">
+                <Image
+                  src="/mission-logo-icon.jpeg"
+                  alt="Mission Weight Loss & Wellness"
+                  width={36}
+                  height={36}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <span className="text-base font-bold tracking-tight text-gray-900">Mission WLW</span>
             </div>

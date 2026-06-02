@@ -42,13 +42,13 @@ export default function Products() {
           {products.map((product) => (
             <Card key={product.id} clickable className="hover:shadow-lg">
               <CardContent className="p-0">
-                <div className="relative aspect-video bg-forest-800 rounded-t-lg overflow-hidden flex items-center justify-center">
+                <div className="relative aspect-[4/3] bg-white rounded-t-lg overflow-hidden flex items-center justify-center">
                   <Image
                     src={product.image}
                     alt={product.name}
                     fill
                     sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                    className="object-contain p-6"
+                    className="object-contain p-4"
                     onError={(e) => {
                       e.currentTarget.src =
                         "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%231b4332' width='400' height='300'/%3E%3C/svg%3E";

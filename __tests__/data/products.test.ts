@@ -37,4 +37,13 @@ describe("normalizeCustomerProducts", () => {
       slug: "tirzepatide",
     });
   });
+
+  it("normalizes old Tirzepatide product images to the branded vial", () => {
+    const oldProduct = makeProduct("tirz_old", "Tirzepatide", "tirzepatide");
+    oldProduct.image = "/product-tirzepatide.svg";
+
+    const products = normalizeCustomerProducts([oldProduct]);
+
+    expect(products[0]?.image).toBe("/tirzepatide-vial.jpg");
+  });
 });

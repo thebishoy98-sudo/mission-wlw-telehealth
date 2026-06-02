@@ -10,3 +10,12 @@ describe("generic login page", () => {
     expect(source).not.toContain("/login/admin");
   });
 });
+
+describe("portal login branding", () => {
+  const source = readFileSync(path.join(process.cwd(), "app", "login", "LoginForm.tsx"), "utf8");
+
+  it("uses the Mission icon instead of a letter badge", () => {
+    expect(source).toContain('src="/mission-logo-icon.jpeg"');
+    expect(source).not.toContain(">M</span>");
+  });
+});

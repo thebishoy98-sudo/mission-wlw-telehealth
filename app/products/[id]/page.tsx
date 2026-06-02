@@ -59,13 +59,13 @@ export default function ProductDetail() {
 
         <div className="grid md:grid-cols-2 gap-12">
           <div>
-            <div className="relative aspect-square bg-gray-200 rounded-lg overflow-hidden">
+            <div className="relative aspect-square bg-white rounded-lg overflow-hidden border border-gray-100">
               <Image
                 src={product.image}
                 alt={product.name}
                 fill
                 sizes="(min-width: 768px) 50vw, 100vw"
-                className="object-cover"
+                className="object-contain p-6"
                 onError={(e) => {
                   e.currentTarget.src =
                     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect fill='%23E5E7EB' width='600' height='600'/%3E%3C/svg%3E";
