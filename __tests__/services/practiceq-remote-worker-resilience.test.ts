@@ -78,6 +78,12 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("question.isanswered = true");
   });
 
+  it("sets PracticeQ Angular choice answers directly from the fill plan", () => {
+    expect(workerSource).toContain("setPracticeQAngularQuestionChoices");
+    expect(workerSource).toContain("answerMatchesPracticeQChoice(answer, option?.Text)");
+    expect(workerSource).toContain('question.Answer = selected.join(", ")');
+  });
+
   it("prioritizes fresh queued PracticeQ jobs ahead of stale retry backlog", () => {
     expect(dbSource).toContain("WHEN status = 'queued' THEN 0");
     expect(dbSource).toContain("WHEN status = 'running' THEN 1");

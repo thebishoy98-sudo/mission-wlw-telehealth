@@ -258,18 +258,19 @@ export async function fillPracticeQQuestionPages(
       "PracticeQ text field fill step timed out."
     );
     filled += await fillPracticeQVitalsPage(page, fillPlan, bodyText).catch(() => 0);
-        await withPracticeQTimeout(
-          clickMatchingChoices(page, fillPlan),
-          PRACTICEQ_CHOICE_TIMEOUT_MS,
-          "PracticeQ choice selection step timed out."
-        );
-        await setPracticeQAngularTextAnswers(page, fillPlan);
-        await setPracticeQNegativeRequiredChoices(page, fillPlan);
-        await withPracticeQTimeout(
-          completeVisibleConsentDocument(page, fillPlan),
-          PRACTICEQ_CONSENT_TIMEOUT_MS,
-          "PracticeQ consent signing step timed out."
-        );
+    await withPracticeQTimeout(
+      clickMatchingChoices(page, fillPlan),
+      PRACTICEQ_CHOICE_TIMEOUT_MS,
+      "PracticeQ choice selection step timed out."
+    );
+    await setPracticeQAngularQuestionChoices(page, fillPlan);
+    await setPracticeQAngularTextAnswers(page, fillPlan);
+    await setPracticeQNegativeRequiredChoices(page, fillPlan);
+    await withPracticeQTimeout(
+      completeVisibleConsentDocument(page, fillPlan),
+      PRACTICEQ_CONSENT_TIMEOUT_MS,
+      "PracticeQ consent signing step timed out."
+    );
 
     // Upload the patient video for IntakeQ's required upload question when present.
     if (uploadFile) {
@@ -862,6 +863,127 @@ async function setPracticeQAngularTextAnswers(page: Page, fillPlan: ReturnType<t
 
     if (changed) {
       intakeScope?.changed?.();
+      if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
+      intakeScope?.$applyAsync?.();
+    }
+  }, fillPlan).catch(() => {});
+}
+
+async function setPracticeQAngularQuestionChoices(page: Page, fillPlan: ReturnType<typeof buildPracticeQFillPlan>) {
+  await page.evaluate((fillPlan) => {
+    const normalize = (raw: unknown) => String(raw ?? "")
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const answerMatchesPracticeQChoice = (answer: string, labelText: unknown): boolean => {
+      const normalizedAnswer = normalize(answer);
+      const normalizedLabel = normalize(labelText);
+      if (!normalizedAnswer || !normalizedLabel) return false;
+      const negativeAnswer = (
+        normalizedAnswer === "none of the above" ||
+        normalizedAnswer === "none apply to me" ||
+        normalizedAnswer === "none" ||
+        normalizedAnswer === "no" ||
+        normalizedAnswer.includes("no known") ||
+        normalizedAnswer.includes("no allergies") ||
+        normalizedAnswer.includes("not applicable")
+      );
+      if (negativeAnswer) return normalizedLabel === "no" || normalizedLabel.includes("none");
+      if (normalizedAnswer === normalizedLabel) return true;
+
+      const selectedValues = normalizedAnswer.split(/\s*,\s*/).map(normalize).filter(Boolean);
+      if (selectedValues.some((value) => {
+        if (value === normalizedLabel) return true;
+        if (value.length <= 4 || normalizedLabel.length <= 4) return false;
+        return value.includes(normalizedLabel) || normalizedLabel.includes(value);
+      })) {
+        return true;
+      }
+
+      if ((normalizedAnswer.includes("pregnant") || normalizedAnswer.includes("pregnancy")) && normalizedLabel.includes("pregnant")) return true;
+      if (normalizedAnswer.includes("weight loss") && normalizedLabel.includes("tirzepatide")) return true;
+      if (normalizedAnswer.includes("breastfeeding") && normalizedLabel.includes("breastfeeding")) return true;
+      if (normalizedAnswer.includes("diabetes") && normalizedLabel.includes("diabetes")) return true;
+      if (normalizedAnswer.includes("tirzepatide") && normalizedLabel.includes("tirzepatide")) return true;
+      if (normalizedAnswer.includes("vitamin b12") && normalizedLabel.includes("vitamin b12")) return true;
+      if (normalizedAnswer.includes("vitamin b6") && normalizedLabel.includes("vitamin b6")) return true;
+      if ((normalizedAnswer.includes("men 2") || normalizedAnswer.includes("multiple endocrine neoplasia")) &&
+          (normalizedLabel.includes("men 2") || normalizedLabel.includes("multiple endocrine neoplasia"))) return true;
+      if (normalizedAnswer.includes("medullary thyroid cancer") && normalizedLabel.includes("medullary thyroid cancer")) return true;
+      if (normalizedAnswer.includes("intestine") && normalizedLabel.includes("intestine")) return true;
+      if (normalizedAnswer.includes("stomach") && normalizedLabel.includes("stomach")) return true;
+      if (normalizedAnswer.includes("anorexia") && normalizedLabel.includes("anorexia")) return true;
+
+      return false;
+    };
+    const findIntakeScope = (root: any) => {
+      const seen = new Set<number>();
+      const stack = [root];
+      while (stack.length) {
+        const scope = stack.pop();
+        if (!scope || seen.has(scope.$id)) continue;
+        seen.add(scope.$id);
+        if (scope.intake?.Questionnaire?.Questions) return scope;
+        if (scope.$$childHead) stack.push(scope.$$childHead);
+        let sibling = scope.$$nextSibling;
+        while (sibling) {
+          stack.push(sibling);
+          sibling = sibling.$$nextSibling;
+        }
+      }
+      return null;
+    };
+    const answerFor = (prompt: unknown) => {
+      const normalizedPrompt = normalize(prompt);
+      if (!normalizedPrompt) return "";
+      const exact = fillPlan.find((item) => normalize(item.prompt) === normalizedPrompt);
+      if (exact) return exact.value;
+      const partial = fillPlan
+        .map((item) => ({ item, candidate: normalize(item.prompt) }))
+        .filter(({ candidate }) =>
+          candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+        )
+        .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+      return partial?.item.value ?? "";
+    };
+
+    const angular = (window as any).angular;
+    const injector = angular?.element(document.body).injector?.();
+    const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+    const questions = intakeScope?.intake?.Questionnaire?.Questions;
+    if (!Array.isArray(questions)) return;
+
+    let changed = false;
+    for (const question of questions) {
+      const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+      if (!options.length) continue;
+      const answer = answerFor(question?.Text);
+      if (!answer) continue;
+      let matched = false;
+      for (const option of options) {
+        if (!answerMatchesPracticeQChoice(answer, option?.Text)) continue;
+        option.Checked = true;
+        option.Answer = option.Text;
+        matched = true;
+      }
+      if (!matched) continue;
+      question.isanswered = true;
+      question.IsAnswered = true;
+      const selected = options
+        .filter((option: any) => option?.Checked)
+        .map((option: any) => option?.Text)
+        .filter(Boolean);
+      if (selected.length) question.Answer = selected.join(", ");
+      intakeScope?.onblur?.(question, question.Answer);
+      intakeScope?.changed?.(question);
+      intakeScope?.textChanged?.();
+      changed = true;
+    }
+
+    if (changed) {
+      intakeScope?.save?.();
       if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.();
       intakeScope?.$applyAsync?.();
     }
