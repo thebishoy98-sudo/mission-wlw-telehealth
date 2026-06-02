@@ -64,6 +64,7 @@ describe("PracticeQ remote worker resilience", () => {
   it("does not bulk-auto-retry PracticeQ failures that already created a hosted draft", () => {
     expect((dbSource.match(/PracticeQ choice selection step timed out.%/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect((dbSource.match(/PracticeQ text field fill step timed out.%/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((dbSource.match(/PracticeQ rejected%background submit:%/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   it("fills remaining IntakeQ vitals when label matching only fills part of the page", () => {
@@ -121,9 +122,9 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("question?.Attachments");
   });
 
-  it("does not submit PracticeQ jobs until identity is actually verified", () => {
-    expect(workerSource).toContain('order.identityStatus !== "verified"');
-    expect(workerSource).toContain("PracticeQ deferred until verified identity");
+  it("does not submit PracticeQ jobs until identity has a pass status", () => {
+    expect(workerSource).toContain("getIdentityGate(order).canDispatch");
+    expect(workerSource).toContain("PracticeQ deferred until identity approval");
     expect(workerSource).toContain("getPracticeQStatusAfterWorkerResult");
     expect(remoteServerSource).toContain("getPracticeQStatusAfterWorkerResult(result)");
   });

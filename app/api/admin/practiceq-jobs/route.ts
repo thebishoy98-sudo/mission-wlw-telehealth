@@ -15,11 +15,16 @@ import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 
 export const dynamic = "force-dynamic";
 
-const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
+const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until identity approval";
+const LEGACY_PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
+
+function isPracticeQIdentityDeferredError(error?: string) {
+  return error === PRACTICEQ_IDENTITY_DEFERRED_ERROR || error === LEGACY_PRACTICEQ_IDENTITY_DEFERRED_ERROR;
+}
 
 function getPracticeQStatusForJobUpdate(status: string, error?: string) {
   if (status === "completed") return "completed";
-  if (status === "failed") return error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error";
+  if (status === "failed") return isPracticeQIdentityDeferredError(error) ? "pending" : "error";
   return "pending";
 }
 

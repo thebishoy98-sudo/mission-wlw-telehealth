@@ -11,8 +11,9 @@ describe("PracticeQ completion contract", () => {
   });
 
   it("does not mark deferred identity PracticeQ failures as order errors", () => {
-    expect(adminRoute).toContain("PracticeQ deferred until verified identity");
-    expect(adminRoute).toContain('error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error"');
+    expect(adminRoute).toContain("PracticeQ deferred until identity approval");
+    expect(adminRoute).toContain("LEGACY_PRACTICEQ_IDENTITY_DEFERRED_ERROR");
+    expect(adminRoute).toContain('isPracticeQIdentityDeferredError(error) ? "pending" : "error"');
   });
 
   it("runs order completion/dispatch when the background worker completes a PracticeQ job", () => {

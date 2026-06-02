@@ -18,6 +18,7 @@ import {
 } from "@/services/practiceq";
 import { loadIdentityMedia } from "@/services/identity-storage";
 import { completePracticeQSession } from "@/lib/practiceq-session-completion";
+import { getIdentityGate } from "@/lib/identity";
 
 type WorkerResult = {
   status: PracticeQAutomationJob["status"];
@@ -45,7 +46,8 @@ type RemoteSession = {
 };
 
 const remoteSessions = new Map<string, RemoteSession>();
-export const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
+export const PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until identity approval";
+const LEGACY_PRACTICEQ_IDENTITY_DEFERRED_ERROR = "PracticeQ deferred until verified identity";
 const PRACTICEQ_PAGE_FILL_TIMEOUT_MS = 45000;
 const PRACTICEQ_CHOICE_TIMEOUT_MS = 30000;
 const PRACTICEQ_CONSENT_TIMEOUT_MS = 60000;
@@ -63,14 +65,18 @@ const PRACTICEQ_MAX_FILL_STEPS = Math.min(
 );
 
 function shouldDeferPracticeQForIdentity(order: Pick<Order, "identityStatus">) {
-  return order.identityStatus !== "verified";
+  return !getIdentityGate(order).canDispatch;
+}
+
+function isPracticeQIdentityDeferredError(error?: string) {
+  return error === PRACTICEQ_IDENTITY_DEFERRED_ERROR || error === LEGACY_PRACTICEQ_IDENTITY_DEFERRED_ERROR;
 }
 
 export function getPracticeQStatusAfterWorkerResult(
   result: Pick<WorkerResult, "status" | "error">
 ): Order["practiceQStatus"] | null {
   if (result.status !== "failed") return null;
-  return result.error === PRACTICEQ_IDENTITY_DEFERRED_ERROR ? "pending" : "error";
+  return isPracticeQIdentityDeferredError(result.error) ? "pending" : "error";
 }
 
 export async function processPracticeQAutomationJob(job: PracticeQAutomationJob): Promise<WorkerResult> {

@@ -79,22 +79,20 @@ describe("manual identity approval workflow", () => {
     });
   });
 
-  it("retries PracticeQ only after identity is verified", () => {
+  it("retries PracticeQ only after identity is verified or manually approved", () => {
     const verifiedOrder = { ...order, identityStatus: "verified" as const };
+    const manuallyApprovedOrder = { ...order, identityStatus: "manual_approved" as const };
 
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval(order)).toBe(false);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval(verifiedOrder)).toBe(true);
+    expect(shouldRetryPracticeQCompletionAfterIdentityApproval(manuallyApprovedOrder)).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "submitted" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "error" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, practiceQStatus: "pending" })).toBe(true);
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({ ...verifiedOrder, pharmacyStatus: "submitted" })).toBe(false);
   });
 
-  it("does not resume PracticeQ for an admin manual approval without verified identity", () => {
-    expect(shouldRetryPracticeQCompletionAfterIdentityApproval({
-      ...order,
-      identityStatus: "manual_approved",
-    })).toBe(false);
+  it("does not resume PracticeQ while identity is still missing", () => {
     expect(shouldRetryPracticeQCompletionAfterIdentityApproval({
       ...order,
       identityStatus: "missing",
