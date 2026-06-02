@@ -11,3 +11,16 @@ dist/
 
 .vercel
 .env*
+
+# Local build/cache artifacts
+tsconfig.tsbuildinfo
+
+# Local AI/tooling state
+.claude/
+.claude-flow/
+.mcp.json
+CLAUDE.md
+
+# Office temporary lock files
+~$*.docx
+docs/~$*.docx
