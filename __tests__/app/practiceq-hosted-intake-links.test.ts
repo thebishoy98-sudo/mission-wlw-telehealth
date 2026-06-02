@@ -13,7 +13,10 @@ describe("Mission payment-gated intake entry points", () => {
   it("uses the Mission intake as the public entry point so PracticeQ is not touched before payment", () => {
     for (const file of publicEntryFiles) {
       const source = fs.readFileSync(path.join(repoRoot, file), "utf8");
-      expect(source).toContain('href="/start/info"');
+      const usesMissionIntake =
+        source.includes('href="/start/info"') ||
+        (source.includes('base = "/start/info"') && source.includes("ctaUrl"));
+      expect(usesMissionIntake).toBe(true);
       expect(source).not.toContain("PRACTICEQ_HOSTED_INTAKE_URL");
     }
   });

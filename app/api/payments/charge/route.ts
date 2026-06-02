@@ -533,9 +533,24 @@ export async function POST(req: NextRequest) {
         details: { source: "payment_charge", reason: identityAiResult.summary },
       }).catch(() => {});
     } else try {
-      const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
-      await dbServer.practiceqAutomationJobDb.create(automationJob);
-      db.practiceqAutomationJobDb.create(automationJob);
+      // Guard: only one job per order. If a job already exists (e.g. from a prior
+      // checkout retry) reuse it rather than inserting a duplicate row.
+      const existingPqJob = await dbServer.practiceqAutomationJobDb.getByOrder(orderId).catch(() => null);
+      if (existingPqJob) {
+        // Already has a job — requeue it if it failed, otherwise leave it alone.
+        if (existingPqJob.status === "failed") {
+          await dbServer.practiceqAutomationJobDb.update(existingPqJob.id, {
+            status: "queued",
+            attempts: 0,
+            lastError: undefined,
+            lockedAt: undefined,
+          }).catch(() => {});
+        }
+      } else {
+        const automationJob = createPracticeQAutomationJob(updatedOrder, patient);
+        await dbServer.practiceqAutomationJobDb.create(automationJob);
+        db.practiceqAutomationJobDb.create(automationJob);
+      }
       db.orderDb.update(orderId, { practiceQStatus: "pending" });
       await dbServer.orderDb.update(orderId, { practiceQStatus: "pending" });
       await wakePracticeQRemoteWorker().catch(() => {});

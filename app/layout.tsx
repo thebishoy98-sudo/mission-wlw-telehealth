@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
-import { Footer } from "@/components/layout/Footer";
+import { ClientFooter } from "@/components/layout/ClientFooter";
 import { SeedInit } from "@/components/SeedInit";
 import { AuthProvider } from "@/lib/auth";
 
@@ -29,7 +29,7 @@ export default function RootLayout({
         <AuthProvider>
           <SeedInit />
           <main className="min-h-screen">{children}</main>
-          <Footer />
+          <ClientFooter />
         </AuthProvider>
       </body>
     </html>
