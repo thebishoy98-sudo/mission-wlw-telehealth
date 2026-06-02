@@ -85,7 +85,7 @@ export const productDb = {
 
 const isDbAvailable = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
 
-async function sql(strings: TemplateStringsArray, ...values: any[]) {
+export async function sql(strings: TemplateStringsArray, ...values: any[]) {
   const text = strings.reduce((query, chunk, index) => {
     return `${query}${index > 0 ? `$${index}` : ""}${chunk}`;
   }, "");

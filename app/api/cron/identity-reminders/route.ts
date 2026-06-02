@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
 import { buildIdentityUploadUrl, createIdentityUploadToken } from "@/lib/identity";
 import { getPublicBaseUrl } from "@/lib/public-url";

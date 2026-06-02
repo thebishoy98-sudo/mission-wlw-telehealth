@@ -1,13 +1,12 @@
-name: Deploy to Vercel
+name: CI
 
 on:
   push:
     branches:
-      - demo
       - main
 
 jobs:
-  deploy:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +14,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -30,8 +29,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to Vercel
-        run: npx vercel@latest --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Render auto-deploys on push to main via GitHub integration.
+      # No manual deploy step needed here.

@@ -16,7 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/db.server";
 import crypto from "crypto";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";

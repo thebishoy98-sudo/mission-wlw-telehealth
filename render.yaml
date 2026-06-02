@@ -169,6 +169,49 @@ services:
       - key: APPSHEET_API_KEY
         sync: false
 
+  # ── Cron jobs (replaces vercel.json crons) ───────────────────────────────
+  - type: cron
+    name: mission-wlw-cron-identity-reminders
+    runtime: node
+    schedule: "0 13 * * *"   # daily at 1pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/identity-reminders',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-pharmacy-tracking
+    runtime: node
+    schedule: "30 13 * * *"  # daily at 1:30pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/pharmacy-tracking-sync',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
   - type: web
     name: mission-wlw-practiceq-remote
     runtime: node
