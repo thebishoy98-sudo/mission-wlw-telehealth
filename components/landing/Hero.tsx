@@ -117,7 +117,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             <motion.div
               animate={{ y: [0, -5, 0] }}
               transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute -bottom-3 -left-3 sm:-bottom-4 sm:-left-4 bg-white rounded-xl sm:rounded-2xl shadow-xl px-3.5 py-2.5"
+              className="absolute -bottom-14 -left-3 sm:-bottom-16 sm:-left-4 bg-white rounded-xl sm:rounded-2xl shadow-xl px-3.5 py-2.5"
             >
               <div className="text-[10px] text-gray-400 mb-0.5">Latest result</div>
               <div className="font-bold text-forest-800 text-sm">Sarah M. lost 52 lbs</div>
