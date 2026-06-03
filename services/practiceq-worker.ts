@@ -2294,15 +2294,17 @@ async function verifyPracticeQSavedSubmission(
   if (!intake) {
     return {
       ...result,
-      status: "completed",
+      status: "failed",
       intakeId: matchedIntake.id,
+      error: `PracticeQ intake ${matchedIntake.id} was found, but the raw intake could not be retrieved for chart verification.`,
     };
   }
 
   const beforeStats = countPracticeQAnswers(intake);
   const beforeStatus = String((intake as any)?.Status ?? matchedIntake.status ?? "");
+  let backfillError = "";
   if (recoverableSubmitRejection || beforeStats.answered < beforeStats.total || !/completed/i.test(beforeStatus)) {
-    intake = await withPracticeQTimeout(
+    const backfilled = await withPracticeQTimeout(
       populateAndUpdatePracticeQIntake(intake, {
         patient: context.patient as any,
         answers: context.answers,
@@ -2310,14 +2312,45 @@ async function verifyPracticeQSavedSubmission(
       }),
       PRACTICEQ_API_VERIFY_TIMEOUT_MS,
       `PracticeQ intake ${matchedIntake.id} answer backfill timed out.`
-    ).catch(() => intake);
+    ).catch((error) => {
+      backfillError = error instanceof Error ? error.message : String(error);
+      return null;
+    });
+    intake = backfilled ?? intake;
   }
 
   const refreshed = await getIntakeById(matchedIntake.id).catch(() => intake);
-  const verifiedIntake = refreshed ?? intake;
+  let verifiedIntake = refreshed ?? intake;
+  let missingRawAnswers = missingRequiredPracticeQRawAnswers(verifiedIntake, context);
+  if (missingRawAnswers.length) {
+    const repaired = await withPracticeQTimeout(
+      populateAndUpdatePracticeQIntake(verifiedIntake, {
+        patient: context.patient as any,
+        answers: context.answers,
+        questions: context.questions,
+      }),
+      PRACTICEQ_API_VERIFY_TIMEOUT_MS,
+      `PracticeQ intake ${matchedIntake.id} required raw chart answer repair timed out.`
+    ).catch((error) => {
+      backfillError = error instanceof Error ? error.message : String(error);
+      return null;
+    });
+    verifiedIntake = await getIntakeById(matchedIntake.id).catch(() => repaired ?? verifiedIntake) ?? repaired ?? verifiedIntake;
+    missingRawAnswers = missingRequiredPracticeQRawAnswers(verifiedIntake, context);
+  }
+
   const answerStats = countPracticeQAnswers(verifiedIntake);
   const consentSigned = hasSignedConsent(verifiedIntake);
   let status = String((verifiedIntake as any)?.Status ?? matchedIntake.status ?? "");
+
+  if (missingRawAnswers.length) {
+    return {
+      ...result,
+      status: "failed",
+      intakeId: matchedIntake.id,
+      error: `PracticeQ raw chart is missing required answers: ${missingRawAnswers.join("; ")}${backfillError ? `; backfill error: ${backfillError}` : ""}`,
+    };
+  }
 
   if (!/completed/i.test(status) || !consentSigned) {
     if (consentSigned && answerStats.answered >= expectedPracticeQAnswerCount(context.answers)) {
@@ -2414,6 +2447,9 @@ function countPracticeQAnswers(intake: any) {
     if (Array.isArray(answer)) return answer.length > 0;
     if (String(answer ?? "").trim()) return true;
     if (Array.isArray(question?.Attachments) && question.Attachments.length > 0) return true;
+    if (Array.isArray(question?.QuestionOptions) && question.QuestionOptions.some((option: any) =>
+      option?.Checked || option?.Selected || option?.IsSelected || String(option?.Answer ?? "").trim()
+    )) return true;
     if (Array.isArray(question?.Rows)) {
       return question.Rows.some((row: any) =>
         Array.isArray(row?.Answers) && row.Answers.some((value: unknown) => String(value ?? "").trim())
@@ -2422,6 +2458,128 @@ function countPracticeQAnswers(intake: any) {
     return false;
   }).length;
   return { total: questions.length, answered };
+}
+
+function missingRequiredPracticeQRawAnswers(
+  intake: any,
+  context: {
+    answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>;
+    questions: Awaited<ReturnType<typeof dbServer.questionDb.getAll>>;
+  }
+) {
+  const checks = buildRequiredPracticeQRawAnswerChecks(context);
+  if (!checks.length) return [];
+
+  return checks.flatMap((check) => {
+    const question = findPracticeQRawQuestion(intake, check.questionText);
+    if (!question) return [`${check.questionText} expected ${check.expected}, but the PracticeQ question was not found`];
+    const actual = readPracticeQRawQuestionAnswer(question);
+    return practiceQRawAnswerMatches(actual, check.expected)
+      ? []
+      : [`${check.questionText} expected ${check.expected}, got ${actual || "<blank>"}`];
+  });
+}
+
+function buildRequiredPracticeQRawAnswerChecks(context: {
+  answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>;
+  questions: Awaited<ReturnType<typeof dbServer.questionDb.getAll>>;
+}) {
+  const questionById = new Map(context.questions.map((question) => [question.id, question]));
+  const answerByQuestionId = new Map(context.answers.map((answer) => [answer.questionId, answer.answer.trim()]));
+  const required = [
+    ["pq_height", "What is your height?", "5'10\""],
+    ["pq_current_weight", "What is your current body weight?", "220"],
+    ["pq_ideal_weight", "What is your ideal body weight?", "180"],
+    ["pq_conditions", "Select any that apply to you?", "None apply to me"],
+    ["pq_surgical_history", "Any surgical history?", "No"],
+    ["pq_medication_allergies", "Any Allergies to medication?", "No"],
+    ["pq_intake_purpose", "This intake form is for....", "Tirzepatide"],
+  ] as const;
+
+  return required.map(([questionId, fallbackText, fallbackExpected]) => {
+    const questionText = questionById.get(questionId)?.text ?? fallbackText;
+    const expected = normalizeExpectedPracticeQRawAnswer(questionText, answerByQuestionId.get(questionId) || fallbackExpected);
+    return { questionText, expected };
+  });
+}
+
+function normalizeExpectedPracticeQRawAnswer(questionText: string, answer: string) {
+  const normalizedQuestion = normalizePracticeQLookup(questionText);
+  const normalizedAnswer = normalizePracticeQLookup(answer);
+  if (normalizedQuestion.includes("this intake form is for") && normalizedAnswer.includes("weight loss")) return "Tirzepatide";
+  if (normalizedQuestion.includes("select any") && isNegativeRawPracticeQAnswer(answer)) return "None apply to me";
+  if (normalizedQuestion.includes("surgical history") && isNegativeRawPracticeQAnswer(answer)) return "No";
+  if (normalizedQuestion.includes("allergies to medication") && isNegativeRawPracticeQAnswer(answer)) return "No";
+  return answer;
+}
+
+function findPracticeQRawQuestion(intake: any, questionText: string) {
+  const questions = Array.isArray(intake?.Questions) ? intake.Questions : [];
+  const expected = normalizePracticeQLookup(questionText);
+  return questions.find((question: any) => {
+    const actual = normalizePracticeQLookup(String(question?.Text ?? question?.QuestionText ?? question?.Question ?? question?.Label ?? ""));
+    if (!actual) return false;
+    return actual === expected || actual.includes(expected) || expected.includes(actual);
+  });
+}
+
+function readPracticeQRawQuestionAnswer(question: any) {
+  const values: string[] = [];
+  for (const key of ["Answer", "Value", "AnswerText", "Response"]) {
+    const value = question?.[key];
+    if (Array.isArray(value)) {
+      values.push(...value.map((item) => String(item ?? "").trim()).filter(Boolean));
+    } else if (String(value ?? "").trim()) {
+      values.push(String(value).trim());
+    }
+  }
+  if (Array.isArray(question?.QuestionOptions)) {
+    values.push(
+      ...question.QuestionOptions
+        .filter((option: any) => option?.Checked || option?.Selected || option?.IsSelected || String(option?.Answer ?? "").trim())
+        .map((option: any) => String(option?.Text ?? option?.Label ?? option?.Value ?? option?.Answer ?? "").trim())
+        .filter(Boolean)
+    );
+  }
+  if (Array.isArray(question?.Rows)) {
+    for (const row of question.Rows) {
+      if (Array.isArray(row?.Answers)) {
+        values.push(...row.Answers.map((value: unknown) => String(value ?? "").trim()).filter(Boolean));
+      }
+    }
+  }
+  return [...new Set(values)].join(", ");
+}
+
+function practiceQRawAnswerMatches(actual: string, expected: string) {
+  const normalizedActual = normalizePracticeQLookup(actual);
+  const normalizedExpected = normalizePracticeQLookup(expected);
+  if (!normalizedExpected) return true;
+  if (!normalizedActual) return false;
+  if (normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected)) return true;
+  if (normalizedExpected === "tirzepatide") return normalizedActual.includes("tirzepatide");
+  if (normalizedExpected === "none apply to me") return normalizedActual.includes("none");
+  if (normalizedExpected === "no") return normalizedActual === "no";
+
+  const expectedNumbers = normalizedExpected.match(/\d+/g) ?? ([] as string[]);
+  if (expectedNumbers.length >= 2) {
+    const actualNumbers = normalizedActual.match(/\d+/g) ?? ([] as string[]);
+    return expectedNumbers.every((number) => actualNumbers.includes(number));
+  }
+  return false;
+}
+
+function isNegativeRawPracticeQAnswer(answer: string) {
+  const normalized = normalizePracticeQLookup(answer);
+  return (
+    normalized === "none" ||
+    normalized === "no" ||
+    normalized === "none apply to me" ||
+    normalized === "none of the above" ||
+    normalized.includes("no known") ||
+    normalized.includes("no allergies") ||
+    normalized.includes("not applicable")
+  );
 }
 
 function expectedPracticeQAnswerCount(answers: Awaited<ReturnType<typeof dbServer.answerDb.getByOrder>>) {

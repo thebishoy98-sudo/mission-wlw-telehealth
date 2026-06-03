@@ -1159,11 +1159,27 @@ export function applyMissionAnswersToPracticeQQuestions(
         profileAnswers
       );
     if (!answer) continue;
-    entry.Answer = answer;
-    applyPracticeQChoiceAnswer(entry, answer);
+    const practiceQAnswer = normalizePracticeQAnswerForQuestion(
+      firstString(entry.Text, entry.QuestionText, entry.Question, entry.Label, entry.Name),
+      answer
+    );
+    entry.Answer = practiceQAnswer;
+    applyPracticeQChoiceAnswer(entry, practiceQAnswer);
     changed = true;
   }
   return changed;
+}
+
+function normalizePracticeQAnswerForQuestion(questionText: string, answer: string) {
+  const normalizedQuestion = normalizeQuestionText(questionText);
+  const normalizedAnswer = normalizeQuestionText(answer);
+  if (normalizedQuestion.includes("this intake form is for") && normalizedAnswer.includes("weight loss")) {
+    return "Tirzepatide";
+  }
+  if (normalizedQuestion.includes("surgical history") && normalizedAnswer === "no") return "No";
+  if (normalizedQuestion.includes("allergies to medication") && normalizedAnswer === "no") return "No";
+  if (normalizedQuestion.includes("select any") && isNegativePracticeQAnswer(answer)) return "None apply to me";
+  return answer;
 }
 
 function applyPracticeQChoiceAnswer(entry: Record<string, unknown>, answer: string) {

@@ -50,6 +50,12 @@ type PracticeQFormFeed = {
   all?: PracticeQFormSummary[];
 };
 
+type PracticeQRawIntake = {
+  Id?: string;
+  Status?: string;
+  Questions?: Array<Record<string, unknown>>;
+};
+
 type OrderDetail = {
   order?: {
     id?: string;
@@ -84,6 +90,12 @@ type OrderDetail = {
   };
 };
 
+type PracticeQAutomationSmokeStatus = {
+  available?: boolean;
+  status?: string;
+  lastError?: string;
+};
+
 type ScenarioKind = "skip_manual_approval" | "skip_late_upload" | "regular_with_id";
 
 type PatientInput = {
@@ -111,6 +123,8 @@ type CheckoutResult = {
 const BASE_URL = (process.env.E2E_BASE_URL ?? "https://mission-wlw-web.onrender.com").replace(/\/$/, "");
 const HEADLESS = process.env.E2E_HEADLESS !== "false";
 const ADMIN_SECRET = process.env.E2E_ADMIN_SECRET ?? "";
+const PRACTICEQ_API_KEY = process.env.E2E_PRACTICEQ_API_KEY ?? process.env.PRACTICEQ_API_KEY ?? "";
+const PRACTICEQ_BASE_URL = (process.env.E2E_PRACTICEQ_BASE_URL ?? "https://intakeq.com/api/v1").replace(/\/$/, "");
 const ARTIFACT_ROOT =
   process.env.E2E_ARTIFACT_DIR ??
   path.join(os.tmpdir(), "mission-wlw-smoke", `identity-gate-practiceq-${Date.now()}`);
@@ -367,6 +381,125 @@ function missingPracticeQAnswers(practiceq: PracticeQMirror) {
   return failures;
 }
 
+async function fetchPracticeQRawIntake(intakeId: string, label: string): Promise<PracticeQRawIntake> {
+  assert(PRACTICEQ_API_KEY, "E2E_PRACTICEQ_API_KEY or PRACTICEQ_API_KEY is required for raw PracticeQ chart verification.");
+  const url = `${PRACTICEQ_BASE_URL}/intakes/${encodeURIComponent(intakeId)}`;
+  let last = "";
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const response = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        "X-Auth-Key": PRACTICEQ_API_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+    const body = await response.text().catch(() => "");
+    if (response.ok) return (body ? JSON.parse(body) : {}) as PracticeQRawIntake;
+
+    last = `${response.status}: ${body.slice(0, 500)}`;
+    if (![404, 408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 8) break;
+    const waitMs = response.status === 429 ? 30_000 : 12_000;
+    console.log(`  ${label}: raw PracticeQ GET ${response.status}, retrying in ${Math.round(waitMs / 1000)}s`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  throw new Error(`${label}: raw PracticeQ intake ${intakeId} could not be fetched: ${last}`);
+}
+
+async function assertRawPracticeQChartAnswers(intakeId: string | undefined, kind: ScenarioKind) {
+  assert(intakeId, `${kind} did not expose a PracticeQ intake ID for raw chart verification.`);
+  const intake = await fetchPracticeQRawIntake(intakeId, kind);
+  const missing = missingRawPracticeQChartAnswers(intake);
+  if (missing.length) throw new Error(`${kind} raw PracticeQ chart is missing expected answers: ${missing.join("; ")}`);
+  console.log(`  ${kind}: raw PracticeQ chart answers verified for intake=${intakeId}`);
+}
+
+function missingRawPracticeQChartAnswers(intake: PracticeQRawIntake) {
+  const checks = [
+    { label: "height", question: "What is your height?", expected: `5'10"` },
+    { label: "current body weight", question: "What is your current body weight?", expected: "220" },
+    { label: "ideal body weight", question: "What is your ideal body weight?", expected: "180" },
+    { label: "conditions", question: "Select any that apply to you?", expected: "None apply to me" },
+    { label: "surgical history", question: "Any surgical history?", expected: "No" },
+    { label: "medication allergies", question: "Any Allergies to medication?", expected: "No" },
+    { label: "intake purpose", question: "This intake form is for....", expected: "Tirzepatide" },
+  ];
+
+  return checks.flatMap((check) => {
+    const question = findRawPracticeQQuestion(intake, check.question);
+    if (!question) return [`${check.label}=<question not found>`];
+    const actual = readRawPracticeQQuestionAnswer(question);
+    return rawPracticeQAnswerMatches(actual, check.expected)
+      ? []
+      : [`${check.label}=${JSON.stringify(actual || "<blank>")} expected ${JSON.stringify(check.expected)}`];
+  });
+}
+
+function findRawPracticeQQuestion(intake: PracticeQRawIntake, questionText: string) {
+  const expected = normalizeRawPracticeQText(questionText);
+  return (intake.Questions ?? []).find((question) => {
+    const actual = normalizeRawPracticeQText(String(question.Text ?? question.QuestionText ?? question.Question ?? question.Label ?? ""));
+    if (!actual) return false;
+    return actual === expected || actual.includes(expected) || expected.includes(actual);
+  });
+}
+
+function readRawPracticeQQuestionAnswer(question: Record<string, unknown>) {
+  const values: string[] = [];
+  for (const key of ["Answer", "Value", "AnswerText", "Response"]) {
+    const value = question[key];
+    if (Array.isArray(value)) {
+      values.push(...value.map((item) => String(item ?? "").trim()).filter(Boolean));
+    } else if (String(value ?? "").trim()) {
+      values.push(String(value).trim());
+    }
+  }
+  const options = question.QuestionOptions;
+  if (Array.isArray(options)) {
+    values.push(
+      ...options
+        .filter((option) =>
+          Boolean(option?.Checked) ||
+          Boolean(option?.Selected) ||
+          Boolean(option?.IsSelected) ||
+          String(option?.Answer ?? "").trim().length > 0
+        )
+        .map((option) => String(option?.Text ?? option?.Label ?? option?.Value ?? option?.Answer ?? "").trim())
+        .filter(Boolean)
+    );
+  }
+  const rows = question.Rows;
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (Array.isArray(row?.Answers)) {
+        values.push(...row.Answers.map((value: unknown) => String(value ?? "").trim()).filter(Boolean));
+      }
+    }
+  }
+  return [...new Set(values)].join(", ");
+}
+
+function rawPracticeQAnswerMatches(actual: string, expected: string) {
+  const normalizedActual = normalizeRawPracticeQText(actual);
+  const normalizedExpected = normalizeRawPracticeQText(expected);
+  if (!normalizedExpected) return true;
+  if (!normalizedActual) return false;
+  if (normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected)) return true;
+  if (normalizedExpected === "tirzepatide") return normalizedActual.includes("tirzepatide");
+  if (normalizedExpected === "none apply to me") return normalizedActual.includes("none");
+  if (normalizedExpected === "no") return normalizedActual === "no";
+
+  const expectedNumbers = normalizedExpected.match(/\d+/g) ?? ([] as string[]);
+  if (expectedNumbers.length >= 2) {
+    const actualNumbers = normalizedActual.match(/\d+/g) ?? ([] as string[]);
+    return expectedNumbers.every((number) => actualNumbers.includes(number));
+  }
+  return false;
+}
+
+function normalizeRawPracticeQText(value: string) {
+  return value.toLowerCase().replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function uniquePatient(kind: ScenarioKind, runId: string, index: number): PatientInput {
   const suffix = `${runId.slice(-6)}${index}`;
   return {
@@ -563,9 +696,9 @@ async function pollPracticeQDone(result: CheckoutResult, kind: ScenarioKind) {
     async () => {
       const [detail, automation] = await Promise.all([
         getOrderDetail(result.orderId),
-        fetchJson<{ available?: boolean; status?: string; lastError?: string }>(
+        fetchJson<PracticeQAutomationSmokeStatus>(
           `${BASE_URL}/api/clinical-consent/automation/${encodeURIComponent(result.orderId)}?patientId=${encodeURIComponent(result.patientId)}`
-        ).catch(() => ({ available: false })),
+        ).catch((): PracticeQAutomationSmokeStatus => ({ available: false })),
       ]);
       const job = detail.diagnostics?.practiceqAutomation;
       console.log(
@@ -725,6 +858,7 @@ async function runScenario({
 
   const detail = await pollPracticeQDone(result, kind);
   await assertSinglePracticeQEntry(result, detail, kind);
+  await assertRawPracticeQChartAnswers(detail.practiceq?.intakeId, kind);
   console.log(
     `SCENARIO ${kind}: PASS order=${result.orderId} intake=${detail.practiceq?.intakeId} client=${detail.practiceq?.clientId} lifefile=${detail.pharmacy?.lifeFileOrderId}`
   );
@@ -741,6 +875,7 @@ async function runScenario({
 
 async function main() {
   assert(ADMIN_SECRET, "Set E2E_ADMIN_SECRET before running this smoke.");
+  assert(PRACTICEQ_API_KEY, "Set E2E_PRACTICEQ_API_KEY before running this smoke so raw PracticeQ chart fields are verified.");
   await fs.mkdir(ARTIFACT_ROOT, { recursive: true });
   await fs.access(ID_IMAGE_PATH);
   await fs.access(ID_VIDEO_PATH);

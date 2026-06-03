@@ -289,6 +289,73 @@ describe("practiceq.markPracticeQIntakeCompletedViaApi", () => {
       ],
     });
   });
+
+  it("writes raw PracticeQ chart answers when IntakeQ omits choice option arrays", () => {
+    const intakeQuestions = [
+      { Id: "practiceq_conditions", Text: "Select any that apply to you?", Answer: "", Rows: [] },
+      { Id: "practiceq_surgical", Text: "Any surgical history?", Answer: "", Rows: [] },
+      { Id: "practiceq_allergies", Text: "Any Allergies to medication?", Answer: "", Rows: [] },
+      { Id: "practiceq_purpose", Text: "This intake form is for....", Answer: "", Rows: [] },
+    ];
+    const chartQuestions: Question[] = [
+      {
+        id: "pq_conditions",
+        category: "medical_history",
+        text: "Select any that apply to you?",
+        type: "checkbox",
+        required: true,
+        options: ["None apply to me"],
+        displayOrder: 3,
+      },
+      {
+        id: "pq_surgical_history",
+        category: "screening",
+        text: "Any surgical history?",
+        type: "radio",
+        required: true,
+        options: ["No", "Yes"],
+        displayOrder: 4,
+      },
+      {
+        id: "pq_medication_allergies",
+        category: "allergies",
+        text: "Any Allergies to medication?",
+        type: "radio",
+        required: true,
+        options: ["No", "Yes"],
+        displayOrder: 5,
+      },
+      {
+        id: "pq_intake_purpose",
+        category: "screening",
+        text: "This intake form is for....",
+        type: "radio",
+        required: true,
+        options: ["Weight loss"],
+        displayOrder: 6,
+      },
+    ];
+    const chartAnswers: QuestionnaireAnswer[] = [
+      { id: "a_conditions", orderId: "o1", questionId: "pq_conditions", answer: "None apply to me", createdAt: "2026-05-27T00:00:00.000Z" },
+      { id: "a_surgical", orderId: "o1", questionId: "pq_surgical_history", answer: "No", createdAt: "2026-05-27T00:00:00.000Z" },
+      { id: "a_allergies", orderId: "o1", questionId: "pq_medication_allergies", answer: "No", createdAt: "2026-05-27T00:00:00.000Z" },
+      { id: "a_purpose", orderId: "o1", questionId: "pq_intake_purpose", answer: "Weight loss", createdAt: "2026-05-27T00:00:00.000Z" },
+    ];
+
+    const changed = practiceq.applyMissionAnswersToPracticeQQuestions(intakeQuestions, {
+      patient: makePatient(),
+      answers: chartAnswers,
+      questions: chartQuestions,
+    });
+
+    expect(changed).toBe(true);
+    expect(intakeQuestions).toEqual([
+      expect.objectContaining({ Text: "Select any that apply to you?", Answer: "None apply to me" }),
+      expect.objectContaining({ Text: "Any surgical history?", Answer: "No" }),
+      expect.objectContaining({ Text: "Any Allergies to medication?", Answer: "No" }),
+      expect.objectContaining({ Text: "This intake form is for....", Answer: "Tirzepatide" }),
+    ]);
+  });
 });
 
 describe("practiceq API retry handling", () => {
