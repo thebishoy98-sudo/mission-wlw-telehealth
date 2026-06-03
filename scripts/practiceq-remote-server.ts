@@ -186,7 +186,7 @@ async function pollQueuedJobs() {
         status: result.status,
         handoffUrl: result.handoffUrl,
         intakeId: result.intakeId,
-        lastError: result.error,
+        lastError: result.status === "completed" ? undefined : result.error,
       });
       if (result.status === "failed") {
         const practiceQStatus = modules.getPracticeQStatusAfterWorkerResult(result);

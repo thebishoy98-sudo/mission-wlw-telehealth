@@ -21,4 +21,8 @@ describe("order detail diagnostics", () => {
     expect(adminSource).toContain("Latest Integration Details");
     expect(adminSource).toContain("PracticeQ Automation");
   });
+
+  it("does not return stale PracticeQ retry errors after a job completed", () => {
+    expect(routeSource).toContain('practiceqAutomationJob.status === "completed" ? undefined : practiceqAutomationJob.lastError');
+  });
 });

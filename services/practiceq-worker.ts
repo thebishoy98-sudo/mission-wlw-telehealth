@@ -147,7 +147,7 @@ export async function processQueuedPracticeQAutomationJobs(limit = 5): Promise<W
       status: result.status,
       handoffUrl: result.handoffUrl,
       intakeId: result.intakeId,
-      lastError: result.error,
+      lastError: result.status === "completed" ? undefined : result.error,
     });
     if (result.status === "completed") {
       await completePracticeQSession(job.id).catch((error) =>

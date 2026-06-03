@@ -100,7 +100,7 @@ export async function GET(
                 handoffUrl: practiceqAutomationJob.handoffUrl,
                 handoffExpiresAt: practiceqAutomationJob.handoffExpiresAt,
                 intakeId: practiceqAutomationJob.intakeId,
-                lastError: practiceqAutomationJob.lastError,
+                lastError: practiceqAutomationJob.status === "completed" ? undefined : practiceqAutomationJob.lastError,
                 updatedAt: practiceqAutomationJob.updatedAt,
               }
             : null,
