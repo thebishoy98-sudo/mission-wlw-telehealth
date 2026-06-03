@@ -154,6 +154,16 @@ function adminHeaders() {
   return { "x-admin-secret": ADMIN_SECRET };
 }
 
+function errorText(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = (error as Error & { cause?: unknown }).cause;
+  return [error.name, error.message, cause ? errorText(cause) : ""].filter(Boolean).join(" ");
+}
+
+function isTransientFetchError(error: unknown) {
+  return /fetch failed|headers timeout|UND_ERR|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket|network/i.test(errorText(error));
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
   const body = await response.text();
@@ -183,7 +193,12 @@ async function poll<T>(
       const result = await fn();
       if (result) return result;
     } catch (error) {
-      last = error instanceof Error ? error.message : String(error);
+      last = errorText(error);
+      if (isTransientFetchError(error)) {
+        console.log(`  ${label}: transient fetch error, retrying: ${last.slice(0, 260)}`);
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        continue;
+      }
       throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));

@@ -57,6 +57,39 @@ import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/ide
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { Payment } from "@/types";
 
+class PaymentPersistenceError extends Error {
+  status: number;
+
+  constructor(operation: string, afterPayment = false) {
+    super(
+      afterPayment
+        ? `Payment was processed, but ${operation} could not be saved. Please contact support with this order ID.`
+        : `Order could not be saved before payment (${operation}). Please retry; no payment was submitted.`
+    );
+    this.name = "PaymentPersistenceError";
+    this.status = afterPayment ? 500 : 503;
+  }
+}
+
+const hasCanonicalDb = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
+
+async function requirePaymentPersistence<T>(
+  operation: string,
+  action: () => Promise<T>,
+  options: { requireResult?: boolean; afterPayment?: boolean } = {}
+): Promise<T> {
+  try {
+    const result = await action();
+    if (options.requireResult && hasCanonicalDb() && result == null) {
+      throw new Error("No persisted row returned.");
+    }
+    return result;
+  } catch (error) {
+    console.error(`Payment persistence failed during ${operation}:`, error);
+    throw new PaymentPersistenceError(operation, options.afterPayment);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -89,10 +122,13 @@ export async function POST(req: NextRequest) {
       : null;
     if (productData) {
       if (!persistedProduct) {
-        await dbServer.productDb.upsert(productData).catch(() => {});
+        await requirePaymentPersistence("product upsert", () => dbServer.productDb.upsert(productData));
         persistedProduct =
           (await dbServer.productDb.getBySlug(productData.slug).catch(() => null)) ??
           (await dbServer.productDb.getById(productData.id).catch(() => null));
+        if (hasCanonicalDb() && !persistedProduct) {
+          throw new PaymentPersistenceError("product lookup");
+        }
       }
     }
     const persistedDose = resolvePersistedDose(persistedProduct, productData ?? null, orderData?.doseId);
@@ -104,18 +140,26 @@ export async function POST(req: NextRequest) {
       : null;
     if (patientData) {
       if (!persistedPatient) {
-        persistedPatient = await dbServer.patientDb.create(patientData).catch(() => null);
+        persistedPatient = await requirePaymentPersistence(
+          "patient create",
+          () => dbServer.patientDb.create(patientData),
+          { requireResult: true }
+        );
       } else {
-        await dbServer.patientDb.update(persistedPatient.id, {
-          firstName: patientData.firstName,
-          lastName: patientData.lastName,
-          dateOfBirth: patientData.dateOfBirth,
-          gender: patientData.gender,
-          phone: patientData.phone,
-          email: patientData.email,
-          address: patientData.address,
-          shippingAddress: patientData.shippingAddress?.street1 ? patientData.shippingAddress : patientData.address,
-        }).catch(() => persistedPatient);
+        persistedPatient = await requirePaymentPersistence(
+          "patient update",
+          () => dbServer.patientDb.update(persistedPatient!.id, {
+            firstName: patientData.firstName,
+            lastName: patientData.lastName,
+            dateOfBirth: patientData.dateOfBirth,
+            gender: patientData.gender,
+            phone: patientData.phone,
+            email: patientData.email,
+            address: patientData.address,
+            shippingAddress: patientData.shippingAddress?.street1 ? patientData.shippingAddress : patientData.address,
+          }),
+          { requireResult: true }
+        );
       }
     }
     const effectivePatient = persistedPatient ?? patientData;
@@ -130,8 +174,11 @@ export async function POST(req: NextRequest) {
 
     // If not found anywhere, create from submitted data (localStorage not accessible server-side)
     if (!order && normalizedOrderData) {
-      await dbServer.orderDb.create(normalizedOrderData).catch(() => normalizedOrderData);
-      order = normalizedOrderData;
+      order = await requirePaymentPersistence(
+        "order create",
+        () => dbServer.orderDb.create(normalizedOrderData),
+        { requireResult: true }
+      );
     }
 
     if (!order) {
@@ -191,8 +238,18 @@ export async function POST(req: NextRequest) {
           const question = questionById.get(answer.questionId);
           return question ? [question] : [];
         });
-      await Promise.all(submittedQuestions.map((question) => dbServer.questionDb.upsert(question).catch(() => question))).catch(() => {});
-      await Promise.all(submittedAnswerRows.map((a) => dbServer.answerDb.create(a).catch(() => {}))).catch(() => {});
+      await Promise.all(
+        submittedQuestions.map((question) =>
+          requirePaymentPersistence("question upsert", () => dbServer.questionDb.upsert(question))
+        )
+      );
+      await Promise.all(
+        submittedAnswerRows.map((a) =>
+          requirePaymentPersistence("questionnaire answer create", () => dbServer.answerDb.create(a), {
+            requireResult: true,
+          })
+        )
+      );
     }
     if (consentData?.signedName) {
       if (!consentData.signedName.trim() || consentData.signedName.trim().split(/\s+/).length < 2) {
@@ -201,17 +258,20 @@ export async function POST(req: NextRequest) {
           { status: 422 }
         );
       }
-      await dbServer.consentDb.create({
-        id: `consent_${orderId}`,
-        orderId,
-        consentText: buildTreatmentConsentText(effectivePatient),
-        acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
-        signedName: String(consentData.signedName).trim(),
-        signedAt: consentData.signedAt ?? new Date().toISOString(),
-        ipAddress: getRequestIp(req),
-        userAgent: req.headers.get("user-agent") ?? undefined,
-        consentVersion: CONSENT_VERSION,
-      }).catch(() => {});
+      await requirePaymentPersistence("consent create", () =>
+        dbServer.consentDb.create({
+          id: `consent_${orderId}`,
+          orderId,
+          consentText: buildTreatmentConsentText(effectivePatient),
+          acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
+          signedName: String(consentData.signedName).trim(),
+          signedAt: consentData.signedAt ?? new Date().toISOString(),
+          ipAddress: getRequestIp(req),
+          userAgent: req.headers.get("user-agent") ?? undefined,
+          consentVersion: CONSENT_VERSION,
+        }),
+        { requireResult: true }
+      );
     }
 
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
@@ -242,11 +302,8 @@ export async function POST(req: NextRequest) {
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
 
-    if (!patient && patientData) {
-      try {
-        await dbServer.patientDb.create(patientData).catch(() => patientData);
-      } catch { /* may already exist */ }
-      patient = patientData;
+    if (!patient && effectivePatient) {
+      patient = effectivePatient;
     }
 
     if (!patient) {
@@ -332,7 +389,10 @@ export async function POST(req: NextRequest) {
     };
 
     db.paymentDb.create(payment);
-    await dbServer.paymentDb.create(payment).catch(() => {});
+    await requirePaymentPersistence("payment create", () => dbServer.paymentDb.create(payment), {
+      requireResult: true,
+      afterPayment: true,
+    });
 
     // 7. Verify identity when patient submitted usable media. Returning patients with
     // a prior successful order reuse identity server-side so checkout cannot fall
@@ -366,7 +426,14 @@ export async function POST(req: NextRequest) {
 
     if (submittedUploads.length) {
       submittedUploads.forEach((upload) => db.uploadDb.create(upload));
-      await Promise.all(submittedUploads.map((upload) => dbServer.uploadDb.create(upload).catch(() => upload)));
+      await Promise.all(
+        submittedUploads.map((upload) =>
+          requirePaymentPersistence("identity upload create", () => dbServer.uploadDb.create(upload), {
+            requireResult: true,
+            afterPayment: true,
+          })
+        )
+      );
     }
 
     const identityAiResult = checkoutIdentityReused
@@ -413,7 +480,10 @@ export async function POST(req: NextRequest) {
       submittedAt: new Date().toISOString(),
     };
     db.orderDb.update(orderId, orderUpdates);
-    await dbServer.orderDb.update(orderId, orderUpdates).catch(() => {});
+    await requirePaymentPersistence("order status update", () => dbServer.orderDb.update(orderId, orderUpdates), {
+      requireResult: true,
+      afterPayment: true,
+    });
     const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
     sendAdminNotification("order_received", {
       orderId,
@@ -693,6 +763,9 @@ export async function POST(req: NextRequest) {
       warnings: errors.length ? errors : undefined,
     });
   } catch (err: any) {
+    if (err instanceof PaymentPersistenceError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("Payment charge error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
