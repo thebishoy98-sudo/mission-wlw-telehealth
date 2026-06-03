@@ -15,10 +15,14 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { generateId } from "@/lib/utils";
 import { logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
+import { requireProvider } from "@/lib/server-auth";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
 
 export async function POST(req: NextRequest) {
+  const authError = requireProvider(req);
+  if (authError) return authError;
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   }

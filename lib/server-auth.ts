@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getStaffSessionFromRequest } from "@/lib/staff-session";
 
 function hasHeaderSecret(req: Request, envName = "ADMIN_SECRET") {
-  const secret = process.env[envName] ?? process.env.ADMIN_SECRET;
-  if (!secret) return process.env.VERCEL_ENV !== "production";
+  const secret = process.env[envName];
+  if (!secret) return false;
 
   const provided =
     envName === "PROVIDER_SECRET"

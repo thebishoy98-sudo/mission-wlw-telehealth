@@ -14,6 +14,7 @@
  * Required by HIPAA to retain audit logs for 6 years from creation or last effective date.
  */
 
+import { randomUUID } from "crypto";
 import * as dbServer from "@/lib/db.server";
 import * as db from "@/lib/db";
 
@@ -64,7 +65,7 @@ export interface PhiAuditEntry {
  */
 export function logPhiAccess(entry: Omit<PhiAuditEntry, "id" | "timestamp">): void {
   const fullEntry: PhiAuditEntry = {
-    id: `phi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `phi_${randomUUID()}`,
     timestamp: new Date().toISOString(),
     ...entry,
   };

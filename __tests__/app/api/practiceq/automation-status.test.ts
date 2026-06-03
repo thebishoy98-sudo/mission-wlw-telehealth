@@ -16,6 +16,12 @@ jest.mock("@/lib/db.server", () => ({
   },
 }));
 
+jest.mock("@/lib/server-auth", () => ({
+  requireProviderOrAdmin: jest.fn().mockReturnValue(null),
+  requireProvider: jest.fn().mockReturnValue(null),
+  requireAdmin: jest.fn().mockReturnValue(null),
+}));
+
 const { GET } = require("@/app/api/practiceq/automation/[orderId]/route");
 
 describe("GET /api/practiceq/automation/[orderId]", () => {

@@ -24,7 +24,7 @@ export function validateSharedSecret({
   serviceName,
   envName,
 }: SharedSecretValidationInput): SharedSecretValidationResult {
-  if (!configuredSecret && process.env.VERCEL_ENV === "production") {
+  if (!configuredSecret) {
     console.error(`${envName} is not configured`);
     return {
       ok: false,
@@ -33,7 +33,7 @@ export function validateSharedSecret({
     };
   }
 
-  if (configuredSecret && providedSecret !== configuredSecret) {
+  if (!timingSafeStringEqual(providedSecret ?? "", configuredSecret)) {
     return { ok: false, status: 401, error: "Unauthorized" };
   }
 
@@ -46,7 +46,7 @@ export function validateBasicAuth({
   configuredPassword,
   serviceName,
 }: BasicAuthValidationInput): SharedSecretValidationResult {
-  if ((!configuredUsername || !configuredPassword) && process.env.VERCEL_ENV === "production") {
+  if (!configuredUsername || !configuredPassword) {
     console.error(`${serviceName} Basic Auth credentials are not configured`);
     return {
       ok: false,
@@ -54,8 +54,6 @@ export function validateBasicAuth({
       error: `${serviceName} webhook is not configured`,
     };
   }
-
-  if (!configuredUsername || !configuredPassword) return { ok: true };
   const credentials = parseBasicAuth(authorizationHeader);
   if (!credentials) return { ok: false, status: 401, error: "Unauthorized" };
 

@@ -13,10 +13,10 @@ import { applyLifeFileWebhookPayload } from "@/lib/lifefile-webhook-handler";
 
 function isAuthorized(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET && process.env.VERCEL_ENV === "production") {
+  if (!process.env.CRON_SECRET) {
     return { ok: false, response: NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 }) };
   }
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
   return { ok: true };
@@ -65,4 +65,3 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export const GET = POST;

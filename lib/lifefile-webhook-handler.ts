@@ -21,7 +21,7 @@ export async function handleLifeFileWebhook(req: NextRequest, routeOrderId = "")
   const signature = req.headers.get("x-lifefile-signature") ?? "";
   const secret = process.env.LIFEFILE_WEBHOOK_SECRET ?? "";
 
-  if (!secret && process.env.VERCEL_ENV === "production") {
+  if (!secret) {
     return NextResponse.json({ error: "LIFEFILE_WEBHOOK_SECRET is not configured" }, { status: 500 });
   }
   if (secret && !signature) {

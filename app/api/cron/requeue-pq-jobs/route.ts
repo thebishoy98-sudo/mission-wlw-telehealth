@@ -51,6 +51,15 @@ export async function POST(req: NextRequest) {
   } | null;
 
   if (body?.orderId) {
+    const job = await dbServer.practiceqAutomationJobDb.getByOrder(body.orderId).catch(() => null);
+    if (!job) return NextResponse.json({ error: "PracticeQ job not found" }, { status: 404 });
+    if (job.status !== "failed" && job.status !== "running") {
+      return NextResponse.json(
+        { error: "Only failed or stuck-running jobs can be requeued with answer updates" },
+        { status: 422 }
+      );
+    }
+
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
     const fallbackQuestions = ensurePracticeQRequiredQuestions(questions.length ? questions : (localQuestions.length ? localQuestions : seedQuestions));
@@ -70,9 +79,6 @@ export async function POST(req: NextRequest) {
       }).catch(() => null);
       seeded.push(questionId);
     }
-
-    const job = await dbServer.practiceqAutomationJobDb.getByOrder(body.orderId).catch(() => null);
-    if (!job) return NextResponse.json({ error: "PracticeQ job not found" }, { status: 404 });
 
     await dbServer.practiceqAutomationJobDb.update(job.id, {
       status: "queued",

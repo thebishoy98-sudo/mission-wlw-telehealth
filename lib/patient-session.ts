@@ -3,12 +3,7 @@ import crypto from "crypto";
 export const PATIENT_SESSION_COOKIE = "patient_session";
 
 function sessionSecret() {
-  return (
-    process.env.PATIENT_SESSION_SECRET ??
-    process.env.ADMIN_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    "dev-patient-session-secret"
-  );
+  return process.env.PATIENT_SESSION_SECRET ?? process.env.ADMIN_SECRET ?? "";
 }
 
 function sign(payload: string) {

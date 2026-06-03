@@ -27,10 +27,10 @@ function daysSince(isoDate: string): number {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET && process.env.VERCEL_ENV === "production") {
+  if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
   }
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -119,26 +119,34 @@ export async function POST(req: NextRequest) {
         }).catch(() => {});
       }
 
-      // Trigger pharmacy order if not already sent
-      const order =
-        (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
-      if (order && getIdentityGate(order).canDispatch) {
-        const existingPharmacyOrder =
-          (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
-          db.pharmacyOrderDb.getByOrder(orderId);
-        if (!existingPharmacyOrder) {
-          try {
-            const pharmacyOrder = await pharmacy.createPharmacyOrder(order);
-            await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
-          } catch {}
-        }
-      }
-
-      const patient = await getPatient();
-      if (patient) {
-        spruceServer.sendMessage(patient, "approved", { orderId }).catch(() => {});
-      }
       log("PracticeQ: order approved by provider");
+
+      // Pharmacy dispatch and patient SMS are fire-and-forget to respond
+      // before PracticeQ's 5-second webhook timeout.
+      Promise.resolve().then(async () => {
+        try {
+          const order =
+            (await dbServer.orderDb.getById(orderId).catch(() => null)) ?? db.orderDb.getById(orderId);
+          if (order && getIdentityGate(order).canDispatch) {
+            const existingPharmacyOrder =
+              (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
+              db.pharmacyOrderDb.getByOrder(orderId);
+            if (!existingPharmacyOrder) {
+              try {
+                const pharmacyOrder = await pharmacy.createPharmacyOrder(order);
+                await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
+              } catch {}
+            }
+          }
+          const patient = await getPatient();
+          if (patient) {
+            spruceServer.sendMessage(patient, "approved", { orderId }).catch(() => {});
+          }
+        } catch (err) {
+          console.error("PracticeQ intake.approved async error:", err);
+        }
+      });
+
       break;
     }
 

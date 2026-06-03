@@ -3,6 +3,8 @@ import * as dbServer from "@/lib/db.server";
 import { loadProviderPatientChart } from "@/lib/provider-chart";
 import { getPracticeQMirrorForOrder } from "@/services/practiceq";
 import { requireProviderOrAdmin } from "@/lib/server-auth";
+import { getStaffSessionFromRequest } from "@/lib/staff-session";
+import { logPhiAccess, actorFromHeaders } from "@/lib/phi-audit";
 import { generateId } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,13 @@ export async function GET(
 
   try {
     const { id } = await params;
+    const auditCtx = actorFromHeaders(req.headers);
+    logPhiAccess({
+      action: "view", resource: "patient", resourceId: id,
+      patientId: id, actor: auditCtx.actor,
+      actorIp: auditCtx.actorIp, requestId: auditCtx.requestId,
+      outcome: "success",
+    });
     const chart = await loadProviderPatientChart(id, {
       selectedOrderId: req.nextUrl.searchParams.get("orderId") ?? undefined,
       patients: dbServer.patientDb,
@@ -58,7 +67,9 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const { orderId, action, reviewedBy = "Dotson, Karen" } = await req.json();
+    const { orderId, action } = await req.json();
+    const patchSession = getStaffSessionFromRequest(req);
+    const reviewedBy = patchSession?.name ?? patchSession?.email ?? "provider";
     if (!orderId || action !== "mark_chart_viewed") {
       return NextResponse.json({ error: "orderId and action=mark_chart_viewed required" }, { status: 400 });
     }

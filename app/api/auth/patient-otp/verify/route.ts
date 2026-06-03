@@ -5,7 +5,7 @@ import { createPatientSessionToken, PATIENT_SESSION_COOKIE } from "@/lib/patient
 import { normalizeSprucePhoneNumber } from "@/services/spruce.server";
 
 function hashCode(phoneNumber: string, code: string) {
-  const secret = process.env.PATIENT_OTP_SECRET ?? process.env.ADMIN_SECRET ?? "dev-patient-otp-secret";
+  const secret = process.env.PATIENT_OTP_SECRET ?? process.env.ADMIN_SECRET ?? "";
   return crypto.createHmac("sha256", secret).update(`${phoneNumber}:${code}`).digest("hex");
 }
 

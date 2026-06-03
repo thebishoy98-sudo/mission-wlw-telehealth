@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
+import { sql } from "@/lib/db.server";
 import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
 import * as pharmacy from "@/services/pharmacy";
@@ -212,6 +213,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Atomic duplicate-charge lock via conditional UPDATE (Postgres only).
+    // First concurrent request wins the UPDATE; second gets rowCount=0 and returns 409.
+    if (hasCanonicalDb()) {
+      try {
+        const lockResult = await sql`
+          UPDATE orders SET status = 'processing' WHERE id = ${orderId} AND status = 'draft'
+        `;
+        if ((lockResult.rowCount ?? 0) === 0) {
+          return NextResponse.json(
+            { error: "Order already processed", orderStatus: order.status },
+            { status: 409 }
+          );
+        }
+      } catch {
+        // Lock unavailable — soft check above still provides basic protection
+      }
+    }
+
     // 3. Server-side eligibility re-check
     const questions = await dbServer.questionDb.getAll().catch(() => []);
     const localQuestions = db.questionDb.getAll();
@@ -251,28 +270,26 @@ export async function POST(req: NextRequest) {
         )
       );
     }
-    if (consentData?.signedName) {
-      if (!consentData.signedName.trim() || consentData.signedName.trim().split(/\s+/).length < 2) {
-        return NextResponse.json(
-          { error: "Consent signature must include first and last name." },
-          { status: 422 }
-        );
-      }
-      await requirePaymentPersistence("consent create", () =>
-        dbServer.consentDb.create({
-          id: `consent_${orderId}`,
-          orderId,
-          consentText: buildTreatmentConsentText(effectivePatient),
-          acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
-          signedName: String(consentData.signedName).trim(),
-          signedAt: consentData.signedAt ?? new Date().toISOString(),
-          ipAddress: getRequestIp(req),
-          userAgent: req.headers.get("user-agent") ?? undefined,
-          consentVersion: CONSENT_VERSION,
-        }),
-        { requireResult: true }
+    if (!consentData?.signedName || consentData.signedName.trim().split(/\s+/).length < 2) {
+      return NextResponse.json(
+        { error: "Consent signature must include first and last name." },
+        { status: 422 }
       );
     }
+    await requirePaymentPersistence("consent create", () =>
+      dbServer.consentDb.create({
+        id: `consent_${orderId}`,
+        orderId,
+        consentText: buildTreatmentConsentText(effectivePatient),
+        acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
+        signedName: String(consentData.signedName).trim(),
+        signedAt: consentData.signedAt ?? new Date().toISOString(),
+        ipAddress: getRequestIp(req),
+        userAgent: req.headers.get("user-agent") ?? undefined,
+        consentVersion: CONSENT_VERSION,
+      }),
+      { requireResult: true }
+    );
 
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
@@ -739,7 +756,10 @@ export async function POST(req: NextRequest) {
     if (process.env.ANTHROPIC_API_KEY) {
       fetch(`${req.nextUrl.origin}/api/ai/eligibility`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.ADMIN_SECRET ? { "x-admin-secret": process.env.ADMIN_SECRET } : {}),
+        },
         body: JSON.stringify({ orderId }),
       }).catch(() => {}); // fire and forget
     }

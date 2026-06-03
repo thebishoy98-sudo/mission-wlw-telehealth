@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("intuit-signature") ?? "";
   const verifierToken = process.env.QB_WEBHOOK_VERIFIER_TOKEN ?? "";
 
-  if (!verifierToken && process.env.VERCEL_ENV === "production") {
+  if (!verifierToken) {
     return NextResponse.json({ error: "QB_WEBHOOK_VERIFIER_TOKEN is not configured" }, { status: 500 });
   }
 
@@ -151,8 +151,11 @@ async function handleEntity(entity: any, realmId: string) {
 // QB webhook verification endpoint (GET) - Intuit sends a challenge to verify
 export async function GET(req: NextRequest) {
   const challenge = req.nextUrl.searchParams.get("challenge");
-  if (challenge) {
+  if (challenge && process.env.QB_WEBHOOK_VERIFIER_TOKEN) {
     return new Response(challenge, { status: 200 });
+  }
+  if (challenge) {
+    return NextResponse.json({ error: "QB webhooks not configured" }, { status: 503 });
   }
   return NextResponse.json({ status: "ok" });
 }

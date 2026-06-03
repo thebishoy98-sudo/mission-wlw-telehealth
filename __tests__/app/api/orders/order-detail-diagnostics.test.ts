@@ -25,4 +25,10 @@ describe("order detail diagnostics", () => {
   it("does not return stale PracticeQ retry errors after a job completed", () => {
     expect(routeSource).toContain('practiceqAutomationJob.status === "completed" ? undefined : practiceqAutomationJob.lastError');
   });
+
+  it("hides stale PracticeQ retry errors in the admin UI after a job completed", () => {
+    expect(adminSource).toContain("selectedPracticeQAutomationError");
+    expect(adminSource).toContain('status === "completed"');
+    expect(adminSource).toContain("{selectedPracticeQAutomationError && (");
+  });
 });

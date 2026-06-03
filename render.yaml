@@ -57,7 +57,7 @@ services:
       - key: USE_REAL_QUICKBOOKS
         value: false
       - key: BYPASS_QB_PAYMENTS
-        value: true
+        sync: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
         value: false
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT

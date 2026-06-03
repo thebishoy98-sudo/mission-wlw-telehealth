@@ -3,6 +3,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { generateId } from "@/lib/utils";
 import { requireProviderOrAdmin } from "@/lib/server-auth";
+import { getStaffSessionFromRequest } from "@/lib/staff-session";
 
 export async function POST(req: NextRequest) {
   const denied = requireProviderOrAdmin(req);
@@ -10,11 +11,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { orderId, action, reviewedBy } = body;
+    const { orderId, action } = body;
+    const session = getStaffSessionFromRequest(req);
+    const reviewedBy = session?.name ?? session?.email ?? "provider";
 
-    if (!orderId || !action || !reviewedBy) {
+    if (!orderId || !action) {
       return NextResponse.json(
-        { error: "Missing required fields: orderId, action, reviewedBy" },
+        { error: "Missing required fields: orderId, action" },
         { status: 400 }
       );
     }

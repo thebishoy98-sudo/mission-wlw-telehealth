@@ -42,20 +42,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { token, orderId, idImageData, selfieFrameData, identityVideoData } = body;
+    const { token, idImageData, selfieFrameData, identityVideoData } = body;
 
-    if ((!token && !orderId) || !idImageData || !selfieFrameData) {
+    if (!token || !idImageData || !selfieFrameData) {
       return NextResponse.json(
-        { error: "token/orderId, ID image, and identity video frame are required" },
+        { error: "token, ID image, and identity video frame are required" },
         { status: 400 }
       );
     }
 
     const order =
-      (token ? await dbServer.orderDb.getByIdentityUploadToken(token).catch(() => null) : null) ??
-      (orderId ? await dbServer.orderDb.getById(orderId).catch(() => null) : null) ??
-      (token ? db.orderDb.getByIdentityUploadToken(token) : null) ??
-      (orderId ? db.orderDb.getById(orderId) : null);
+      (await dbServer.orderDb.getByIdentityUploadToken(token).catch(() => null)) ??
+      db.orderDb.getByIdentityUploadToken(token);
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });

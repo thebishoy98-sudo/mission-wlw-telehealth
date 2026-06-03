@@ -58,7 +58,6 @@ function sessionSecret() {
   return (
     process.env.STAFF_SESSION_SECRET ??
     process.env.ADMIN_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
     ""
   );
 }
@@ -125,7 +124,7 @@ export async function verifyStaffSessionCookieForProxy(
 // ── Admin route protection ───────────────────────────────────────────────────
 async function checkAdminAuth(req: NextRequest): Promise<boolean> {
   const secret = process.env.ADMIN_SECRET;
-  if (!secret) return true; // not configured — allow in dev
+  if (!secret) return false;
 
   const provided = req.headers.get("x-admin-secret");
   if (provided === secret) return true;
@@ -155,6 +154,13 @@ export async function proxy(req: NextRequest) {
         { status: 429, headers: { "Retry-After": "600" } }
       );
     }
+  } else if (path.startsWith("/api/auth/")) {
+    if (!rateLimit(`${ip}:auth`, 10, 60 * 1000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Try again later." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
   } else if (path.startsWith("/api/")) {
     if (!rateLimit(`${ip}:api`, 100, 60 * 1000)) {
       return NextResponse.json(
@@ -175,9 +181,11 @@ export async function proxy(req: NextRequest) {
   // ── Add audit headers for downstream API routes ────────────────────────────
   // API routes can read x-client-ip and x-request-id for PHI audit logging.
   const requestId = crypto.randomUUID();
-  const res = NextResponse.next();
-  res.headers.set("x-client-ip", ip);
-  res.headers.set("x-request-id", requestId);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-client-ip", ip);
+  requestHeaders.set("x-request-id", requestId);
+  requestHeaders.delete("x-actor"); // strip any client-supplied actor header
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
   // Echo request-id back to client for support tracing
   res.headers.set("X-Request-Id", requestId);
   res.headers.set("X-Content-Type-Options", "nosniff");

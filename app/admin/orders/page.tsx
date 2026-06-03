@@ -301,6 +301,10 @@ export default function OrdersManagement() {
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
   const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
   const selectedPracticeQSkipped = selectedOrder ? isPracticeQSkippedForOrder(selectedOrder) : false;
+  const selectedPracticeQAutomationError =
+    selectedDiagnostics?.practiceqAutomation?.status === "completed"
+      ? undefined
+      : selectedDiagnostics?.practiceqAutomation?.lastError;
   const chartFileHref = (fileId: string) => ["/api/provider/", "practice", "q-files/", fileId].join("");
   const latestErroredLogs = selectedDiagnostics?.integrationLogs
     .filter((log) => log.status === "error")
@@ -492,8 +496,8 @@ export default function OrdersManagement() {
                               <p className="font-medium text-gray-800">PracticeQ Automation</p>
                               <p>Status: {selectedDiagnostics.practiceqAutomation.status}</p>
                               <p>Attempts: {selectedDiagnostics.practiceqAutomation.attempts}</p>
-                              {selectedDiagnostics.practiceqAutomation.lastError && (
-                                <p className="text-red-700">{selectedDiagnostics.practiceqAutomation.lastError}</p>
+                              {selectedPracticeQAutomationError && (
+                                <p className="text-red-700">{selectedPracticeQAutomationError}</p>
                               )}
                               {selectedDiagnostics.practiceqAutomation.handoffUrl && (
                                 <a

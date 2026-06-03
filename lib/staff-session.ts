@@ -14,12 +14,7 @@ export type StaffSession = {
 const STAFF_SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 function sessionSecret() {
-  return (
-    process.env.STAFF_SESSION_SECRET ??
-    process.env.ADMIN_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    "dev-staff-session-secret"
-  );
+  return process.env.STAFF_SESSION_SECRET ?? process.env.ADMIN_SECRET ?? "";
 }
 
 function sign(payload: string) {

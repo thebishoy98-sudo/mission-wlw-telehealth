@@ -37,7 +37,7 @@ function reusableStatus(status: Order["identityStatus"]): Extract<IdentityStatus
 function isAllowedPriorOrder(order: Order) {
   return (
     getIdentityGate({ identityStatus: order.identityStatus }).canDispatch ||
-    PRIOR_DISPATCHED_STATUSES.includes(order.status)
+    (PRIOR_DISPATCHED_STATUSES.includes(order.status) && order.identityStatus !== "missing")
   );
 }
 
