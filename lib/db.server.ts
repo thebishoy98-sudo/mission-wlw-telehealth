@@ -1194,6 +1194,7 @@ export const adminMaintenanceDb = {
     const orderIds = orderRows.rows.map((row) => row.id);
 
     if (orderIds.length) {
+      await sql`DELETE FROM ai_conversations WHERE order_id = ANY(${orderIds})`;
       await sql`DELETE FROM spruce_messages WHERE order_id = ANY(${orderIds})`;
       await sql`DELETE FROM integration_logs WHERE order_id = ANY(${orderIds})`;
       await sql`DELETE FROM practiceq_automation_jobs WHERE order_id = ANY(${orderIds})`;
@@ -1208,6 +1209,8 @@ export const adminMaintenanceDb = {
       await sql`DELETE FROM orders WHERE id = ANY(${orderIds})`;
     }
 
+    await sql`DELETE FROM ai_conversations WHERE patient_id = ANY(${patientIds})`;
+    await sql`DELETE FROM patient_login_otps WHERE patient_id = ANY(${patientIds})`;
     const deletedPatients = await sql`DELETE FROM patients WHERE id = ANY(${patientIds})`;
     return {
       patients: deletedPatients.rowCount ?? 0,
