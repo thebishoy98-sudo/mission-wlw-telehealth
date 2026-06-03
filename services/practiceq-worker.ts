@@ -1927,10 +1927,10 @@ export async function setPracticeQRootChoiceAnswers(
 
     const selectedOptions = options
       .filter((option) => option?.Checked || option?.Selected || option?.IsSelected)
-      .map((option) => ({ text: option?.Text, value: option?.Value }))
-      .filter((option) => option.text || option.value);
+      .map((option) => ({ text: option?.Text, value: option?.Value, id: option?.Id }))
+      .filter((option) => option.text || option.value || option.id);
     question.Answer = singleChoice
-      ? String(selectedOptions[0]?.value ?? selectedOptions[0]?.text ?? answer)
+      ? String(selectedOptions[0]?.id ?? selectedOptions[0]?.value ?? selectedOptions[0]?.text ?? answer)
       : selectedOptions.map((option) => option.text).filter(Boolean).join(", ");
     question.Value = question.Answer;
     question.isanswered = true;
