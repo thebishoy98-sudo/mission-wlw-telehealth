@@ -1226,6 +1226,7 @@ function practiceQAnswerMatchesOption(answer: string, optionText: string) {
   if (isNegativePracticeQAnswer(answer)) {
     return normalizedOption === "no" || normalizedOption.includes("none");
   }
+  if (normalizedAnswer.length <= 4 || normalizedOption.length <= 4) return false;
   return normalizedAnswer.includes(normalizedOption) || normalizedOption.includes(normalizedAnswer);
 }
 

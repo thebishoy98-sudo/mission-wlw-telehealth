@@ -110,6 +110,8 @@ export async function processPracticeQAutomationJob(job: PracticeQAutomationJob)
     await clickContinue(page);
     await resolvePracticeQResumePrompt(page);
     const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
+    await page.waitForTimeout(3000);
+    await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
     const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
     await closeBrowserAfterPracticeQSubmit(browser);
 
@@ -221,6 +223,8 @@ export async function startPracticeQRemoteSession(
       (async () => {
         await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: filling intake form" }).catch(() => null);
         const fillOutcome = await fillPracticeQQuestionPages(page, fillPlan, uploadFile);
+        await page.waitForTimeout(3000);
+        await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
         await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: submitting intake form" }).catch(() => null);
         const submitResult = await submitPracticeQInBackground(page, fillOutcome, fillPlan);
         await dbServer.practiceqAutomationJobDb.update(job.id, { lastError: "PracticeQ automation: verifying submitted intake" }).catch(() => null);
@@ -304,6 +308,7 @@ export async function fillPracticeQQuestionPages(
       PRACTICEQ_CHOICE_TIMEOUT_MS,
       "PracticeQ choice selection step timed out."
     );
+    await setPracticeQRootChoiceAnswers(page, fillPlan);
     await setPracticeQAngularQuestionChoices(page, fillPlan);
     await setPracticeQAngularTextAnswers(page, fillPlan);
     await setPracticeQNegativeRequiredChoices(page, fillPlan);
@@ -327,20 +332,52 @@ export async function fillPracticeQQuestionPages(
 
     const moved = await clickContinue(page).catch(() => false);
     if (moved) {
+      await page.waitForFunction((before) => {
+        const signature = `${location.href}::${(document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 1200)}`;
+        return signature !== before;
+      }, beforeSignature, { timeout: 15000 }).catch(() => {});
       await waitForPracticeQPageText(page);
       await page.waitForTimeout(500);
       const afterText = await page.locator("body").innerText().catch(() => "");
       const afterSignature = practiceQPageSignature(page.url(), afterText);
       if (afterSignature === beforeSignature) {
         noProgressCount += 1;
-        if (filled === 0 || noProgressCount >= 2) return { stoppedForPatientConsent: false };
+        if (filled === 0 || noProgressCount >= 2) {
+          await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
+          await page.waitForTimeout(2500);
+          await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
+          return { stoppedForPatientConsent: false };
+        }
       } else {
         noProgressCount = 0;
       }
+      await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
     }
-    if (!moved && filled === 0) return { stoppedForPatientConsent: false };
+    if (!moved && filled === 0) {
+      await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
+      await page.waitForTimeout(2500);
+      await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
+      return { stoppedForPatientConsent: false };
+    }
   }
+  await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
+  await page.waitForTimeout(2500);
+  await finalizePracticeQCurrentPage(page, fillPlan, uploadFile);
   return { stoppedForPatientConsent: false };
+}
+
+async function finalizePracticeQCurrentPage(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>,
+  uploadFile: PracticeQUploadFile | null
+) {
+  await setPracticeQRootChoiceAnswers(page, fillPlan).catch(() => 0);
+  await setPracticeQAngularQuestionChoices(page, fillPlan).catch(() => {});
+  await setPracticeQNegativeRequiredChoices(page, fillPlan).catch(() => {});
+  await setPracticeQFallbackRequiredChoices(page, fillPlan).catch(() => {});
+  if (uploadFile) await uploadPracticeQFile(page, uploadFile).catch(() => {});
+  await savePracticeQPage(page).catch(() => {});
+  await waitForPracticeQSaved(page).catch(() => {});
 }
 
 async function fillPracticeQVitalsPage(
@@ -1772,6 +1809,151 @@ async function clickMatchingChoices(page: Page, fillPlan: ReturnType<typeof buil
     await setPracticeQAngularChoice(page, choice.context, choice.label);
     await clickPracticeQChoiceInput(input);
   }
+}
+
+export async function setPracticeQRootChoiceAnswers(
+  page: Page,
+  fillPlan: ReturnType<typeof buildPracticeQFillPlan>
+): Promise<number> {
+  const fillRootChoices = new Function("plan", `
+  const normalize = (raw) => String(raw ?? "")
+    .toLowerCase()
+    .replace(/\\([^)]*\\)/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\\s+/g, " ")
+    .trim();
+  const answerFor = (prompt) => {
+    const normalizedPrompt = normalize(prompt);
+    if (!normalizedPrompt) return "";
+    const exact = plan.find((item) => normalize(item.prompt) === normalizedPrompt);
+    if (exact) return exact.value;
+    const partial = plan
+      .map((item) => ({ item, candidate: normalize(item.prompt) }))
+      .filter(({ candidate }) =>
+        candidate.length > 3 && (normalizedPrompt.includes(candidate) || candidate.includes(normalizedPrompt))
+      )
+      .sort((a, b) => b.candidate.length - a.candidate.length)[0];
+    return partial?.item.value ?? "";
+  };
+  const answerMatchesChoice = (answer, labelText) => {
+    const normalizedAnswer = normalize(answer);
+    const normalizedLabel = normalize(labelText);
+    if (!normalizedAnswer || !normalizedLabel) return false;
+    const negativeAnswer = (
+      normalizedAnswer === "none of the above" ||
+      normalizedAnswer === "none apply to me" ||
+      normalizedAnswer === "none" ||
+      normalizedAnswer === "no" ||
+      normalizedAnswer.includes("no known") ||
+      normalizedAnswer.includes("no allergies") ||
+      normalizedAnswer.includes("not applicable")
+    );
+    if (negativeAnswer) return normalizedLabel === "no" || normalizedLabel.includes("none");
+    if (normalizedAnswer === normalizedLabel) return true;
+    if (normalizedAnswer.includes("weight loss") && normalizedLabel.includes("tirzepatide")) return true;
+
+    const selectedValues = normalizedAnswer.split(/\\s*,\\s*/).map(normalize).filter(Boolean);
+    if (selectedValues.some((value) => {
+      if (value === normalizedLabel) return true;
+      if (value.length <= 4 || normalizedLabel.length <= 4) return false;
+      return value.includes(normalizedLabel) || normalizedLabel.includes(value);
+    })) {
+      return true;
+    }
+    if (normalizedAnswer.length <= 4 || normalizedLabel.length <= 4) return false;
+    return normalizedAnswer.includes(normalizedLabel) || normalizedLabel.includes(normalizedAnswer);
+  };
+  const findIntakeScope = (root) => {
+    const seen = new Set();
+    const stack = [root];
+    while (stack.length) {
+      const scope = stack.pop();
+      if (!scope || seen.has(scope.$id)) continue;
+      seen.add(scope.$id);
+      if (scope.intake?.Questionnaire?.Questions) return scope;
+      if (scope.$$childHead) stack.push(scope.$$childHead);
+      let sibling = scope.$$nextSibling;
+      while (sibling) {
+        stack.push(sibling);
+        sibling = sibling.$$nextSibling;
+      }
+    }
+    return null;
+  };
+
+  const angular = window.angular;
+  const injector = angular?.element(document.body).injector?.();
+  const intakeScope = findIntakeScope(injector?.get?.("$rootScope"));
+  const questions = intakeScope?.intake?.Questionnaire?.Questions;
+  const diagnostics = [];
+  window.__missionPracticeQRootChoiceAnswers = {
+    ran: true,
+    hasQuestions: Array.isArray(questions),
+    changed: 0,
+    diagnostics,
+  };
+  if (!Array.isArray(questions)) return 0;
+
+  let changed = 0;
+  for (const question of questions) {
+    const options = Array.isArray(question?.QuestionOptions) ? question.QuestionOptions : [];
+    if (!options.length) continue;
+    const answer = answerFor(question?.Text);
+    if (!answer) continue;
+    const matchedLabels = [];
+
+    const singleChoice =
+      Number(question?.QuestionType) === 3 ||
+      normalize(question?.QuestionSubType).includes("single");
+    let matched = false;
+    for (const option of options) {
+      const selected = answerMatchesChoice(answer, option?.Text);
+      if (selected) matchedLabels.push(String(option?.Text ?? ""));
+      if (singleChoice) {
+        option.Checked = selected;
+        option.Selected = selected;
+        option.IsSelected = selected;
+        option.Answer = selected ? option.Text : null;
+      } else if (selected) {
+        option.Checked = true;
+        option.Selected = true;
+        option.IsSelected = true;
+        option.Answer = option.Text;
+      }
+      matched ||= selected;
+    }
+    diagnostics.push({ text: String(question?.Text ?? ""), answer, matched: matchedLabels });
+    if (!matched) continue;
+
+    const selectedOptions = options
+      .filter((option) => option?.Checked || option?.Selected || option?.IsSelected)
+      .map((option) => ({ text: option?.Text, value: option?.Value }))
+      .filter((option) => option.text || option.value);
+    question.Answer = singleChoice
+      ? String(selectedOptions[0]?.value ?? selectedOptions[0]?.text ?? answer)
+      : selectedOptions.map((option) => option.text).filter(Boolean).join(", ");
+    question.Value = question.Answer;
+    question.isanswered = true;
+    question.IsAnswered = true;
+    question.Valid = true;
+    try { intakeScope?.changed?.(question); } catch {}
+    try { intakeScope?.textChanged?.(); } catch {}
+    changed += 1;
+  }
+  window.__missionPracticeQRootChoiceAnswers.changed = changed;
+
+  if (changed > 0) {
+    try { intakeScope?.save?.(); } catch {}
+    try { if (!intakeScope?.$root?.$$phase) intakeScope?.$apply?.(); } catch {}
+    try { intakeScope?.$applyAsync?.(); } catch {}
+  }
+  return changed;
+`) as (plan: Array<{ prompt: string; value: string }>) => number;
+
+  return page.evaluate(fillRootChoices, fillPlan).catch((error) => {
+    console.warn("PracticeQ root choice answer fill failed", error);
+    return 0;
+  });
 }
 
 async function bulkClickMatchingChoices(
