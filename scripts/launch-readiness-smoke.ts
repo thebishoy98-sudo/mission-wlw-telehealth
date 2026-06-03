@@ -448,17 +448,28 @@ async function smokeOrderChartSurfaces() {
   );
 
   assert(candidate.detail.order?.id || candidate.order.id, "Candidate order detail did not include an order.");
-  requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent, "Candidate order has no consent record visible to admin/provider.");
-  requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent?.signedName, "Consent record is missing signed name.");
-  requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent?.signedAt, "Consent record is missing signed timestamp.");
-  requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent?.ipAddress, "Consent record is missing IP address.");
-  requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent?.userAgent, "Consent record is missing user agent.");
+  const hasPracticeQChartFiles = Boolean(candidate.detail.practiceq?.answerFileId && candidate.detail.practiceq?.pdfFileId);
   requireOrWarn(
     candidate.strictChart,
-    "Consent record",
-    candidate.detail.consent?.consentText?.includes("CONSENT FOR MEDICAL TREATMENT"),
-    "Consent text is missing the medical treatment consent body."
+    "Consent audit source",
+    candidate.detail.consent || hasPracticeQChartFiles,
+    "Candidate order has neither a local consent record nor PracticeQ chart files visible to admin/provider."
   );
+  if (candidate.detail.consent) {
+    requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent.signedName, "Consent record is missing signed name.");
+    requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent.signedAt, "Consent record is missing signed timestamp.");
+    requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent.ipAddress, "Consent record is missing IP address.");
+    requireOrWarn(candidate.strictChart, "Consent record", candidate.detail.consent.userAgent, "Consent record is missing user agent.");
+    requireOrWarn(
+      candidate.strictChart,
+      "Consent record",
+      candidate.detail.consent.consentText?.includes("CONSENT FOR MEDICAL TREATMENT"),
+      "Consent text is missing the medical treatment consent body."
+    );
+  } else {
+    requireOrWarn(candidate.strictChart, "PracticeQ chart files", candidate.detail.practiceq?.answerFileId, "PracticeQ answers JSON file is missing after local consent purge.");
+    requireOrWarn(candidate.strictChart, "PracticeQ chart files", candidate.detail.practiceq?.pdfFileId, "PracticeQ chart PDF file is missing after local consent purge.");
+  }
 
   if (!candidate.detail.practiceq?.available) {
     warn("PracticeQ chart mirror", `Candidate order ${candidate.order.id} has no available PracticeQ mirror.`);
@@ -486,7 +497,12 @@ async function smokeOrderChartSurfaces() {
     await provider.page.locator("text=Order Details").waitFor({ timeout: 30_000 });
     const text = await pageText(provider.page);
     assert(/Chart Review Audit/i.test(text), "Provider chart is missing chart review audit.");
-    assert(/Consent Certificate/i.test(text), "Provider chart is missing consent certificate.");
+    if (candidate.detail.consent) {
+      assert(/Consent Certificate/i.test(text), "Provider chart is missing consent certificate.");
+    } else if (hasPracticeQChartFiles) {
+      assert(/Answers JSON/i.test(text), "Provider chart is missing the PracticeQ answers JSON link.");
+      assert(/Chart PDF/i.test(text), "Provider chart is missing the PracticeQ chart PDF link.");
+    }
     if (candidate.detail.practiceq?.available) {
       assert(/Clinical Chart/i.test(text), "Provider chart is missing the PracticeQ clinical chart.");
     }
@@ -507,10 +523,18 @@ async function smokeOrderChartSurfaces() {
     ]);
     await admin.page.locator(`text=${candidate.order.id.slice(-8)}`).first().waitFor({ timeout: 30_000 });
     await admin.page.locator(`text=${candidate.order.id.slice(-8)}`).first().click();
-    await admin.page.locator("text=Consent Certificate").waitFor({ timeout: 30_000 });
+    if (candidate.detail.consent) {
+      await admin.page.locator("text=Consent Certificate").waitFor({ timeout: 30_000 });
+    } else if (hasPracticeQChartFiles) {
+      await admin.page.locator("text=Chart PDF").waitFor({ timeout: 30_000 });
+    }
     const text = await pageText(admin.page);
     assert(/Identity Evidence/i.test(text), "Admin order drawer is missing identity evidence.");
     assert(/PracticeQ/i.test(text), "Admin order drawer is missing PracticeQ details.");
+    if (!candidate.detail.consent && hasPracticeQChartFiles) {
+      assert(/Answers JSON/i.test(text), "Admin order drawer is missing the PracticeQ answers JSON link.");
+      assert(/Chart PDF/i.test(text), "Admin order drawer is missing the PracticeQ chart PDF link.");
+    }
   } finally {
     await admin.context.close();
   }

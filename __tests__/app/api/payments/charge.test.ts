@@ -62,4 +62,9 @@ describe("payment identity storage contract", () => {
     expect(practiceQWorker).toContain("loadIdentityMedia");
     expect(practiceQWorker).toContain("selectPracticeQUploadFile");
   });
+
+  it("enforces that the consent signature matches the patient name server-side", () => {
+    expect(chargeRoute).toContain("doesSignatureMatchPatient");
+    expect(chargeRoute).toContain("Consent signature must match the patient name");
+  });
 });

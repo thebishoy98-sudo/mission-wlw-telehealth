@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { getIntakeState, saveIntakeState, type IntakeFormState } from "@/lib/intake-store";
-import { buildTreatmentConsentText } from "@/lib/consent";
+import { buildTreatmentConsentText, doesSignatureMatchPatient, patientLegalName } from "@/lib/consent";
 import { Shield } from "lucide-react";
 
 export default function Consent() {
@@ -28,6 +28,14 @@ export default function Consent() {
     if (!signedName.trim()) newErrors.signedName = "Please type your full name to sign";
     if (signedName.trim() && signedName.trim().split(/\s+/).length < 2) {
       newErrors.signedName = "Please enter your first and last name";
+    }
+    if (
+      signedName.trim() &&
+      !newErrors.signedName &&
+      patientLegalName(activeIntakeState) &&
+      !doesSignatureMatchPatient(signedName, activeIntakeState)
+    ) {
+      newErrors.signedName = `Signature must match the patient name: ${patientLegalName(activeIntakeState)}`;
     }
     if (!acknowledged) newErrors.acknowledged = "You must agree to continue";
     setErrors(newErrors);

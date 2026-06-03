@@ -52,7 +52,9 @@ import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
 import {
   buildTreatmentConsentText,
   CONSENT_VERSION,
+  doesSignatureMatchPatient,
   getRequestIp,
+  patientLegalName,
 } from "@/lib/consent";
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
 import { getPublicBaseUrl } from "@/lib/public-url";
@@ -276,13 +278,20 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
     }
+    const signedName = String(consentData.signedName).trim();
+    if (effectivePatient && !doesSignatureMatchPatient(signedName, effectivePatient)) {
+      return NextResponse.json(
+        { error: `Consent signature must match the patient name: ${patientLegalName(effectivePatient)}` },
+        { status: 422 }
+      );
+    }
     await requirePaymentPersistence("consent create", () =>
       dbServer.consentDb.create({
         id: `consent_${orderId}`,
         orderId,
         consentText: buildTreatmentConsentText(effectivePatient),
         acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
-        signedName: String(consentData.signedName).trim(),
+        signedName,
         signedAt: consentData.signedAt ?? new Date().toISOString(),
         ipAddress: getRequestIp(req),
         userAgent: req.headers.get("user-agent") ?? undefined,
