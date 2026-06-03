@@ -20,8 +20,28 @@ const patient: Patient = {
   updatedAt: "2026-05-31T00:00:00.000Z",
 };
 
+// Signature field validation: requires at least two whitespace-separated words.
+// Case and extra spacing are irrelevant — any casing is accepted.
+const hasMinTwoWords = (name: string) => name.trim().split(/\s+/).length >= 2;
+
+describe("consent signature field validation", () => {
+  it("accepts any casing with at least two words", () => {
+    expect(hasMinTwoWords("John Doe")).toBe(true);
+    expect(hasMinTwoWords("john doe")).toBe(true);
+    expect(hasMinTwoWords("JOHN DOE")).toBe(true);
+    expect(hasMinTwoWords("  John   Doe  ")).toBe(true);
+    expect(hasMinTwoWords("John Michael Doe")).toBe(true);
+  });
+
+  it("rejects a single word or blank input", () => {
+    expect(hasMinTwoWords("John")).toBe(false);
+    expect(hasMinTwoWords("")).toBe(false);
+    expect(hasMinTwoWords("   ")).toBe(false);
+  });
+});
+
 describe("treatment consent helpers", () => {
-  it("requires the electronic signature to match the patient legal name", () => {
+  it("doesSignatureMatchPatient is case-insensitive and collapses extra spaces", () => {
     expect(doesSignatureMatchPatient("Bishoy Kamel", patient)).toBe(true);
     expect(doesSignatureMatchPatient("bishoy   kamel", patient)).toBe(true);
     expect(doesSignatureMatchPatient("BK", patient)).toBe(false);

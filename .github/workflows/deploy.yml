@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   ci:
@@ -22,6 +25,9 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
 
       - name: Unit tests
         run: npm test -- --no-coverage
