@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { getPatientIdFromRequest } from "@/lib/patient-session";
+import { canonicalProducts } from "@/data/products";
 
 export async function GET(req: Request) {
   const patientId = getPatientIdFromRequest(req);
@@ -15,9 +16,10 @@ export async function GET(req: Request) {
 
   const orders = await dbServer.orderDb.getByPatient(patient.id).catch(() => []);
   const products = await Promise.all(
-    Array.from(new Set(orders.map((order) => order.productId))).map((productId) =>
-      dbServer.productDb.getById(productId).catch(() => null)
-    )
+    Array.from(new Set(orders.map((order) => order.productId))).map(async (productId) => {
+      const fromDb = await dbServer.productDb.getById(productId).catch(() => null);
+      return fromDb ?? canonicalProducts.find((p) => p.id === productId) ?? null;
+    })
   );
   const pharmacyOrders = await Promise.all(
     orders.map((order) => dbServer.pharmacyOrderDb.getByOrder(order.id).catch(() => null))

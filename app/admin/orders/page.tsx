@@ -360,6 +360,7 @@ export default function OrdersManagement() {
                       <thead className="sticky top-0 border-b bg-gray-50">
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-semibold">Patient</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">Product</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold">Order</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold">Payment</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold">PracticeQ</th>
@@ -381,6 +382,20 @@ export default function OrdersManagement() {
                               <td className="px-4 py-4 text-sm">
                                 <p className="max-w-[11rem] truncate font-semibold text-gray-900">{patientDisplayName(patient, order)}</p>
                                 <p className="max-w-[11rem] truncate text-xs text-gray-500">{patientSecondaryLine(patient, order)}</p>
+                              </td>
+                              <td className="px-4 py-4 text-sm">
+                                {(() => {
+                                  const product = products[order.productId];
+                                  const dose = product?.doses?.find((d) => d.id === order.doseId);
+                                  return product ? (
+                                    <>
+                                      <p className="font-semibold text-gray-900 whitespace-nowrap">{product.name}</p>
+                                      {dose && <p className="text-xs text-gray-500 whitespace-nowrap">{dose.strength ?? dose.label}</p>}
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-gray-400 font-mono">{order.productId?.slice(-12) ?? "—"}</p>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>

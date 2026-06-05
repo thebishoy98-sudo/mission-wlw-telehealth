@@ -18,6 +18,12 @@ type AdminDashboardData = {
   pharmacyOrders: Types.PharmacyOrder[];
 };
 
+type AnalyticsData = {
+  totals: { allTime: number; week7: number; month30: number; ytd: number };
+  monthly: Array<{ key: string; label: string; orders: number; patients: number; revenue: number }>;
+  productMix: Array<{ name: string; count: number }>;
+};
+
 const paymentAmount = (payment: Types.Payment) => {
   const amount = Number(payment.amount);
   return Number.isFinite(amount) ? amount : 0;
@@ -38,6 +44,7 @@ function AdminDashboardContent() {
   const [payments, setPayments] = useState<Record<string, Types.Payment>>({});
   const [pharmacyOrders, setPharmacyOrders] = useState<Record<string, Types.PharmacyOrder>>({});
   const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -107,6 +114,12 @@ function AdminDashboardContent() {
           });
         }
         setRevenueData(last7Days);
+
+        // Load analytics separately — non-blocking
+        fetch("/api/admin/analytics", { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : null)
+          .then((a: AnalyticsData | null) => { if (isMounted && a) setAnalytics(a); })
+          .catch(() => {});
       } catch {
         if (isMounted) {
           setError("Could not load admin dashboard data. Please refresh the page or open Order Management.");
@@ -179,6 +192,30 @@ function AdminDashboardContent() {
           </Card>
         </div>
 
+        {/* Patient period analytics */}
+        {analytics && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6 mb-8">
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-1">New Patients (7 days)</p>
+                <p className="text-3xl font-bold text-forest-800">{analytics.totals.week7}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-1">New Patients (30 days)</p>
+                <p className="text-3xl font-bold text-forest-800">{analytics.totals.month30}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-1">New Patients (Year to date)</p>
+                <p className="text-3xl font-bold text-forest-800">{analytics.totals.ytd}</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Charts */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-8 sm:mb-12">
           <Card>
@@ -203,39 +240,57 @@ function AdminDashboardContent() {
 
           <Card>
             <CardContent className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Order Status Distribution</h3>
-              <div className="space-y-3">
-                {[
-                  {
-                    label: "Pending Review",
-                    count: orders.filter((o) => o.status === "pending_review")
-                      .length,
-                  },
-                  {
-                    label: "Approved",
-                    count: orders.filter((o) => o.status === "approved").length,
-                  },
-                  {
-                    label: "Sent to Pharmacy",
-                    count: orders.filter((o) => o.status === "sent_to_pharmacy")
-                      .length,
-                  },
-                  {
-                    label: "Fulfilled",
-                    count: orders.filter(
-                      (o) => o.status === "fulfilled" || o.status === "delivered"
-                    ).length,
-                  },
-                ].map((item, i) => (
-                  <div key={i} className="flex justify-between items-center">
-                    <span className="text-gray-700">{item.label}</span>
-                    <span className="font-bold">{item.count}</span>
-                  </div>
-                ))}
-              </div>
+              <h3 className="font-semibold text-gray-900 mb-4">Patients &amp; Orders by Month</h3>
+              {analytics ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={analytics.monthly}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="patients" fill="#0d9488" name="Patients" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="orders" fill="#6366f1" name="Orders" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: "Pending Review", count: orders.filter((o) => o.status === "pending_review").length },
+                    { label: "Approved", count: orders.filter((o) => o.status === "approved").length },
+                    { label: "Sent to Pharmacy", count: orders.filter((o) => o.status === "sent_to_pharmacy").length },
+                    { label: "Fulfilled", count: orders.filter((o) => o.status === "fulfilled" || o.status === "delivered").length },
+                  ].map((item, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span className="text-gray-700">{item.label}</span>
+                      <span className="font-bold">{item.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* Product mix */}
+        {analytics && analytics.productMix.length > 0 && (
+          <div className="mb-8 sm:mb-12">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Product Mix</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {analytics.productMix.map((p) => (
+                <Card key={p.name}>
+                  <CardContent className="p-5 flex items-center justify-between">
+                    <p className="font-semibold text-gray-800">{p.name}</p>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-forest-800">{p.count}</p>
+                      <p className="text-xs text-gray-400">orders</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Orders */}
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Recent Orders</h2>
