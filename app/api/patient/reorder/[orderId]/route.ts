@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import { getPatientIdFromRequest } from "@/lib/patient-session";
-import { normalizeProduct } from "@/data/products";
+import { canonicalProducts, normalizeProduct } from "@/data/products";
 
 export async function GET(
   req: Request,
@@ -23,7 +23,8 @@ export async function GET(
     return NextResponse.json({ error: "Patient not found" }, { status: 404 });
   }
 
-  const product = await dbServer.productDb.getById(order.productId).catch(() => null);
+  const productFromDb = await dbServer.productDb.getById(order.productId).catch(() => null);
+  const product = productFromDb ?? canonicalProducts.find((p) => p.id === order.productId) ?? null;
   const answers = await dbServer.answerDb.getByOrder(order.id).catch(() => []);
   const questionnaireAnswers = Object.fromEntries(
     answers.map((answer) => [answer.questionId, answer.answer])
