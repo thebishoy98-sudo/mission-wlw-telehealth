@@ -175,10 +175,14 @@ export default function PatientDetail() {
                   <div className="space-y-4">
                     {answers.map((answer) => {
                       const question = questionnaire.find((q) => q.id === answer.questionId);
+                      const isSoftFlag = question?.warnIf && answer.answer === question.warnIf;
                       return (
-                        <div key={answer.id} className="border-b border-gray-50 pb-4 last:border-0">
-                          <p className="font-medium text-gray-800 text-sm mb-1">{question?.text || answer.questionId}</p>
-                          <p className="text-gray-600 text-sm">{answer.answer || <span className="text-gray-400 italic">No answer</span>}</p>
+                        <div key={answer.id} className={`border-b border-gray-50 pb-4 last:border-0 ${isSoftFlag ? "rounded-lg border border-amber-200 bg-amber-50 p-3" : ""}`}>
+                          <p className="font-medium text-gray-800 text-sm mb-1 flex items-center gap-2">
+                            {question?.text || answer.questionId}
+                            {isSoftFlag && <span className="text-amber-700 text-xs font-bold bg-amber-100 px-2 py-0.5 rounded-full">Provider Review Required</span>}
+                          </p>
+                          <p className={`text-sm ${isSoftFlag ? "text-amber-900 font-semibold" : "text-gray-600"}`}>{answer.answer || <span className="text-gray-400 italic">No answer</span>}</p>
                         </div>
                       );
                     })}

@@ -80,6 +80,12 @@ export default function PatientInfo() {
       isReorder: false,
       reorderSourceOrderId: undefined,
     });
+    // Fire-and-forget: save partial intake for abandonment recovery SMS
+    fetch("/api/intake/save-partial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: formData.phone, email: formData.email, firstName: formData.firstName }),
+    }).catch(() => {});
     router.push("/start/questionnaire");
   };
 

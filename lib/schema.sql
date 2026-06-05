@@ -381,3 +381,18 @@ CREATE INDEX IF NOT EXISTS idx_phi_audit_patient    ON phi_audit_logs(patient_id
 CREATE INDEX IF NOT EXISTS idx_phi_audit_timestamp  ON phi_audit_logs(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_phi_audit_actor      ON phi_audit_logs(actor);
 CREATE INDEX IF NOT EXISTS idx_phi_audit_resource   ON phi_audit_logs(resource, resource_id);
+
+-- ── Partial Intakes (abandonment recovery) ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS partial_intakes (
+  id            TEXT PRIMARY KEY,
+  phone         TEXT NOT NULL,
+  email         TEXT,
+  first_name    TEXT,
+  started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed     BOOLEAN NOT NULL DEFAULT false,
+  completed_at  TIMESTAMPTZ,
+  sms_1h_sent   BOOLEAN NOT NULL DEFAULT false,
+  sms_24h_sent  BOOLEAN NOT NULL DEFAULT false
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_intakes_phone ON partial_intakes(phone);
+CREATE INDEX IF NOT EXISTS idx_partial_intakes_started_at ON partial_intakes(started_at DESC);

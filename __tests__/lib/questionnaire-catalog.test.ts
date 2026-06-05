@@ -25,6 +25,7 @@ describe("ensurePracticeQRequiredQuestions", () => {
       "pq_surgical_history",
       "custom_allergy",
       "pq_intake_purpose",
+      "pq_gastric_bypass",
     ]);
   });
 

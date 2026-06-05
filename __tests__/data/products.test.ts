@@ -17,7 +17,7 @@ describe("normalizeCustomerProducts", () => {
     }))).toEqual([
       { label: "Tirzepatide 20mg", patientDescription: "8-Week Prescription", price: 349 },
       { label: "Tirzepatide 40mg", patientDescription: "8-Week Prescription", price: 479 },
-      { label: "Tirzepatide 60mg", patientDescription: "8-Week Prescription", price: 799 },
+      { label: "Tirzepatide 60mg", patientDescription: "8-Week Prescription", price: 749 },
     ]);
   });
 
@@ -30,8 +30,10 @@ describe("normalizeCustomerProducts", () => {
       makeProduct("tirz_copy", "Tirzepatide", "tirzepatide"),
     ]);
 
-    expect(products).toHaveLength(1);
-    expect(products[0]).toMatchObject({
+    // Both canonical products (Tirzepatide + Retatrutide) are returned
+    expect(products).toHaveLength(2);
+    const tirz = products.find((p) => p.slug === "tirzepatide");
+    expect(tirz).toMatchObject({
       id: tirzepatideProduct.id,
       name: "Tirzepatide",
       slug: "tirzepatide",
@@ -44,6 +46,7 @@ describe("normalizeCustomerProducts", () => {
 
     const products = normalizeCustomerProducts([oldProduct]);
 
-    expect(products[0]?.image).toBe("/tirzepatide-vial.jpg");
+    const tirz = products.find((p) => p.slug === "tirzepatide");
+    expect(tirz?.image).toBe("/tirzepatide-vial.jpg");
   });
 });

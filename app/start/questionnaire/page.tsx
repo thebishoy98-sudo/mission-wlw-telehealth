@@ -275,6 +275,11 @@ export default function Questionnaire() {
                     })}
                   </div>
                 )}
+                {question.warnIf && answers[question.id] === question.warnIf && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Note: Your response will be flagged for provider review before your order is dispatched.
+                  </div>
+                )}
                 {missingRequired.includes(question.id) && (
                   <p className="mt-2 text-sm text-red-500">This question is required.</p>
                 )}

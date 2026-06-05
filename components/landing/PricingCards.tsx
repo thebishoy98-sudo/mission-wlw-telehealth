@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { FadeUp } from "./FadeUp";
 
@@ -40,8 +41,8 @@ const DOSES = [
     label: "Tirzepatide 60mg",
     strength: "60mg vial",
     weekly: "7.5mg / week",
-    price: 799,
-    monthly: 400,
+    price: 749,
+    monthly: 375,
     badge: "Max Dose",
     bullets: [
       "8-week supply",
@@ -61,6 +62,15 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">
             Pricing
           </span>
+          <div className="flex justify-center mb-5">
+            <Image
+              src="/tirzepatide-vial.jpg"
+              alt="Mission Tirzepatide vial"
+              width={72}
+              height={92}
+              className="object-contain drop-shadow-xl"
+            />
+          </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-forest-800 tracking-tight mb-4">
             Compounded Tirzepatide
           </h2>
@@ -118,13 +128,13 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                       d.highlight ? "text-white" : "text-forest-800"
                     }`}
                   >
-                    <span className="text-3xl font-bold">${d.price}</span>
+                    <span className="text-3xl font-bold">${d.monthly}</span>
                     <span
                       className={`text-sm ${
                         d.highlight ? "text-white/60" : "text-gray-400"
                       }`}
                     >
-                      / 8 weeks
+                      / month
                     </span>
                   </div>
                   <div
@@ -132,7 +142,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                       d.highlight ? "text-rose-300" : "text-forest-700"
                     }`}
                   >
-                    ~${d.monthly}/month
+                    ~${d.price} / 8-week supply
                   </div>
                 </div>
 

@@ -147,6 +147,8 @@ export interface Question {
   displayOrder: number;
   /** If set, answering with this exact value disqualifies the patient from GLP-1 treatment */
   disqualifying?: string;
+  /** If set, answering with this exact value shows a provider-review warning (soft flag, does not block) */
+  warnIf?: string;
 }
 
 export interface ConsentRecord {
@@ -392,6 +394,17 @@ export interface IntegrationLog {
   status: "success" | "pending" | "error";
   details: Record<string, any>;
   error?: string;
+}
+
+export interface DiscountCode {
+  code: string;
+  type: "flat" | "percent";
+  amount: number;
+  minOrder?: number;
+  expiresAt?: string;
+  active: boolean;
+  /** Track redemptions by patient phone to enforce single-use */
+  singleUsePerCustomer: boolean;
 }
 
 export type AdminNotificationEvent =

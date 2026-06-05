@@ -41,7 +41,7 @@ export const tirzepatideProduct: Product = {
       label: "Tirzepatide 60mg",
       strength: "60mg vial",
       quantity: 1,
-      price: 799,
+      price: 749,
       durationWeeks: 8,
       weeklyDoseMg: 7.5,
       injectionUnits: 37.5,
@@ -72,34 +72,82 @@ export const tirzepatideProduct: Product = {
   createdAt,
 };
 
-export const canonicalProducts: Product[] = [tirzepatideProduct];
+export const retatrutideProduct: Product = {
+  id: "product_retatrutide",
+  name: "Retatrutide",
+  slug: "retatrutide",
+  description: "8-week compounded Retatrutide prescription with supplies included.",
+  longDescription:
+    "A provider-reviewed 8-week compounded Retatrutide prescription. A next-generation GLP-1/GIP/glucagon triple agonist for enhanced weight loss.",
+  startingPrice: 325,
+  image: "/retatrutide-vial.jpg",
+  doses: [
+    {
+      id: "retatrutide_16mg_8_week",
+      label: "Retatrutide 16mg",
+      strength: "16mg vial",
+      quantity: 1,
+      price: 325,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+    {
+      id: "retatrutide_32mg_8_week",
+      label: "Retatrutide 32mg",
+      strength: "32mg vial",
+      quantity: 1,
+      price: 455,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+    {
+      id: "retatrutide_48mg_8_week",
+      label: "Retatrutide 48mg",
+      strength: "48mg vial",
+      quantity: 1,
+      price: 525,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+  ],
+  eligibilityNote:
+    "Final dose and eligibility are determined by a licensed provider after review.",
+  isActive: true,
+  faqs: [],
+  createdAt,
+};
+
+export const canonicalProducts: Product[] = [tirzepatideProduct, retatrutideProduct];
+
+const CANONICAL_BY_SLUG: Record<string, Product> = {
+  tirzepatide: tirzepatideProduct,
+  retatrutide: retatrutideProduct,
+};
 
 export function normalizeProduct(product: Product): Product {
-  const isTirzepatide =
-    product.slug?.toLowerCase().includes("tirzepatide") ||
-    product.name.toLowerCase().includes("tirzepatide");
-
-  if (!isTirzepatide) return product;
-
+  const slug = product.slug?.toLowerCase();
+  const canonical = slug ? CANONICAL_BY_SLUG[slug] : undefined;
+  if (!canonical) return product;
   return {
     ...product,
-    name: tirzepatideProduct.name,
-    slug: tirzepatideProduct.slug,
-    description: tirzepatideProduct.description,
-    longDescription: tirzepatideProduct.longDescription,
-    startingPrice: tirzepatideProduct.startingPrice,
-    image: tirzepatideProduct.image,
-    doses: tirzepatideProduct.doses,
-    eligibilityNote: tirzepatideProduct.eligibilityNote,
-    faqs: tirzepatideProduct.faqs,
+    name: canonical.name,
+    slug: canonical.slug,
+    description: canonical.description,
+    longDescription: canonical.longDescription,
+    startingPrice: canonical.startingPrice,
+    image: canonical.image,
+    doses: canonical.doses,
+    eligibilityNote: canonical.eligibilityNote,
+    faqs: canonical.faqs,
   };
 }
 
 export function normalizeProducts(products: Product[]): Product[] {
   if (!products.length) return canonicalProducts;
   const normalized = products.map(normalizeProduct);
-  const hasTirzepatide = normalized.some((product) => product.slug === "tirzepatide");
-  return hasTirzepatide ? normalized : [tirzepatideProduct, ...normalized];
+  const slugs = new Set(normalized.map((p) => p.slug));
+  const missing = canonicalProducts.filter((p) => !slugs.has(p.slug));
+  return [...missing, ...normalized];
 }
 
 function isCustomerVisibleProduct(product: Product): boolean {
@@ -115,7 +163,8 @@ export function normalizeCustomerProducts(products: Product[]): Product[] {
   for (const product of visible) {
     const key = product.slug || product.name.toLowerCase().trim();
     const existing = bySlug.get(key);
-    if (!existing || product.id === tirzepatideProduct.id) {
+    const isCanonical = Object.values(CANONICAL_BY_SLUG).some((c) => c.id === product.id);
+    if (!existing || isCanonical) {
       bySlug.set(key, product);
     }
   }

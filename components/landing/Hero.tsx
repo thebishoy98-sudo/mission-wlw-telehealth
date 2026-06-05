@@ -94,19 +94,21 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                   ))}
                 </div>
                 <div className="border-t border-white/20 pt-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-4">
+                    <div className="shrink-0 bg-white/10 rounded-xl p-1.5">
                       <Image
                         src="/tirzepatide-vial.jpg"
-                        alt="Tirzepatide"
-                        width={36}
-                        height={36}
-                        className="w-full h-full object-cover rounded-full"
+                        alt="Mission Tirzepatide vial"
+                        width={52}
+                        height={68}
+                        className="object-contain drop-shadow-lg"
+                        style={{ maxHeight: "68px", width: "auto" }}
                       />
                     </div>
                     <div>
                       <div className="text-sm font-semibold">Compounded Tirzepatide</div>
                       <div className="text-[11px] text-white/55">Licensed 503B Pharmacy</div>
+                      <div className="text-[11px] text-rose-300 mt-0.5">From $175 / month</div>
                     </div>
                   </div>
                 </div>

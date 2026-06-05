@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" width="300" height="400">
+  <rect width="300" height="400" fill="#f4f7f4"/>
+  <!-- Stopper / needle -->
+  <rect x="140" y="30" width="20" height="20" rx="2" fill="#888"/>
+  <rect x="148" y="15" width="4" height="18" rx="1" fill="#aaa"/>
+  <!-- Cap -->
+  <rect x="112" y="48" width="76" height="28" rx="6" fill="#1a3a16"/>
+  <!-- Neck -->
+  <rect x="126" y="73" width="48" height="14" rx="3" fill="#2d5a27"/>
+  <!-- Body -->
+  <rect x="100" y="84" width="100" height="210" rx="18" fill="#2d5a27"/>
+  <!-- Liquid fill -->
+  <rect x="100" y="227" width="100" height="67" rx="0" fill="#1a3a16" opacity="0.3"/>
+  <rect x="100" y="276" width="100" height="18" rx="0 0 18 18" fill="#1a3a16" opacity="0.3"/>
+  <!-- Shine -->
+  <rect x="105" y="90" width="11" height="195" rx="5" fill="white" opacity="0.12"/>
+  <!-- Label background -->
+  <rect x="108" y="118" width="84" height="130" rx="10" fill="white" opacity="0.95"/>
+  <!-- Label content -->
+  <text x="150" y="143" text-anchor="middle" font-family="Georgia, serif" font-size="9" font-weight="bold" fill="#1a3a16" letter-spacing="1.5">RETATRUTIDE</text>
+  <line x1="116" y1="150" x2="184" y2="150" stroke="#d0d8cf" stroke-width="0.8"/>
+  <text x="150" y="167" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.5" fill="#444">Compounded</text>
+  <text x="150" y="183" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.5" fill="#666">GLP-1 / GIP / Glucagon</text>
+  <text x="150" y="199" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.5" fill="#666">Triple Agonist</text>
+  <line x1="116" y1="208" x2="184" y2="208" stroke="#d0d8cf" stroke-width="0.8"/>
+  <text x="150" y="224" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#999">Mission WLW · Rx Only</text>
+</svg>

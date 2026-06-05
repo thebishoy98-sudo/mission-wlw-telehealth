@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, token, cardNumber, expMonth, expYear, cvc, cardName, cardLast4, cardBrand, amount, patientData, orderData, productData, identityUploads, questionnaireAnswers, consentData } = body;
+    const incomingDiscountCode = typeof body.discountCode === "string" ? body.discountCode.toUpperCase().trim() : "";
     const isReorder = body.isReorder === true || orderData?.isReorder === true;
     const reorderSourceOrderId = typeof body.reorderSourceOrderId === "string"
       ? body.reorderSourceOrderId
@@ -104,7 +105,39 @@ export async function POST(req: NextRequest) {
         ? orderData.reorderSourceOrderId
         : "";
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
-    const chargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
+    const DISCOUNT_CODES: Record<string, { type: "flat" | "percent"; amount: number; singleUse: boolean }> = {
+      SUMMER50: { type: "flat", amount: 50, singleUse: true },
+    };
+    let baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
+    let appliedDiscountAmount = 0;
+    let validatedDiscountCode = "";
+
+    if (incomingDiscountCode && baseChargeAmount !== null) {
+      const promo = DISCOUNT_CODES[incomingDiscountCode];
+      if (!promo) {
+        return NextResponse.json({ error: "Invalid discount code." }, { status: 400 });
+      }
+      // Check single-use: query integration_logs for prior use by this patient's phone
+      if (promo.singleUse && patientData?.phone && process.env.POSTGRES_URL) {
+        const { rows } = await sql`
+          SELECT 1 FROM integration_logs
+          WHERE action = 'discount_applied'
+            AND details->>'code' = ${incomingDiscountCode}
+            AND details->>'phone' = ${String(patientData.phone)}
+          LIMIT 1
+        `.catch(() => ({ rows: [] as any[] }));
+        if (rows.length > 0) {
+          return NextResponse.json({ error: "This discount code has already been used." }, { status: 400 });
+        }
+      }
+      appliedDiscountAmount = promo.type === "flat"
+        ? promo.amount
+        : Math.floor((baseChargeAmount ?? 0) * promo.amount / 100);
+      baseChargeAmount = Math.max(bypassQuickBooksPayment ? 0.01 : 0.50, (baseChargeAmount ?? 0) - appliedDiscountAmount);
+      validatedDiscountCode = incomingDiscountCode;
+    }
+
+    const chargeAmount = baseChargeAmount;
 
     if (!orderId || chargeAmount === null) {
       return NextResponse.json(
@@ -272,33 +305,35 @@ export async function POST(req: NextRequest) {
         )
       );
     }
-    if (!consentData?.signedName || consentData.signedName.trim().split(/\s+/).length < 2) {
-      return NextResponse.json(
-        { error: "Consent signature must include first and last name." },
-        { status: 422 }
+    if (!isReorder) {
+      if (!consentData?.signedName || consentData.signedName.trim().split(/\s+/).length < 2) {
+        return NextResponse.json(
+          { error: "Consent signature must include first and last name." },
+          { status: 422 }
+        );
+      }
+      const signedName = String(consentData.signedName).trim();
+      if (effectivePatient && !doesSignatureMatchPatient(signedName, effectivePatient)) {
+        return NextResponse.json(
+          { error: `Consent signature must match the patient name: ${patientLegalName(effectivePatient)}` },
+          { status: 422 }
+        );
+      }
+      await requirePaymentPersistence("consent create", () =>
+        dbServer.consentDb.create({
+          id: `consent_${orderId}`,
+          orderId,
+          consentText: buildTreatmentConsentText(effectivePatient),
+          acknowledgments: consentData!.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
+          signedName,
+          signedAt: consentData!.signedAt ?? new Date().toISOString(),
+          ipAddress: getRequestIp(req),
+          userAgent: req.headers.get("user-agent") ?? undefined,
+          consentVersion: CONSENT_VERSION,
+        }),
+        { requireResult: true }
       );
     }
-    const signedName = String(consentData.signedName).trim();
-    if (effectivePatient && !doesSignatureMatchPatient(signedName, effectivePatient)) {
-      return NextResponse.json(
-        { error: `Consent signature must match the patient name: ${patientLegalName(effectivePatient)}` },
-        { status: 422 }
-      );
-    }
-    await requirePaymentPersistence("consent create", () =>
-      dbServer.consentDb.create({
-        id: `consent_${orderId}`,
-        orderId,
-        consentText: buildTreatmentConsentText(effectivePatient),
-        acknowledgments: consentData.acknowledgments ?? { telehealth: true, pharmacy: true, payment: true, privacy: true },
-        signedName,
-        signedAt: consentData.signedAt ?? new Date().toISOString(),
-        ipAddress: getRequestIp(req),
-        userAgent: req.headers.get("user-agent") ?? undefined,
-        consentVersion: CONSENT_VERSION,
-      }),
-      { requireResult: true }
-    );
 
     const answers = await dbServer.answerDb.getByOrder(orderId).catch(() => []);
     const fallbackAnswers = answers.length ? answers : (submittedAnswerRows.length ? submittedAnswerRows : db.answerDb.getByOrder(orderId));
@@ -771,6 +806,35 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({ orderId }),
       }).catch(() => {}); // fire and forget
+    }
+
+    // Log discount usage for single-use enforcement
+    if (validatedDiscountCode && patientData?.phone) {
+      db.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "system",
+        action: "discount_applied",
+        patientId: patientData.id ?? "",
+        orderId,
+        status: "success",
+        details: { code: validatedDiscountCode, phone: patientData.phone, discountAmount: appliedDiscountAmount },
+      });
+      if (process.env.POSTGRES_URL) {
+        await sql`
+          INSERT INTO integration_logs (id, timestamp, integration_name, action, patient_id, order_id, status, details)
+          VALUES (${generateId()}, ${new Date().toISOString()}, 'discount', 'discount_applied', ${patientData.id ?? ""}, ${orderId}, 'success',
+            ${JSON.stringify({ code: validatedDiscountCode, phone: patientData.phone, discountAmount: appliedDiscountAmount })}::jsonb)
+        `.catch(() => {});
+      }
+    }
+
+    // Mark partial intake as completed so abandonment SMS are suppressed
+    if (process.env.POSTGRES_URL && patientData?.phone) {
+      await sql`
+        UPDATE partial_intakes SET completed = true, completed_at = NOW()
+        WHERE phone = ${patientData.phone} AND completed = false
+      `.catch(() => {});
     }
 
     return NextResponse.json({

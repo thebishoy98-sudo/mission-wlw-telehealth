@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle, Camera, CheckCircle, Flashlight, FlashlightOff, ShieldCheck, Video } from "lucide-react";
 
-const RECORDING_SECONDS = 10;
+const RECORDING_SECONDS = 15;
 const MAX_IMAGE_WIDTH = 1200;
 const VIDEO_BITS_PER_SECOND = 180_000;
 export const MAX_VIDEO_DATA_URL_BYTES = 3_500_000;
@@ -218,7 +218,7 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-forest-800" />
             <p className="text-sm text-forest-900">
-              Take a clear ID photo, then record a 10-second identity video in good lighting.
+              Take a clear ID photo, then record a short video mentioning your name, date of birth, and current weight.
             </p>
           </div>
         </div>
@@ -279,9 +279,9 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
 
       <div className="rounded-lg border border-gray-200 p-5 space-y-4">
         <div>
-          <h2 className="font-semibold text-gray-900">10-Second Identity Video</h2>
+          <h2 className="font-semibold text-gray-900">15-Second Verification Video</h2>
           <p className="text-xs text-gray-500 mt-1">
-            Face a light source, remove sunglasses, hold still, then slowly turn your head left and right.
+            Please upload a quick video mentioning your name, date of birth, and current weight if interested in weight loss.
           </p>
         </div>
         <video ref={videoRef} playsInline muted className={`w-full rounded-lg bg-gray-100 ${recording ? "block" : "hidden"}`} />

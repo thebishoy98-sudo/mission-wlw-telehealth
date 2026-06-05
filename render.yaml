@@ -212,6 +212,90 @@ services:
       - key: CRON_SECRET
         sync: false
 
+  - type: cron
+    name: mission-wlw-cron-refill-reminders
+    runtime: node
+    schedule: "0 14 * * *"   # daily at 2pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/refill-reminders',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-delivery-checkins
+    runtime: node
+    schedule: "0 15 * * *"   # daily at 3pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/delivery-checkins',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-winback
+    runtime: node
+    schedule: "0 16 * * *"   # daily at 4pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/winback',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-intake-abandonment
+    runtime: node
+    schedule: "0 * * * *"   # hourly
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/intake-abandonment',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
   - type: web
     name: mission-wlw-practiceq-remote
     runtime: node

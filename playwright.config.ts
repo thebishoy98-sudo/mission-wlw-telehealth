@@ -1,9 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-const PROVIDER_EMAIL = process.env.PROVIDER_EMAIL ?? process.env.E2E_PROVIDER_EMAIL ?? "provider@example.com";
+const PROVIDER_EMAIL = process.env.PROVIDER_EMAIL ?? process.env.E2E_PROVIDER_EMAIL ?? "dr.johnson@telehealth.com";
 const PROVIDER_PASSWORD = process.env.PROVIDER_PASSWORD ?? process.env.E2E_PROVIDER_PASSWORD ?? "provider123";
 const PROVIDER_SECRET = process.env.PROVIDER_SECRET ?? "local-provider-secret";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? process.env.E2E_ADMIN_EMAIL ?? "admin@telehealth.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? process.env.E2E_ADMIN_PASSWORD ?? "admin123";
+const ADMIN_SECRET = process.env.ADMIN_SECRET ?? process.env.E2E_ADMIN_SECRET ?? "local-admin-secret";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -42,8 +45,11 @@ export default defineConfig({
           PROVIDER_PASSWORD,
           PROVIDER_SECRET,
           PROVIDER_NAME: process.env.PROVIDER_NAME ?? "Dotson, Karen",
+          ADMIN_EMAIL,
+          ADMIN_PASSWORD,
+          ADMIN_SECRET,
         },
-        reuseExistingServer: true,
+        reuseExistingServer: false,
         timeout: 60000,
       },
 });

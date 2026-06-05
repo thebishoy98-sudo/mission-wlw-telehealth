@@ -11,7 +11,12 @@ import { buildTreatmentConsentText, CONSENT_VERSION } from "@/lib/consent";
 import { dataUrlToFileMetadata } from "@/lib/data-url";
 import { formatCurrency } from "@/lib/utils";
 import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
-import { Lock, CreditCard } from "lucide-react";
+import { Lock, CreditCard, Tag, ShieldCheck, BadgeCheck } from "lucide-react";
+
+// Client-side code lookup — server re-validates before charging
+const PROMO_CODES: Record<string, { type: "flat" | "percent"; amount: number }> = {
+  SUMMER50: { type: "flat", amount: 50 },
+};
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clinicalConsentStatusKey = ["practice", "QStatus"].join("") as keyof Types.Order;
@@ -84,9 +89,14 @@ export default function Payment() {
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountError, setDiscountError] = useState("");
   const productTotal = dose?.price || product?.startingPrice || 0;
-  const total = chargeAmountOverride ?? productTotal;
-  const productReady = !!product && !!dose && total > 0;
+  const baseTotal = chargeAmountOverride ?? productTotal;
+  const total = Math.max(0, baseTotal - discountAmount);
+  const productReady = !!product && !!dose && baseTotal > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +141,27 @@ export default function Payment() {
       cache: "no-store",
     }).catch(() => {});
   }, []);
+
+  const handleApplyCode = () => {
+    setDiscountError("");
+    const code = discountInput.trim().toUpperCase();
+    if (!code) return;
+    const promo = PROMO_CODES[code];
+    if (!promo) {
+      setDiscountError("Invalid discount code.");
+      return;
+    }
+    const disc = promo.type === "flat" ? promo.amount : Math.floor(baseTotal * promo.amount / 100);
+    setAppliedCode(code);
+    setDiscountAmount(disc);
+    setDiscountInput("");
+  };
+
+  const handleRemoveCode = () => {
+    setAppliedCode("");
+    setDiscountAmount(0);
+    setDiscountError("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,6 +299,7 @@ export default function Payment() {
         orderId: order.id,
         isReorder: intakeState.isReorder,
         reorderSourceOrderId: intakeState.reorderSourceOrderId,
+        discountCode: appliedCode || undefined,
         token: quickBooksToken || undefined,
         cardNumber: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardDigits,
         expMonth: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : expMonth,
@@ -375,11 +407,49 @@ export default function Payment() {
               <span className="font-semibold text-forest-800">{formatCurrency(total)}</span>
             </div>
           )}
+          {discountAmount > 0 && (
+            <div className="flex justify-between items-center text-sm text-green-700">
+              <span className="flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" />{appliedCode}</span>
+              <span className="font-semibold">-{formatCurrency(discountAmount)}</span>
+            </div>
+          )}
           <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
             <span className="font-semibold text-gray-900">Total due today</span>
             <span className="text-2xl font-bold text-forest-800">{productReady ? formatCurrency(total) : "-"}</span>
           </div>
         </div>
+
+        {/* Discount code */}
+        {appliedCode ? (
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-green-50 border border-green-200 px-4 py-2.5 text-sm">
+            <span className="text-green-800 font-semibold flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5" /> {appliedCode} — {formatCurrency(discountAmount)} off applied
+            </span>
+            <button type="button" onClick={handleRemoveCode} className="text-green-600 hover:text-green-800 text-xs font-medium">Remove</button>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Discount code"
+                value={discountInput}
+                onChange={(e) => { setDiscountInput(e.target.value.toUpperCase()); setDiscountError(""); }}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleApplyCode())}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-700 uppercase placeholder:normal-case placeholder:text-gray-400"
+              />
+              <button
+                type="button"
+                onClick={handleApplyCode}
+                className="px-4 py-2 bg-forest-800 text-white text-sm font-semibold rounded-xl hover:bg-forest-700 transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+            {discountError && <p className="mt-1.5 text-xs text-red-500">{discountError}</p>}
+          </div>
+        )}
+
         <div className="mt-5 p-4 bg-cream-100 rounded-xl text-sm text-gray-600">
           <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy — no additional approval steps needed.
         </div>
@@ -503,6 +573,18 @@ export default function Payment() {
         <Button fullWidth type="submit" disabled={processing || !productReady || (!paymentsDisabled && (cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3))}>
           {processing ? "Processing..." : paymentsDisabled ? "Submit order" : `Pay ${productReady ? formatCurrency(total) : "-"}`}
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pt-1 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-green-500" /> HIPAA Compliant
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5" /> 256-bit Encrypted
+        </span>
+        <span className="flex items-center gap-1.5">
+          <BadgeCheck className="w-3.5 h-3.5 text-forest-700" /> Licensed US Providers
+        </span>
       </div>
     </form>
   );
