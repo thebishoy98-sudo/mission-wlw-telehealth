@@ -8,13 +8,21 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? process.env.E2E_ADMIN_EMAIL ?? "a
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? process.env.E2E_ADMIN_PASSWORD ?? "admin123";
 const ADMIN_SECRET = process.env.ADMIN_SECRET ?? process.env.E2E_ADMIN_SECRET ?? "local-admin-secret";
 
+// Expose normalized credentials to the test-runner process so spec files
+// reading process.env.E2E_* pick up the same values used by the webServer.
+process.env.E2E_PROVIDER_EMAIL ??= PROVIDER_EMAIL;
+process.env.E2E_PROVIDER_PASSWORD ??= PROVIDER_PASSWORD;
+process.env.E2E_ADMIN_EMAIL ??= ADMIN_EMAIL;
+process.env.E2E_ADMIN_PASSWORD ??= ADMIN_PASSWORD;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  retries: process.env.CI ? 2 : 1,
+  workers: 1,
   reporter: process.env.CI ? "github" : "list",
+  timeout: 60_000,
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",

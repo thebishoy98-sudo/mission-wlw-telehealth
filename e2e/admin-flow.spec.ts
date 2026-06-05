@@ -18,7 +18,7 @@ async function loginAsAdmin(page: Page) {
 test.describe("Admin dashboard", () => {
   test("admin can log in from direct URL and see metrics", async ({ page }) => {
     await loginAsAdmin(page);
-    await expect(page.getByText(/Admin Dashboard/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Admin Dashboard/i })).toBeVisible();
     await expect(page.getByText(/Total Orders|Revenue|Pending Review/i).first()).toBeVisible();
   });
 
