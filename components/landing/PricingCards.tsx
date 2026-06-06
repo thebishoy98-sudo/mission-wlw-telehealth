@@ -3,54 +3,54 @@ import Image from "next/image";
 import Link from "next/link";
 import { FadeUp } from "./FadeUp";
 
-const DOSES = [
+const PRODUCTS = [
   {
-    id: "tirzepatide_20mg_8_week",
-    label: "Tirzepatide 20mg",
-    strength: "20mg vial",
-    weekly: "2.5mg / week",
-    price: 349,
-    monthly: 175,
-    badge: "Most Popular",
-    bullets: [
-      "8-week supply",
-      "Syringes & supplies included",
-      "Free overnight shipping",
-      "Provider-reviewed prescription",
-    ],
+    id: "product_retatrutide",
+    label: "Retatrutide",
+    tagline: "Triple GLP-1 Agonist",
+    img: "/retatrutide-vial.jpg",
+    badge: "First to Market",
+    fromMonthly: 250,
+    fromSupply: 499,
     highlight: true,
-  },
-  {
-    id: "tirzepatide_40mg_8_week",
-    label: "Tirzepatide 40mg",
-    strength: "40mg vial",
-    weekly: "5mg / week",
-    price: 479,
-    monthly: 240,
-    badge: "Standard Dose",
     bullets: [
-      "8-week supply",
+      "Newest triple-agonist GLP-1",
       "Syringes & supplies included",
       "Free overnight shipping",
       "Provider-reviewed prescription",
     ],
-    highlight: false,
   },
   {
-    id: "tirzepatide_60mg_8_week",
-    label: "Tirzepatide 60mg",
-    strength: "60mg vial",
-    weekly: "7.5mg / week",
-    price: 749,
-    monthly: 375,
-    badge: "Max Dose",
+    id: "product_tirzepatide",
+    label: "Tirzepatide",
+    tagline: "Dual GLP-1 / GIP Agonist",
+    img: "/tirzepatide-vial.jpg",
+    badge: "Most Popular",
+    fromMonthly: 175,
+    fromSupply: 349,
+    highlight: false,
     bullets: [
-      "8-week supply",
+      "Proven weight loss results",
       "Syringes & supplies included",
       "Free overnight shipping",
       "Provider-reviewed prescription",
     ],
+  },
+  {
+    id: "product_semaglutide",
+    label: "Semaglutide",
+    tagline: "GLP-1 Receptor Agonist",
+    img: "/semaglutide-vial.jpg",
+    badge: "Available",
+    fromMonthly: 149,
+    fromSupply: 299,
     highlight: false,
+    bullets: [
+      "Well-established GLP-1 therapy",
+      "Syringes & supplies included",
+      "Free overnight shipping",
+      "Provider-reviewed prescription",
+    ],
   },
 ];
 
@@ -62,31 +62,22 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">
             Pricing
           </span>
-          <div className="flex justify-center mb-5">
-            <Image
-              src="/tirzepatide-vial.jpg"
-              alt="Mission Tirzepatide vial"
-              width={72}
-              height={92}
-              className="object-contain drop-shadow-xl"
-            />
-          </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-forest-800 tracking-tight mb-4">
-            Compounded Tirzepatide
+            GLP-1 Weight Loss Programs
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            8-week prescription with all supplies included. Your provider determines the right
-            dose during your consultation.
+            8-week prescription with all supplies included. Your provider selects the right
+            medication and dose during your consultation.
           </p>
         </FadeUp>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {DOSES.map((d, i) => (
-            <FadeUp key={d.id} delay={i * 0.08}>
+          {PRODUCTS.map((p, i) => (
+            <FadeUp key={p.id} delay={i * 0.08}>
               <div
                 className={`rounded-2xl p-6 h-full flex flex-col ${
-                  d.highlight
-                    ? "bg-forest-800 text-white ring-2 ring-forest-700"
+                  p.highlight
+                    ? "bg-[#13100a] text-white ring-2 ring-amber-400/60"
                     : "bg-white text-gray-800 border border-gray-100 shadow-sm"
                 }`}
               >
@@ -94,44 +85,49 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                     <div
                       className={`min-w-0 pt-1 text-[11px] font-bold uppercase tracking-widest ${
-                        d.highlight ? "text-rose-300" : "text-forest-700"
+                        p.highlight ? "text-amber-400" : "text-forest-700"
                       }`}
                     >
-                      {d.weekly}
+                      {p.tagline}
                     </div>
                     <span
                       className={`shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                        d.highlight
-                          ? "bg-white text-forest-800"
+                        p.highlight
+                          ? "bg-amber-400 text-amber-950"
                           : "bg-forest-800/10 text-forest-800"
                       }`}
                     >
-                      {d.badge}
+                      {p.badge}
                     </span>
                   </div>
-                  <h3
-                    className={`text-lg font-bold mb-1 ${
-                      d.highlight ? "text-white" : "text-forest-800"
-                    }`}
-                  >
-                    {d.label}
-                  </h3>
-                  <div
-                    className={`text-xs mb-4 ${
-                      d.highlight ? "text-white/50" : "text-gray-400"
-                    }`}
-                  >
-                    {d.strength}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`shrink-0 rounded-xl p-1 ${p.highlight ? "bg-white/10" : "bg-gray-50"}`}>
+                      <Image
+                        src={p.img}
+                        alt={`${p.label} vial`}
+                        width={32}
+                        height={52}
+                        className="object-contain"
+                        style={{ maxHeight: "52px", width: "auto" }}
+                      />
+                    </div>
+                    <h3
+                      className={`text-xl font-bold ${
+                        p.highlight ? "text-amber-400" : "text-forest-800"
+                      }`}
+                    >
+                      {p.label}
+                    </h3>
                   </div>
                   <div
                     className={`flex items-baseline gap-1 ${
-                      d.highlight ? "text-white" : "text-forest-800"
+                      p.highlight ? "text-white" : "text-forest-800"
                     }`}
                   >
-                    <span className="text-3xl font-bold">${d.monthly}</span>
+                    <span className="text-3xl font-bold">${p.fromMonthly}</span>
                     <span
                       className={`text-sm ${
-                        d.highlight ? "text-white/60" : "text-gray-400"
+                        p.highlight ? "text-white/60" : "text-gray-400"
                       }`}
                     >
                       / month
@@ -139,24 +135,24 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   </div>
                   <div
                     className={`text-xs mt-1 ${
-                      d.highlight ? "text-rose-300" : "text-forest-700"
+                      p.highlight ? "text-amber-400/70" : "text-forest-700"
                     }`}
                   >
-                    ~${d.price} / 8-week supply
+                    from ${p.fromSupply} / 8-week supply
                   </div>
                 </div>
 
                 <ul className="space-y-2 mb-6 flex-1">
-                  {d.bullets.map((b) => (
+                  {p.bullets.map((b) => (
                     <li
                       key={b}
                       className={`flex items-start gap-2 text-sm ${
-                        d.highlight ? "text-white/85" : "text-gray-600"
+                        p.highlight ? "text-white/85" : "text-gray-600"
                       }`}
                     >
                       <span
                         className={`shrink-0 font-bold mt-0.5 ${
-                          d.highlight ? "text-rose-300" : "text-forest-700"
+                          p.highlight ? "text-amber-400" : "text-forest-700"
                         }`}
                       >
                         ✓
@@ -169,12 +165,12 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                 <Link
                   href={ctaUrl}
                   className={`block text-center font-bold py-3 rounded-full text-sm transition-all active:scale-[.98] ${
-                    d.highlight
-                      ? "bg-white text-forest-800 hover:bg-cream-200"
+                    p.highlight
+                      ? "bg-amber-400 text-amber-950 hover:bg-amber-300 shadow-lg shadow-amber-400/20"
                       : "bg-forest-800 text-white hover:bg-forest-700"
                   }`}
                 >
-                  Start with {d.strength}
+                  Get Started
                 </Link>
               </div>
             </FadeUp>
@@ -183,8 +179,9 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
 
         <FadeUp className="mt-8 text-center">
           <p className="text-xs text-gray-400 max-w-xl mx-auto leading-relaxed">
-            Consultation fee waived for new patients this month. Final dose is determined by your
-            licensed provider. Compounded Tirzepatide is prepared by a licensed 503B pharmacy.
+            Consultation fee waived for new patients this month. Final medication and dose
+            are determined by your licensed provider. All medications are compounded by a
+            licensed 503B pharmacy.
           </p>
         </FadeUp>
       </div>

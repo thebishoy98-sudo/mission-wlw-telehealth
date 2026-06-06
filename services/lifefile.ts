@@ -208,19 +208,48 @@ function buildPharmacyRxs(
     typeof dose.durationWeeks === "number" && dose.durationWeeks > 0
       ? dose.durationWeeks * 7
       : 56; // default to 8-week supply
+  const vialQty = typeof dose.quantity === "number" && dose.quantity > 0 ? dose.quantity : 1;
+  // Supply qty: 10 syringes + 10 swabs per vial (1-1 ratio same as tirzepatide)
+  const supplyQty = String(vialQty * 10);
   return [
     {
       rxType: "new",
       drugName: (product.name ?? "").toUpperCase().slice(0, 254),
       drugStrength: (dose.strength ?? dose.label ?? "").slice(0, 254),
       drugForm: "INJECTABLE",
-      quantity: String(typeof dose.quantity === "number" && dose.quantity > 0 ? dose.quantity : 1),
+      quantity: String(vialQty),
       quantityUnits: "each",
       directions: dose.prescriptionLabel || `Inject as directed by prescriber. Use ${dose.strength ?? "prescribed dose"} once weekly subcutaneously.`,
       refills: 0,
       dateWritten,
       daysSupply,
       scheduleCode: "L",
+    },
+    {
+      rxType: "new",
+      drugName: "ALCOHOL SWABS",
+      drugStrength: "EA",
+      drugForm: "SUPPLY",
+      quantity: supplyQty,
+      quantityUnits: "each",
+      directions: "Use as directed with injection",
+      refills: 0,
+      dateWritten,
+      daysSupply,
+      scheduleCode: "O",
+    },
+    {
+      rxType: "new",
+      drugName: "COMFORT EZ 31GX5/16\" 1ML SYRINGE",
+      drugStrength: "EA",
+      drugForm: "SYRINGE",
+      quantity: supplyQty,
+      quantityUnits: "each",
+      directions: "Use as directed with injection",
+      refills: 0,
+      dateWritten,
+      daysSupply,
+      scheduleCode: "O",
     },
   ];
 }
@@ -300,6 +329,12 @@ export const createPharmacyOrder = async (
   const dateWritten = new Date().toISOString().split("T")[0];
   const rxs = buildPharmacyRxs(product, dose, lfProductId, dateWritten);
 
+  // Build memo from first Rx line: "DRUGNAME DRUGFORM STRENGTH (QTY: X each)"
+  const firstRx = rxs[0];
+  const memoText = firstRx
+    ? `${firstRx.drugName} ${firstRx.drugForm} ${firstRx.drugStrength} (QTY: ${firstRx.quantity} ${firstRx.quantityUnits})`
+    : `${product.name ?? ""} ${dose.label ?? ""}`.trim();
+
   // Build Life File POST /order payload per spec
   const payload = {
     message: {
@@ -308,7 +343,7 @@ export const createPharmacyOrder = async (
     },
     order: {
       general: {
-        memo: clip(`${product.name ?? ""} ${dose.label ?? ""}`.trim() || product.id, 120),
+        memo: clip(memoText, 120),
         referenceId: clip(order.id, 200),
       },
       prescriber: {

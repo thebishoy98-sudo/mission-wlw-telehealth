@@ -40,10 +40,10 @@ test.describe("Landing pricing responsive layout", () => {
     await page.evaluate(() => {
       document.getElementById("pricing")?.scrollIntoView({ block: "center" });
     });
-    await expect(page.getByRole("heading", { name: /Compounded Tirzepatide/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /GLP-1 Weight Loss Programs/i })).toBeVisible();
 
-    await expectLabelAndBadgeDoNotOverlap(page, "Tirzepatide 20mg", "2.5mg / week", "Starter Dose");
-    await expectLabelAndBadgeDoNotOverlap(page, "Tirzepatide 40mg", "5mg / week", "Most Popular");
-    await expectLabelAndBadgeDoNotOverlap(page, "Tirzepatide 60mg", "7.5mg / week", "Max Dose");
+    await expectLabelAndBadgeDoNotOverlap(page, "Retatrutide", "Triple GLP-1 Agonist", "First to Market");
+    await expectLabelAndBadgeDoNotOverlap(page, "Tirzepatide", "Dual GLP-1 / GIP Agonist", "Most Popular");
+    await expectLabelAndBadgeDoNotOverlap(page, "Semaglutide", "GLP-1 Receptor Agonist", "Available");
   });
 });

@@ -23,7 +23,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
           <div>
             <FadeUp>
               <span className="inline-flex items-center gap-1.5 bg-forest-800/10 text-forest-800 text-[11px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-4">
-                FDA-Regulated Compounded Tirzepatide
+                Medical-Grade GLP-1 Weight Loss
               </span>
             </FadeUp>
 
@@ -36,8 +36,8 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             <FadeUp delay={0.15}>
               <p className="text-base sm:text-lg text-gray-600 mb-7 leading-relaxed">
                 Mission Weight Loss and Wellness connects you with board-certified providers who
-                prescribe personalized Tirzepatide programs. Medication delivered to your door
-                with no office visits required.
+                prescribe personalized GLP-1 programs — Retatrutide, Tirzepatide, or Semaglutide.
+                Medication delivered to your door with no office visits required.
               </p>
             </FadeUp>
 
@@ -49,12 +49,12 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                 >
                   Start Your Free Assessment
                 </Link>
-                <a
-                  href="#how-it-works"
+                <Link
+                  href="/login/patient"
                   className="border-2 border-forest-800 text-forest-800 font-semibold px-7 py-4 rounded-full text-center hover:bg-forest-800/5 transition-colors text-sm sm:text-base"
                 >
-                  How It Works
-                </a>
+                  Returning Patient
+                </Link>
               </div>
             </FadeUp>
 
@@ -95,20 +95,36 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                 </div>
                 <div className="border-t border-white/20 pt-5">
                   <div className="flex items-center gap-4">
-                    <div className="shrink-0 bg-white/10 rounded-xl p-1.5">
+                    <div className="shrink-0 bg-white/10 rounded-xl p-1.5 flex gap-1">
+                      <Image
+                        src="/retatrutide-vial.jpg"
+                        alt="Retatrutide vial"
+                        width={28}
+                        height={58}
+                        className="object-contain drop-shadow-lg"
+                        style={{ maxHeight: "58px", width: "auto" }}
+                      />
                       <Image
                         src="/tirzepatide-vial.jpg"
-                        alt="Mission Tirzepatide vial"
-                        width={52}
-                        height={68}
+                        alt="Tirzepatide vial"
+                        width={28}
+                        height={58}
                         className="object-contain drop-shadow-lg"
-                        style={{ maxHeight: "68px", width: "auto" }}
+                        style={{ maxHeight: "58px", width: "auto" }}
+                      />
+                      <Image
+                        src="/semaglutide-vial.jpg"
+                        alt="Semaglutide vial"
+                        width={28}
+                        height={58}
+                        className="object-contain drop-shadow-lg"
+                        style={{ maxHeight: "58px", width: "auto" }}
                       />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">Compounded Tirzepatide</div>
+                      <div className="text-sm font-semibold">3 GLP-1 Programs</div>
                       <div className="text-[11px] text-white/55">Licensed 503B Pharmacy</div>
-                      <div className="text-[11px] text-rose-300 mt-0.5">From $175 / month</div>
+                      <div className="text-[11px] text-rose-300 mt-0.5">From $149 / month</div>
                     </div>
                   </div>
                 </div>

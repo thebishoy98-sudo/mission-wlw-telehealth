@@ -13,7 +13,7 @@ const FAQS = [
   },
   {
     q: "Is this covered by insurance?",
-    a: "Our compounded Tirzepatide program is self-pay. The starting dose is $349 for an 8-week supply, which works out to around $175 per month. All supplies are included and there are no hidden fees.",
+    a: "Our GLP-1 programs are self-pay. Programs start from $299 for an 8-week supply (Semaglutide) up to $499+ for Retatrutide. All supplies are included and there are no hidden fees.",
   },
   {
     q: "Do I need to come in person?",

@@ -10,7 +10,7 @@ const MILESTONES = [
   {
     period: "Week 1",
     title: "Medication Arrives",
-    desc: "Your Tirzepatide is shipped from a licensed 503B pharmacy and delivered to your door, discreetly.",
+    desc: "Your GLP-1 medication is shipped from a licensed 503B pharmacy and delivered to your door, discreetly.",
   },
   {
     period: "Month 1 to 2",
