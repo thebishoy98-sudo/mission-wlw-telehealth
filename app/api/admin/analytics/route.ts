@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     const allPayments = await dbServer.paymentDb
       .getByOrders(activeOrders.map((o) => o.id))
       .catch(() => []);
-    const paymentByOrder = new Map(allPayments.map((p) => [p.orderId, p]));
+    const paymentByOrder = new Map(allPayments.map((p) => [p.orderId, p] as [string, typeof p]));
 
     for (const order of activeOrders) {
       const d = new Date(order.createdAt);
