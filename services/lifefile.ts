@@ -20,9 +20,11 @@ import { serviceConfig } from "@/lib/service-config";
 import { generateId } from "@/lib/utils";
 
 // ── Sandbox product ID map (slug / partial name → LF lfProductID) ─────────────
+// Only tirzepatide uses a fixed lfProductID because its sandbox entry is specific.
+// Other GLP-1 medications (retatrutide, semaglutide) rely on drug-name lookup in
+// the LF catalog — do NOT add them here unless you have the correct LF product ID.
 const LF_PRODUCT_MAP: Record<string, number> = {
   tirzepatide: 305492221,     // Acetaminophen 500mg — closest sandbox match
-  semaglutide: 305492220,     // Acarbose 50mg
   "benzocaine-lidocaine-tetracaine": 305157968,
   "baclofen-dexamethasone-flurbiprofen": 305492218,
   acyclovir: 305492222,
@@ -199,19 +201,25 @@ function buildPharmacyRxs(
     ];
   }
 
+  // For non-tirzepatide products, omit lfProductID so LifeFile resolves
+  // by drug name/strength — avoids tirzepatide sandbox ID being sent for
+  // retatrutide/semaglutide which would cause a catalog mismatch rejection.
+  const daysSupply =
+    typeof dose.durationWeeks === "number" && dose.durationWeeks > 0
+      ? dose.durationWeeks * 7
+      : 56; // default to 8-week supply
   return [
     {
       rxType: "new",
-      drugName: (product.name ?? "").slice(0, 254),
+      drugName: (product.name ?? "").toUpperCase().slice(0, 254),
       drugStrength: (dose.strength ?? dose.label ?? "").slice(0, 254),
-      drugForm: (dose.label ?? dose.strength ?? "INJECTABLE").slice(0, 255),
-      lfProductID: lfProductId,
-      quantity: String(dose.quantity),
+      drugForm: "INJECTABLE",
+      quantity: String(typeof dose.quantity === "number" && dose.quantity > 0 ? dose.quantity : 1),
       quantityUnits: "each",
-      directions: "As directed by prescriber",
-      refills: 11,
+      directions: dose.prescriptionLabel || `Inject as directed by prescriber. Use ${dose.strength ?? "prescribed dose"} once weekly subcutaneously.`,
+      refills: 0,
       dateWritten,
-      daysSupply: 84,
+      daysSupply,
       scheduleCode: "L",
     },
   ];
