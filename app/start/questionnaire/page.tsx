@@ -68,20 +68,21 @@ export default function Questionnaire() {
   const [questions, setQuestions] = useState<Types.Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const answersRef = useRef<Record<string, string>>({});
+  const [step, setStep] = useState(0);
   const [ineligibleQuestion, setIneligibleQuestion] = useState<Types.Question | null>(null);
-  const [missingRequired, setMissingRequired] = useState<string[]>([]);
+  const [stepError, setStepError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/questions", { cache: "no-store" })
-      .then((response) => response.json())
+      .then((r) => r.json())
       .then((payload) => {
         const all = (payload.questions ?? []) as Types.Question[];
         setQuestions(all.sort((a, b) => a.displayOrder - b.displayOrder));
       })
       .catch(() => setQuestions([]));
-    const savedAnswers = getIntakeState().questionnaireAnswers || {};
-    answersRef.current = savedAnswers;
-    setAnswers(savedAnswers);
+    const saved = getIntakeState().questionnaireAnswers || {};
+    answersRef.current = saved;
+    setAnswers(saved);
   }, []);
 
   const setAnswer = (id: string, val: string) => {
@@ -89,41 +90,26 @@ export default function Questionnaire() {
     answersRef.current = next;
     setAnswers(next);
     saveIntakeState({ questionnaireAnswers: next });
-    // Clear ineligibility if answer changes
-    setIneligibleQuestion(null);
-    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
+    setStepError(null);
   };
 
   const toggleMultiAnswer = (id: string, option: string, checked: boolean) => {
-    const current = (answersRef.current[id] || "").split(",").map((item) => item.trim()).filter(Boolean);
+    const current = (answersRef.current[id] || "").split(",").map((s) => s.trim()).filter(Boolean);
     const answer = isNoneOption(option)
       ? (checked ? option : "")
       : (checked
-          ? Array.from(new Set([...current.filter((item) => !isNoneOption(item)), option]))
-          : current.filter((item) => item !== option)
+          ? Array.from(new Set([...current.filter((s) => !isNoneOption(s)), option]))
+          : current.filter((s) => s !== option)
         ).join(", ");
     const next = { ...answersRef.current, [id]: answer };
     answersRef.current = next;
     setAnswers(next);
     saveIntakeState({ questionnaireAnswers: next });
-    setIneligibleQuestion(null);
-    setMissingRequired((prev) => prev.filter((questionId) => questionId !== id));
+    setStepError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const finalize = () => {
     const currentAnswers = answersRef.current;
-
-    const missing = questions
-      .filter((question) => question.required && !currentAnswers[question.id]?.trim())
-      .map((question) => question.id);
-
-    if (missing.length) {
-      setMissingRequired(missing);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
     const submittedAnswers = Object.entries(currentAnswers).map(([questionId, answer]) => ({
       id: `answer_${questionId}`,
       orderId: "pending",
@@ -133,18 +119,39 @@ export default function Questionnaire() {
     }));
     const eligibility = checkEligibility(submittedAnswers, questions);
     const disqualifier = eligibility.disqualifyingQuestion
-      ? questions.find((question) => question.text === eligibility.disqualifyingQuestion)
+      ? questions.find((q) => q.text === eligibility.disqualifyingQuestion)
       : null;
-
     if (disqualifier) {
       setIneligibleQuestion(disqualifier);
-      // Scroll to top to show the message
-      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-
     saveIntakeState({ questionnaireAnswers: currentAnswers });
     router.push("/start/consent");
+  };
+
+  const handleNext = () => {
+    const q = questions[step];
+    if (q.required && !answersRef.current[q.id]?.trim()) {
+      setStepError("Please answer this question before continuing.");
+      return;
+    }
+    if (step < questions.length - 1) {
+      setStep(step + 1);
+      setStepError(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      finalize();
+    }
+  };
+
+  const handleBack = () => {
+    setStepError(null);
+    if (step === 0) {
+      router.push("/start/info");
+    } else {
+      setStep(step - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   if (ineligibleQuestion) {
@@ -160,31 +167,22 @@ export default function Questionnaire() {
           <p className="text-gray-500 text-base leading-relaxed mb-6 max-w-md mx-auto">
             Based on your response to <strong className="text-gray-700">&ldquo;{ineligibleQuestion.text}&rdquo;</strong>, you are not eligible for GLP-1 treatment at this time.
           </p>
-
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-5 text-left mb-8 max-w-md mx-auto">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-amber-900 text-sm mb-1">Why we cannot proceed</p>
                 <p className="text-amber-700 text-sm leading-relaxed">
-                  GLP-1 medications such as Tirzepatide are contraindicated for patients with a personal or family history of thyroid cancer, MEN 2, or who are currently pregnant or breastfeeding. Your safety is our priority.
+                  GLP-1 medications are contraindicated for patients with a personal or family history of thyroid cancer, MEN 2, or who are currently pregnant or breastfeeding. Your safety is our priority.
                 </p>
               </div>
             </div>
           </div>
-
           <p className="text-sm text-gray-400 mb-6">
             Please consult with your primary care physician about alternative treatment options. Your answers were not saved and no charge was applied.
           </p>
-
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIneligibleQuestion(null);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
+            <Button variant="outline" onClick={() => { setIneligibleQuestion(null); setStep(questions.length - 1); }}>
               Go Back &amp; Review Answers
             </Button>
             <Button variant="ghost" onClick={() => router.push("/")}>
@@ -196,105 +194,117 @@ export default function Questionnaire() {
     );
   }
 
+  if (questions.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+        <div className="w-8 h-8 border-2 border-forest-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-400 text-sm">Loading questions...</p>
+      </div>
+    );
+  }
+
+  const q = questions[step];
+  const total = questions.length;
+  const progress = ((step + 1) / total) * 100;
+  const isLast = step === total - 1;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-7">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">Health Questionnaire</h2>
-        <p className="text-gray-500 text-sm mb-8">
-          Please answer honestly - this helps our providers determine if treatment is right for you.
+    <div className="space-y-5">
+      {/* Progress */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4">
+        <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+          <span className="font-medium text-forest-700">Health Questionnaire</span>
+          <span>Question {step + 1} of {total}</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-1.5">
+          <div
+            className="bg-forest-700 h-1.5 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Question card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3">
+          Question {step + 1}
         </p>
-        {missingRequired.length > 0 && (
-          <div className="mb-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Please answer every required question before continuing.
-          </div>
+        <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-6 leading-snug">
+          {q.text}
+          {q.required && <span className="text-red-400 ml-1">*</span>}
+        </h2>
+
+        {q.type === "text" && q.id === "pq_height" && (
+          <HeightPicker value={answers[q.id] || ""} onChange={(v) => setAnswer(q.id, v)} />
         )}
-
-        {questions.length === 0 ? (
-          <div className="text-center py-10">
-            <div className="w-8 h-8 border-2 border-forest-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-gray-400 text-sm">Loading questions...</p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {questions.map((question, idx) => (
-              <div key={question.id} className="border-b border-gray-50 pb-7 last:border-0 last:pb-0">
-                <label className="block text-sm font-semibold text-gray-800 mb-3">
-                  <span className="text-forest-700 mr-1.5">{idx + 1}.</span>
-                  {question.text}
-                  {question.required && <span className="text-red-400 ml-1">*</span>}
-                </label>
-
-                {question.type === "text" && question.id === "pq_height" && (
-                  <HeightPicker value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
-                )}
-                {question.type === "text" && (question.id === "pq_current_weight" || question.id === "pq_ideal_weight") && (
-                  <WeightInput value={answers[question.id] || ""} onChange={(v) => setAnswer(question.id, v)} />
-                )}
-                {question.type === "text" && question.id !== "pq_height" && question.id !== "pq_current_weight" && question.id !== "pq_ideal_weight" && (
-                  <Input value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} />
-                )}
-                {question.type === "textarea" && (
-                  <Textarea value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)} rows={3} />
-                )}
-                {question.type === "radio" && (
-                  <div className="space-y-2">
-                    {question.options?.map((option) => (
-                      <label key={option} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                        answers[question.id] === option && question.disqualifying === option
-                          ? "border-red-300 bg-red-50"
-                          : "border-gray-100 hover:bg-gray-50 has-[:checked]:border-green-200 has-[:checked]:bg-green-50"
-                      }`}>
-                        <input
-                          type="radio"
-                          name={question.id}
-                          value={option}
-                          checked={answers[question.id] === option}
-                          onChange={(e) => setAnswer(question.id, e.target.value)}
-                          className="accent-forest-800"
-                        />
-                        <span className="text-sm text-gray-700">{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {question.type === "checkbox" && (
-                  <div className="space-y-2">
-                    {(question.options?.length ? question.options : ["Yes"]).map((option) => {
-                      const selected = (answers[question.id] || "").split(",").map((item) => item.trim()).includes(option);
-                      return (
-                        <label key={option} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-green-200 has-[:checked]:bg-green-50 transition-all">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={(e) => toggleMultiAnswer(question.id, option, e.target.checked)}
-                            className="accent-forest-800"
-                          />
-                          <span className="text-sm text-gray-700">{option}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                {question.warnIf && answers[question.id] === question.warnIf && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Note: Your response will be flagged for provider review before your order is dispatched.
-                  </div>
-                )}
-                {missingRequired.includes(question.id) && (
-                  <p className="mt-2 text-sm text-red-500">This question is required.</p>
-                )}
-              </div>
+        {q.type === "text" && (q.id === "pq_current_weight" || q.id === "pq_ideal_weight") && (
+          <WeightInput value={answers[q.id] || ""} onChange={(v) => setAnswer(q.id, v)} />
+        )}
+        {q.type === "text" && q.id !== "pq_height" && q.id !== "pq_current_weight" && q.id !== "pq_ideal_weight" && (
+          <Input value={answers[q.id] || ""} onChange={(e) => setAnswer(q.id, e.target.value)} />
+        )}
+        {q.type === "textarea" && (
+          <Textarea value={answers[q.id] || ""} onChange={(e) => setAnswer(q.id, e.target.value)} rows={4} />
+        )}
+        {q.type === "radio" && (
+          <div className="space-y-2">
+            {q.options?.map((option) => (
+              <label key={option} className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                answers[q.id] === option && q.disqualifying === option
+                  ? "border-red-300 bg-red-50"
+                  : "border-gray-100 hover:bg-gray-50 has-[:checked]:border-forest-300 has-[:checked]:bg-forest-50"
+              }`}>
+                <input
+                  type="radio"
+                  name={q.id}
+                  value={option}
+                  checked={answers[q.id] === option}
+                  onChange={(e) => setAnswer(q.id, e.target.value)}
+                  className="accent-forest-800"
+                />
+                <span className="text-sm text-gray-700">{option}</span>
+              </label>
             ))}
           </div>
         )}
+        {q.type === "checkbox" && (
+          <div className="space-y-2">
+            {(q.options?.length ? q.options : ["Yes"]).map((option) => {
+              const selected = (answers[q.id] || "").split(",").map((s) => s.trim()).includes(option);
+              return (
+                <label key={option} className="flex items-center gap-3 p-3.5 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-50 has-[:checked]:border-forest-300 has-[:checked]:bg-forest-50 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(e) => toggleMultiAnswer(q.id, option, e.target.checked)}
+                    className="accent-forest-800"
+                  />
+                  <span className="text-sm text-gray-700">{option}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {q.warnIf && answers[q.id] === q.warnIf && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Note: Your response will be flagged for provider review before your order is dispatched.
+          </div>
+        )}
+        {stepError && (
+          <p className="mt-4 text-sm text-red-500">{stepError}</p>
+        )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Button fullWidth variant="outline" type="button" onClick={() => router.push("/start/info")}>
+      {/* Nav */}
+      <div className="flex gap-3">
+        <Button variant="outline" type="button" onClick={handleBack} className="w-28 shrink-0">
           Back
         </Button>
-        <Button fullWidth type="submit">Continue</Button>
+        <Button fullWidth type="button" onClick={handleNext}>
+          {isLast ? "Continue" : "Next →"}
+        </Button>
       </div>
-    </form>
+    </div>
   );
 }
