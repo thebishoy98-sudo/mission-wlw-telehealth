@@ -456,7 +456,7 @@ export const createPharmacyOrder = async (
       order: {
         general: {
           referenceId: order.id,
-          memo: `${product.name} ${dose.label}`,
+          memo: clip(memoText, 120),
         },
         prescriber: {
           npi: payload.order.prescriber.npi,
@@ -474,7 +474,9 @@ export const createPharmacyOrder = async (
         rxs: payload.order.rxs.map((rx) => ({
           drugName: rx.drugName,
           drugStrength: rx.drugStrength,
+          drugForm: rx.drugForm,
           quantity: parseInt(rx.quantity, 10),
+          quantityUnits: rx.quantityUnits,
           directions: rx.directions,
           refills: rx.refills,
           daysSupply: rx.daysSupply,

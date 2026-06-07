@@ -117,11 +117,57 @@ export const retatrutideProduct: Product = {
   createdAt,
 };
 
-export const canonicalProducts: Product[] = [tirzepatideProduct, retatrutideProduct];
+export const semaglutideProduct: Product = {
+  id: "product_semaglutide",
+  name: "Semaglutide",
+  slug: "semaglutide",
+  description: "8-week compounded Semaglutide prescription with supplies included.",
+  longDescription:
+    "A provider-reviewed 8-week compounded Semaglutide prescription. A well-established GLP-1 receptor agonist for effective weight management.",
+  startingPrice: 299,
+  image: "/semaglutide-vial.jpg",
+  doses: [
+    {
+      id: "semaglutide_2mg_8_week",
+      label: "Semaglutide 2mg",
+      strength: "2mg vial",
+      quantity: 1,
+      price: 299,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+    {
+      id: "semaglutide_4mg_8_week",
+      label: "Semaglutide 4mg",
+      strength: "4mg vial",
+      quantity: 1,
+      price: 359,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+    {
+      id: "semaglutide_6mg_8_week",
+      label: "Semaglutide 6mg",
+      strength: "6mg vial",
+      quantity: 1,
+      price: 419,
+      durationWeeks: 8,
+      patientDescription: "8-Week Prescription",
+    },
+  ],
+  eligibilityNote:
+    "Final dose and eligibility are determined by a licensed provider after review.",
+  isActive: true,
+  faqs: [],
+  createdAt,
+};
+
+export const canonicalProducts: Product[] = [tirzepatideProduct, retatrutideProduct, semaglutideProduct];
 
 const CANONICAL_BY_SLUG: Record<string, Product> = {
   tirzepatide: tirzepatideProduct,
   retatrutide: retatrutideProduct,
+  semaglutide: semaglutideProduct,
 };
 
 export function normalizeProduct(product: Product): Product {

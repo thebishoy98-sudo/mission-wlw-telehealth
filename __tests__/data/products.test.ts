@@ -30,8 +30,8 @@ describe("normalizeCustomerProducts", () => {
       makeProduct("tirz_copy", "Tirzepatide", "tirzepatide"),
     ]);
 
-    // Both canonical products (Tirzepatide + Retatrutide) are returned
-    expect(products).toHaveLength(2);
+    // All three canonical products (Tirzepatide + Retatrutide + Semaglutide) are returned
+    expect(products).toHaveLength(3);
     const tirz = products.find((p) => p.slug === "tirzepatide");
     expect(tirz).toMatchObject({
       id: tirzepatideProduct.id,
