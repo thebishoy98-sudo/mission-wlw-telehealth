@@ -9,8 +9,8 @@ import { HowItWorks } from "@/components/landing/HowItWorks";
 import { WeightLossCalculator } from "@/components/landing/WeightLossCalculator";
 import { LifestyleSection } from "@/components/landing/LifestyleSection";
 import { Timeline } from "@/components/landing/Timeline";
-import { MedicationShowcase } from "@/components/landing/MedicationShowcase";
 import { PricingCards } from "@/components/landing/PricingCards";
+import { RetatrutideModal } from "@/components/landing/RetatrutideModal";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { StickyCtaBar } from "@/components/landing/StickyCtaBar";
 import { LandingFaq } from "@/components/landing/LandingFaq";
@@ -51,7 +51,6 @@ function LandingPage() {
         <WeightLossCalculator ctaUrl={ctaUrl} />
         <LifestyleSection ctaUrl={ctaUrl} />
         <Timeline />
-        <MedicationShowcase ctaUrl={ctaUrl} />
         <Testimonials />
         <PricingCards ctaUrl={ctaUrl} />
         <LandingFaq />
@@ -60,6 +59,7 @@ function LandingPage() {
 
       <StickyCtaBar ctaUrl={ctaUrl} />
       <AiChat />
+      <RetatrutideModal ctaUrl={ctaUrl} />
     </div>
   );
 }

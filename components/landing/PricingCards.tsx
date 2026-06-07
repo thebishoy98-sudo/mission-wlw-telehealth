@@ -58,6 +58,47 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
   return (
     <section id="pricing" className="bg-cream-100 py-16 sm:py-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Retatrutide launch banner */}
+        <FadeUp className="mb-10">
+          <div
+            className="relative rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row items-center gap-4"
+            style={{ background: "linear-gradient(135deg, #13100a 0%, #1c1608 60%, #0e0c06 100%)" }}
+          >
+            <div className="absolute top-0 right-0 w-64 h-full bg-amber-400/5 blur-3xl pointer-events-none" />
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="shrink-0 bg-white/8 rounded-xl p-1.5 border border-amber-400/20">
+                <Image
+                  src="/retatrutide-vial.jpg"
+                  alt="Retatrutide vial"
+                  width={36}
+                  height={56}
+                  className="object-contain"
+                  style={{ mixBlendMode: "multiply" }}
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">
+                    Now Available
+                  </span>
+                </div>
+                <p className="text-white font-bold text-sm sm:text-base">
+                  Retatrutide — Pharmacy-Grade, First to Market
+                </p>
+                <p className="text-white/45 text-xs mt-0.5 truncate">
+                  Triple-agonist GLP-1 · Licensed 503B compounding pharmacy · Ships today
+                </p>
+              </div>
+            </div>
+            <Link
+              href={ctaUrl}
+              className="shrink-0 bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-[.98] shadow-lg shadow-amber-400/20 whitespace-nowrap"
+            >
+              Order Now →
+            </Link>
+          </div>
+        </FadeUp>
+
         <FadeUp className="text-center mb-12 sm:mb-16">
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">
             Pricing
