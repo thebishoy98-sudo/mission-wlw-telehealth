@@ -20,6 +20,12 @@ type AdminDashboardData = {
 
 type AnalyticsData = {
   totals: { allTime: number; week7: number; month30: number; ytd: number };
+  orderPeriods: {
+    today: { orders: number; revenue: number };
+    thisWeek: { orders: number; revenue: number };
+    thisMonth: { orders: number; revenue: number };
+    thisYear: { orders: number; revenue: number };
+  };
   monthly: Array<{ key: string; label: string; orders: number; patients: number; revenue: number }>;
   productMix: Array<{ name: string; count: number }>;
 };
@@ -213,6 +219,29 @@ function AdminDashboardContent() {
                 <p className="text-3xl font-bold text-forest-800">{analytics.totals.ytd}</p>
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Order period stats */}
+        {analytics?.orderPeriods && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Orders Overview</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+              {[
+                { label: "Today", data: analytics.orderPeriods.today },
+                { label: "This Week", data: analytics.orderPeriods.thisWeek },
+                { label: "This Month", data: analytics.orderPeriods.thisMonth },
+                { label: "This Year", data: analytics.orderPeriods.thisYear },
+              ].map(({ label, data }) => (
+                <Card key={label}>
+                  <CardContent className="p-4 sm:p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
+                    <p className="text-2xl font-bold text-forest-800">{data.orders}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{formatCurrency(data.revenue)}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
         )}
 

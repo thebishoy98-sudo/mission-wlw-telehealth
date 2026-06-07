@@ -296,6 +296,69 @@ services:
       - key: CRON_SECRET
         sync: false
 
+  - type: cron
+    name: mission-wlw-cron-weekly-checkins
+    runtime: node
+    schedule: "30 14 * * *"  # daily at 2:30pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/weekly-checkins',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-dose-escalation
+    runtime: node
+    schedule: "0 17 * * *"   # daily at 5pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/dose-escalation',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-retatrutide-blast
+    runtime: node
+    schedule: "0 18 * * *"   # daily at 6pm UTC (idempotent — each patient receives it at most once)
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/retatrutide-blast',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
   - type: web
     name: mission-wlw-practiceq-remote
     runtime: node

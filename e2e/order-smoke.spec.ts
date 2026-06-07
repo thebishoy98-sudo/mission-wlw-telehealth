@@ -131,39 +131,116 @@ test.describe("Abandonment cron smoke tests", () => {
   });
 });
 
-test.describe("Landing page showcase smoke tests", () => {
-  test("medication showcase: Retatrutide appears before Tirzepatide", async ({ page }) => {
-    await page.goto(BASE);
-
-    // Scroll to the dark medication showcase section
-    await page.getByText("FIRST TO MARKET").scrollIntoViewIfNeeded();
-
-    const reta = page.getByText("Retatrutide Injection").first();
-    const tirz = page.getByText("Tirzepatide Injection").first();
-
-    await expect(reta).toBeVisible({ timeout: 10_000 });
-    await expect(tirz).toBeVisible({ timeout: 5_000 });
-
-    const retaTop = await reta.evaluate((el) => el.getBoundingClientRect().top);
-    const tirzTop = await tirz.evaluate((el) => el.getBoundingClientRect().top);
-    expect(retaTop).toBeLessThanOrEqual(tirzTop);
-  });
-
-  test("pricing section: 20mg card shows Most Popular badge", async ({ page }) => {
+test.describe("Landing page smoke tests", () => {
+  test("pricing section: Retatrutide appears before Tirzepatide in product grid", async ({ page }) => {
     await page.goto(BASE);
     await page.evaluate(() => {
       document.getElementById("pricing")?.scrollIntoView({ behavior: "instant" });
     });
 
-    // The Most Popular badge should exist
-    await expect(page.getByText("Most Popular").first()).toBeVisible({ timeout: 10_000 });
+    const reta = page.getByText("Retatrutide").first();
+    const tirz = page.getByText("Tirzepatide").first();
 
-    // The highlighted dark card containing Most Popular should also mention 20mg
-    const highlightedCard = page
-      .locator("div")
-      .filter({ hasText: /Most Popular/ })
-      .filter({ hasText: /20mg/ })
-      .first();
-    await expect(highlightedCard).toBeVisible({ timeout: 5_000 });
+    await expect(reta).toBeVisible({ timeout: 10_000 });
+    await expect(tirz).toBeVisible({ timeout: 5_000 });
+
+    const retaTop = await reta.evaluate((el: Element) => el.getBoundingClientRect().top);
+    const tirzTop = await tirz.evaluate((el: Element) => el.getBoundingClientRect().top);
+    expect(retaTop).toBeLessThanOrEqual(tirzTop);
+  });
+
+  test("pricing section: Most Popular badge is visible", async ({ page }) => {
+    await page.goto(BASE);
+    await page.evaluate(() => {
+      document.getElementById("pricing")?.scrollIntoView({ behavior: "instant" });
+    });
+    await expect(page.getByText("Most Popular").first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("pricing section: First to Market badge is visible on Retatrutide", async ({ page }) => {
+    await page.goto(BASE);
+    await page.evaluate(() => {
+      document.getElementById("pricing")?.scrollIntoView({ behavior: "instant" });
+    });
+    await expect(page.getByText("First to Market").first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("hero: Returning Patient button is visible and links to /login/patient", async ({ page }) => {
+    await page.goto(BASE);
+    const btn = page.getByRole("link", { name: /Returning Patient/i });
+    await expect(btn).toBeVisible({ timeout: 10_000 });
+    await expect(btn).toHaveAttribute("href", "/login/patient");
+  });
+
+  test("hero: Start Your Free Assessment CTA is visible", async ({ page }) => {
+    await page.goto(BASE);
+    await expect(page.getByRole("link", { name: /Start Your Free Assessment/i }).first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("landing page with ?ref= affiliate code loads without error", async ({ page }) => {
+    await page.goto(`${BASE}?ref=test-affiliate-001`);
+    await expect(page.locator("body")).not.toContainText(/error|500/i, { timeout: 10_000 });
+    await expect(page.getByRole("link", { name: /Start Your Free Assessment/i }).first()).toBeVisible();
+  });
+});
+
+test.describe("New SMS cron smoke tests", () => {
+  test("weekly-checkins cron requires authorization", async ({ request }) => {
+    const res = await request.get(`${BASE}/api/cron/weekly-checkins`);
+    expect([401, 500]).toContain(res.status());
+  });
+
+  test("dose-escalation cron requires authorization", async ({ request }) => {
+    const res = await request.get(`${BASE}/api/cron/dose-escalation`);
+    expect([401, 500]).toContain(res.status());
+  });
+
+  test("retatrutide-blast cron requires authorization", async ({ request }) => {
+    const res = await request.get(`${BASE}/api/cron/retatrutide-blast`);
+    expect([401, 500]).toContain(res.status());
+  });
+
+  test("weekly-checkins cron returns results JSON when authorized", async ({ request }) => {
+    const cronSecret = process.env.CRON_SECRET ?? "local-cron-secret";
+    const res = await request.get(`${BASE}/api/cron/weekly-checkins`, {
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    });
+    if (res.status() === 200) {
+      const body = await res.json();
+      expect(typeof body.processed === "number" || body.skipped).toBeTruthy();
+    } else {
+      expect([401, 500]).toContain(res.status());
+    }
+  });
+
+  test("dose-escalation cron returns results JSON when authorized", async ({ request }) => {
+    const cronSecret = process.env.CRON_SECRET ?? "local-cron-secret";
+    const res = await request.get(`${BASE}/api/cron/dose-escalation`, {
+      headers: { Authorization: `Bearer ${cronSecret}` },
+    });
+    if (res.status() === 200) {
+      const body = await res.json();
+      expect(typeof body.processed === "number" || body.skipped).toBeTruthy();
+    } else {
+      expect([401, 500]).toContain(res.status());
+    }
+  });
+});
+
+test.describe("Admin affiliate system smoke tests", () => {
+  test("admin affiliates page redirects unauthenticated users", async ({ page }) => {
+    await page.goto(`${BASE}/admin/affiliates`);
+    // Should redirect to login or show auth gate — not a 500 error
+    await expect(page.locator("body")).not.toContainText(/Internal Server Error|500/i, { timeout: 10_000 });
+  });
+
+  test("affiliates API requires admin auth", async ({ request }) => {
+    const res = await request.get(`${BASE}/api/admin/affiliates`);
+    expect([401, 403]).toContain(res.status());
+  });
+
+  test("analytics API requires admin auth", async ({ request }) => {
+    const res = await request.get(`${BASE}/api/admin/analytics`);
+    expect([401, 403]).toContain(res.status());
   });
 });

@@ -16,6 +16,7 @@ type DashboardData = {
   patients: Types.Patient[];
   products: Types.Product[];
   reviews: Types.ProviderReview[];
+  orderPeriods?: { today: number; thisWeek: number; thisMonth: number; thisYear: number };
 };
 
 const patientDisplayName = (patient: Types.Patient | undefined) => {
@@ -31,6 +32,7 @@ function ProviderDashboardContent() {
   const [orders, setOrders] = useState<Types.Order[]>([]);
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
   const [reviews, setReviews] = useState<Record<string, Types.ProviderReview>>({});
+  const [orderPeriods, setOrderPeriods] = useState<{ today: number; thisWeek: number; thisMonth: number; thisYear: number } | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingOrder, setMarkingOrder] = useState("");
   const [loading, setLoading] = useState(true);
@@ -49,6 +51,7 @@ function ProviderDashboardContent() {
       setOrders(allOrders);
       setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
       setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
+      if (data.orderPeriods) setOrderPeriods(data.orderPeriods);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -129,7 +132,7 @@ function ProviderDashboardContent() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6">
           <Card>
             <CardContent className="p-5 sm:p-6">
               <div className="text-3xl font-bold text-forest-800 mb-2">
@@ -155,6 +158,25 @@ function ProviderDashboardContent() {
             </CardContent>
           </Card>
         </div>
+
+        {orderPeriods && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 mb-8 sm:mb-12">
+            {[
+              { label: "Today", value: orderPeriods.today },
+              { label: "This Week", value: orderPeriods.thisWeek },
+              { label: "This Month", value: orderPeriods.thisMonth },
+              { label: "This Year", value: orderPeriods.thisYear },
+            ].map(({ label, value }) => (
+              <Card key={label}>
+                <CardContent className="p-4 sm:p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
+                  <p className="text-2xl font-bold text-forest-800">{value}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">new orders</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">All Orders</h2>

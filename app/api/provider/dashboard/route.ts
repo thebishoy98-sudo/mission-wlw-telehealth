@@ -60,11 +60,21 @@ export async function GET(req: NextRequest) {
     const products = await dbServer.productDb.getAll().catch(() => db.productDb.getAll());
     const patients = await loadDashboardPatientMap(orders);
 
+    const now = new Date();
+    const activeOrders = orders.filter((o) => o.status !== "draft" && o.status !== "cancelled");
+    const orderPeriods = {
+      today: activeOrders.filter((o) => new Date(o.createdAt) >= new Date(now.getFullYear(), now.getMonth(), now.getDate())).length,
+      thisWeek: activeOrders.filter((o) => new Date(o.createdAt).getTime() >= now.getTime() - 7 * 24 * 60 * 60 * 1000).length,
+      thisMonth: activeOrders.filter((o) => new Date(o.createdAt) >= new Date(now.getFullYear(), now.getMonth(), 1)).length,
+      thisYear: activeOrders.filter((o) => new Date(o.createdAt) >= new Date(now.getFullYear(), 0, 1)).length,
+    };
+
     return NextResponse.json({
       orders,
       patients: Array.from(patients.values()),
       products,
       reviews,
+      orderPeriods,
     });
   } catch (error) {
     console.error("Provider dashboard load error:", error);

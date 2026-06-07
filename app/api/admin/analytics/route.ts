@@ -55,6 +55,26 @@ export async function GET(req: NextRequest) {
       .catch(() => []);
     const paymentByOrder = new Map(allPayments.map((p) => [p.orderId, p] as [string, typeof p]));
 
+    // Period order + revenue stats
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    function periodStats(orders: typeof activeOrders) {
+      const revenue = orders.reduce((sum, o) => {
+        const p = paymentByOrder.get(o.id);
+        return sum + (p?.status === "completed" ? Number(p.amount) || 0 : 0);
+      }, 0);
+      return { orders: orders.length, revenue };
+    }
+
+    const orderPeriods = {
+      today: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= todayStart)),
+      thisWeek: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= weekStart)),
+      thisMonth: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= monthStart)),
+      thisYear: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= yearStart)),
+    };
+
     for (const order of activeOrders) {
       const d = new Date(order.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -81,6 +101,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       totals,
+      orderPeriods,
       monthly: monthKeys.map((key) => {
         const [year, month] = key.split("-");
         const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString("en-US", {

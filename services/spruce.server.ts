@@ -26,6 +26,13 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   referral_prompt: "{{patientName}}, loving your results? Share Mission WLW with a friend — they'll get a discount on their first order. Share: {{referralUrl}}",
   intake_abandonment_1h: "Hey {{firstName}}, you started your Mission WLW intake but didn't finish. Your spot is still open — complete it in 2 minutes: {{ctaUrl}}",
   intake_abandonment_24h: "{{firstName}}, your Mission WLW consultation is still waiting. GLP-1 therapy has helped thousands lose 20–40% of body weight. Ready to start? {{ctaUrl}}",
+  retatrutide_launch: "{{patientName}}, exciting news! Mission WLW now offers Retatrutide — the newest triple-agonist GLP-1 showing up to 24% body weight loss in clinical trials. Be among the first: {{ctaUrl}}",
+  dose_escalation_nudge: "Hey {{patientName}}, you've been making great progress! A higher dose could help you hit your goal faster next cycle. Ready to step it up? Reorder here: {{reorderUrl}}",
+  weekly_checkin_week2: "Hey {{patientName}}, it's been 2 weeks on your new medication — how are you feeling? Most patients notice appetite changes around now. Any questions for your provider? Just reply.",
+  weekly_checkin_week4: "{{patientName}}, you're almost halfway through your first cycle! Any questions for your provider? We're here to help — just reply to this text.",
+  weekly_checkin_week6: "{{patientName}}, you're nearing the end of your first cycle — amazing work! Now's a great time to plan your refill so there's no gap in treatment. Reply or visit: {{ctaUrl}}",
+  welcome_order_placed: "Thanks {{patientName}}! Your Mission WLW order is confirmed. Your provider is reviewing your chart now — we'll text you as soon as your prescription is sent to the pharmacy.",
+  welcome_what_to_expect: "{{patientName}}, what to expect next: Your medication ships within 3–5 business days after provider approval. Stay hydrated and follow your dosing schedule. Questions? Just reply anytime!",
 };
 
 function getSpruceAuthToken() {
