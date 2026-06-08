@@ -16,7 +16,7 @@ export function Input({
   ...props
 }: InputProps) {
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {label && (
         <label className="block text-sm font-medium text-gray-900 mb-1.5">
           {label}
@@ -26,9 +26,9 @@ export function Input({
         {...props}
         disabled={disabled}
         className={cn(
-          "w-full px-4 py-3 border border-gray-200 rounded-xl bg-white",
+          "w-full min-w-0 px-4 py-3 border border-gray-200 rounded-xl bg-white",
           "focus:outline-none focus:ring-2 focus:ring-forest-800 focus:border-transparent",
-          "placeholder:text-gray-400 text-gray-900",
+          "placeholder:text-gray-400 text-gray-900 text-base sm:text-sm",
           "disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500",
           "transition-shadow duration-150",
           error && "border-red-400 focus:ring-red-400",

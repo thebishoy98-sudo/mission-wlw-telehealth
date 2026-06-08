@@ -26,7 +26,7 @@ export function Select({
         {...props}
         disabled={disabled}
         className={cn(
-          "w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-gray-900",
+          "w-full min-w-0 px-4 py-3 border border-gray-200 rounded-xl bg-white text-gray-900 text-base sm:text-sm",
           "focus:outline-none focus:ring-2 focus:ring-forest-800 focus:border-transparent",
           "disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500",
           "transition-shadow duration-150",
