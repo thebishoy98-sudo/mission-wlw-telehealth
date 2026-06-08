@@ -10,7 +10,7 @@ import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { checkEligibility } from "@/lib/eligibility";
 import { AlertTriangle, XCircle } from "lucide-react";
 
-const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 text-sm bg-white appearance-none";
+const selectCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 text-base sm:text-sm bg-white appearance-none";
 const noneOptionLabels = new Set(["None apply to me", "None of the above"]);
 
 function isNoneOption(option: string) {

@@ -97,7 +97,18 @@ export const saveIntakeState = (state: Partial<IntakeFormState>): void => {
   if (typeof window === "undefined") return;
   const current = getIntakeState();
   const updated = { ...current, ...state };
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // QuotaExceededError: storage full (common with large base64 identity media).
+    // Strip media blobs and retry so the form data is never silently lost.
+    try {
+      const slim = { ...updated, licenseImageData: undefined, selfieFrameData: undefined, identityVideoData: undefined };
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+    } catch {
+      // Storage completely full — nothing we can do without data loss
+    }
+  }
 };
 
 export const clearIntakeState = (): void => {

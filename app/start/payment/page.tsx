@@ -19,6 +19,15 @@ const PROMO_CODES: Record<string, { type: "flat" | "percent"; amount: number }> 
 };
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function detectCardBrand(number: string): string {
+  const n = number.replace(/\D/g, "");
+  if (/^4/.test(n)) return "Visa";
+  if (/^5[1-5]|^2[2-7]/.test(n)) return "Mastercard";
+  if (/^3[47]/.test(n)) return "AmEx";
+  if (/^6011|^622|^64[4-9]|^65/.test(n)) return "Discover";
+  return "Card";
+}
 const clinicalConsentStatusKey = ["practice", "QStatus"].join("") as keyof Types.Order;
 const accountingStatusKey = ["quick", "booksStatus"].join("") as keyof Types.Order;
 
@@ -324,7 +333,7 @@ export default function Payment() {
         cvc: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardCvc,
         cardName: `${intakeState.firstName} ${intakeState.lastName}`,
         cardLast4,
-        cardBrand: paymentsDisabled ? "bypass" : "Visa",
+        cardBrand: paymentsDisabled ? "bypass" : detectCardBrand(cardNumber),
         amount: total,
         identityUploads: {
           licenseImageData: intakeState.licenseImageData,
@@ -400,6 +409,9 @@ export default function Payment() {
       isReorder: false,
       reorderSourceOrderId: undefined,
     });
+    // Also persist orderId to localStorage so the confirmation page survives a tab refresh
+    try { localStorage.setItem("tele_last_order_id", order.id); } catch { /* ignore */ }
+    try { localStorage.setItem("tele_last_patient_id", patient.id); } catch { /* ignore */ }
     setProcessing(false);
     router.push("/start/confirmation");
   };
@@ -543,7 +555,7 @@ export default function Payment() {
                   const formatted = digits.replace(/(.{4})/g, "$1 ").trim();
                   setCardNumber(formatted);
                 }}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 focus:border-transparent font-mono text-sm tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400"
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 focus:border-transparent font-mono text-base sm:text-sm tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400"
               />
             </div>
           </div>
@@ -561,7 +573,7 @@ export default function Payment() {
                   if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
                   setCardExpiry(v);
                 }}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 font-mono text-sm"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 font-mono text-base sm:text-sm"
               />
             </div>
             <div>
@@ -572,7 +584,7 @@ export default function Payment() {
                 maxLength={4}
                 value={cardCvc}
                 onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ""))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 font-mono text-sm"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 font-mono text-base sm:text-sm"
               />
             </div>
           </div>

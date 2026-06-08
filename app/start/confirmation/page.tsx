@@ -16,8 +16,10 @@ type ConsentAutomationStatus = {
 
 export default function Confirmation() {
   const intakeState = getIntakeState();
-  const orderId = intakeState.orderId;
-  const patientId = intakeState.patientId;
+  const orderId = intakeState.orderId
+    || (typeof window !== "undefined" ? localStorage.getItem("tele_last_order_id") ?? undefined : undefined);
+  const patientId = intakeState.patientId
+    || (typeof window !== "undefined" ? localStorage.getItem("tele_last_patient_id") ?? undefined : undefined);
   const [order, setOrder] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
   const [consentAutomation, setConsentAutomation] = useState<ConsentAutomationStatus | null>(null);
