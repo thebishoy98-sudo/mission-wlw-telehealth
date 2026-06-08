@@ -51,7 +51,16 @@ export const productDb = {
       VALUES (${p.id}, ${p.name}, ${p.slug}, ${p.description}, ${p.longDescription ?? null},
         ${p.startingPrice}, ${p.image}, ${JSON.stringify(p.doses)}::jsonb, ${p.eligibilityNote},
         ${p.isActive}, ${JSON.stringify(p.faqs ?? [])}::jsonb, ${p.createdAt})
-      ON CONFLICT (slug) DO NOTHING
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        long_description = EXCLUDED.long_description,
+        starting_price = EXCLUDED.starting_price,
+        image = EXCLUDED.image,
+        doses = EXCLUDED.doses,
+        eligibility_note = EXCLUDED.eligibility_note,
+        is_active = EXCLUDED.is_active,
+        faqs = EXCLUDED.faqs
     `;
   },
 

@@ -53,7 +53,7 @@ services:
       - key: CRON_SECRET
         sync: false
 
-      # QuickBooks production one-cent payment testing configuration.
+      # QuickBooks production payment configuration.
       - key: USE_REAL_QUICKBOOKS
         value: true
       - key: BYPASS_QB_PAYMENTS
@@ -81,15 +81,15 @@ services:
       - key: NEXT_PUBLIC_QB_PAYMENTS_APP_KEY
         sync: false
 
-      # Pharmacy dispatch is routed to LifeFile sandbox for pilot testing.
+      # Pharmacy dispatch is routed to LifeFile production.
       - key: PHARMACY_PROVIDER
         value: lifefile
       - key: USE_REAL_LIFEFILE
         value: true
       - key: LIFEFILE_ENVIRONMENT
-        value: sandbox
+        value: production
       - key: LIFEFILE_BASE_URL
-        value: https://host100-7.lifefile.net/lfapi/v1
+        value: https://host37a.lifefile.net/lfapi/v1
       - key: LIFEFILE_VENDOR_ID
         sync: false
       - key: LIFEFILE_LOCATION_ID
@@ -416,9 +416,9 @@ services:
       - key: USE_REAL_LIFEFILE
         value: true
       - key: LIFEFILE_ENVIRONMENT
-        value: sandbox
+        value: production
       - key: LIFEFILE_BASE_URL
-        value: https://host100-7.lifefile.net/lfapi/v1
+        value: https://host37a.lifefile.net/lfapi/v1
       - key: LIFEFILE_VENDOR_ID
         sync: false
       - key: LIFEFILE_LOCATION_ID

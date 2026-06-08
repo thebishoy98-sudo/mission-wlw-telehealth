@@ -60,7 +60,7 @@ describe("pharmacy provider router", () => {
     expect(lifefile.createPharmacyOrder).not.toHaveBeenCalled();
   });
 
-  it("declares LifeFile sandbox dispatch settings for the Render PracticeQ worker", () => {
+  it("declares LifeFile production dispatch settings for the Render PracticeQ worker", () => {
     const fs = require("fs");
     const path = require("path");
     const renderSource = fs.readFileSync(path.join(process.cwd(), "render.yaml"), "utf8");
@@ -69,7 +69,8 @@ describe("pharmacy provider router", () => {
     expect(renderSource).toContain("value: lifefile");
     expect(renderSource).toContain("USE_REAL_LIFEFILE");
     expect(renderSource).toContain("LIFEFILE_ENVIRONMENT");
-    expect(renderSource).toContain("value: sandbox");
+    expect(renderSource).toContain("value: production");
+    expect(renderSource).toContain("https://host37a.lifefile.net/lfapi/v1");
     expect(renderSource).toContain("LIFEFILE_ORDER_ENDPOINT");
   });
 

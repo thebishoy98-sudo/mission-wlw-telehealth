@@ -99,7 +99,14 @@ function formatLifeFileDateOfBirth(value: unknown): string {
   throw new Error("Invalid order data - patient date of birth must be YYYY-MM-DD");
 }
 
-function getLfProductId(product: Types.Product): number {
+function isSandboxLifeFile() {
+  const c = cfg();
+  const environment = (process.env.LIFEFILE_ENVIRONMENT ?? "").toLowerCase();
+  return environment === "sandbox" || c.baseUrl.includes("host100-7") || c.orderEndpoint.includes("host100-7");
+}
+
+function getLfProductId(product: Types.Product): number | undefined {
+  if (!isSandboxLifeFile()) return undefined;
   const slug = product.slug?.toLowerCase() ?? "";
   if (LF_PRODUCT_MAP[slug]) return LF_PRODUCT_MAP[slug];
   const name = String(product.name ?? "").toLowerCase();
@@ -149,7 +156,7 @@ function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
 function buildPharmacyRxs(
   product: Types.Product,
   dose: Types.DoseOption,
-  lfProductId: number,
+  lfProductId: number | undefined,
   dateWritten: string
 ): LfRxPayload[] {
   if (isTirzepatide(product)) {
@@ -163,7 +170,7 @@ function buildPharmacyRxs(
         drugName: "TIRZEPATIDE/PYRIDOXINE",
         drugStrength: "20MG/25MG/ML (2 ML)",
         drugForm: "INJECTABLE",
-        lfProductID: lfProductId,
+        ...(lfProductId ? { lfProductID: lfProductId } : {}),
         quantity: String(calculateTirzepatideVialQuantity(dose)),
         quantityUnits: "each",
         directions,

@@ -166,6 +166,42 @@ describe("lifefile.createPharmacyOrder", () => {
       email: "service@missionwlw.com",
     });
     expect(body.order.shipping.service).toBe(6230);
+    expect(body.order.rxs[0].lfProductID).toBe(305492221);
+
+    process.env = original;
+    (global as unknown as { fetch?: unknown }).fetch = undefined;
+    jest.resetModules();
+  });
+
+  it("omits sandbox LifeFile product IDs for production orders", async () => {
+    const original = { ...process.env };
+    process.env.USE_REAL_LIFEFILE = "true";
+    process.env.LIFEFILE_ENVIRONMENT = "production";
+    process.env.LIFEFILE_VENDOR_ID = "11472";
+    process.env.LIFEFILE_LOCATION_ID = "110260";
+    process.env.LIFEFILE_API_NETWORK_ID = "1173";
+    process.env.LIFEFILE_API_USERNAME = "prod-user";
+    process.env.LIFEFILE_API_PASSWORD = "prod-pass";
+    process.env.LIFEFILE_ORDER_ENDPOINT = "https://host37a.lifefile.net/lfapi/v1/order";
+    process.env.LIFEFILE_BASE_URL = "https://host37a.lifefile.net/lfapi/v1";
+    process.env.LIFEFILE_PRACTICE_ID = "1009646";
+    process.env.LIFEFILE_SHIPPING_SERVICE_ID = "6230";
+
+    jest.resetModules();
+    const liveLifefile = await import("@/services/lifefile");
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ type: "success", message: "ok", data: { orderId: "910001" } }),
+    } as Response);
+    global.fetch = fetchMock;
+
+    const order = db.orderDb.getById("o1")!;
+    await liveLifefile.createPharmacyOrder(order);
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.order.rxs[0].drugName).toBe("TIRZEPATIDE/PYRIDOXINE");
+    expect(body.order.rxs[0]).not.toHaveProperty("lfProductID");
 
     process.env = original;
     (global as unknown as { fetch?: unknown }).fetch = undefined;

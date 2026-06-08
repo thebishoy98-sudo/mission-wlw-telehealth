@@ -9,7 +9,7 @@ export const tirzepatideProduct: Product = {
   description: "8-week compounded Tirzepatide prescription with supplies included.",
   longDescription:
     "A provider-reviewed 8-week compounded Tirzepatide prescription. Choose the dose that matches your prescribed weekly amount.",
-  startingPrice: 0.01,
+  startingPrice: 349,
   image: "/tirzepatide-vial.jpg",
   doses: [
     {
@@ -17,7 +17,7 @@ export const tirzepatideProduct: Product = {
       label: "Tirzepatide 20mg",
       strength: "20mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 349,
       durationWeeks: 8,
       weeklyDoseMg: 2.5,
       injectionUnits: 12.5,
@@ -29,7 +29,7 @@ export const tirzepatideProduct: Product = {
       label: "Tirzepatide 40mg",
       strength: "40mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 479,
       durationWeeks: 8,
       weeklyDoseMg: 5,
       injectionUnits: 25,
@@ -41,7 +41,7 @@ export const tirzepatideProduct: Product = {
       label: "Tirzepatide 60mg",
       strength: "60mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 749,
       durationWeeks: 8,
       weeklyDoseMg: 7.5,
       injectionUnits: 37.5,
@@ -79,7 +79,7 @@ export const retatrutideProduct: Product = {
   description: "8-week compounded Retatrutide prescription with supplies included.",
   longDescription:
     "A provider-reviewed 8-week compounded Retatrutide prescription. A next-generation GLP-1/GIP/glucagon triple agonist for enhanced weight loss.",
-  startingPrice: 0.01,
+  startingPrice: 325,
   image: "/retatrutide-vial.jpg",
   doses: [
     {
@@ -87,7 +87,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 16mg",
       strength: "16mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 325,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
@@ -96,7 +96,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 32mg",
       strength: "32mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 455,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
@@ -105,7 +105,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 48mg",
       strength: "48mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 525,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
@@ -124,7 +124,7 @@ export const semaglutideProduct: Product = {
   description: "8-week compounded Semaglutide prescription with supplies included.",
   longDescription:
     "A provider-reviewed 8-week compounded Semaglutide prescription. A well-established GLP-1 receptor agonist for effective weight management.",
-  startingPrice: 0.01,
+  startingPrice: 299,
   image: "/semaglutide-vial.jpg",
   doses: [
     {
@@ -132,7 +132,7 @@ export const semaglutideProduct: Product = {
       label: "Semaglutide 2mg",
       strength: "2mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 299,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
@@ -141,7 +141,7 @@ export const semaglutideProduct: Product = {
       label: "Semaglutide 4mg",
       strength: "4mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 359,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
@@ -150,7 +150,7 @@ export const semaglutideProduct: Product = {
       label: "Semaglutide 6mg",
       strength: "6mg vial",
       quantity: 1,
-      price: 0.01,
+      price: 419,
       durationWeeks: 8,
       patientDescription: "8-Week Prescription",
     },
