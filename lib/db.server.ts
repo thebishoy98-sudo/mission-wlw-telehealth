@@ -21,6 +21,8 @@ import type {
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
+let productPricingScaleReady = false;
+
 export const productDb = {
   async getById(id: string): Promise<Product | null> {
     if (!isDbAvailable()) return null;
@@ -42,6 +44,7 @@ export const productDb = {
 
   async upsert(p: Product): Promise<void> {
     if (!isDbAvailable()) return;
+    await ensureProductPricingScale();
     // Use slug as conflict target since IDs are generated client-side and may differ
     await sql`
       INSERT INTO products (id, name, slug, description, long_description, starting_price, image, doses, eligibility_note, is_active, faqs, created_at)
@@ -119,6 +122,14 @@ export const appSettingDb = {
     return value;
   },
 };
+
+async function ensureProductPricingScale() {
+  if (productPricingScaleReady) return;
+  await sql`
+    ALTER TABLE products ALTER COLUMN starting_price TYPE NUMERIC(10,2) USING starting_price::numeric
+  `;
+  productPricingScaleReady = true;
+}
 
 // ── Patients ──────────────────────────────────────────────────────────────────
 

@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS products (
   slug             TEXT NOT NULL UNIQUE,
   description      TEXT NOT NULL,
   long_description TEXT,
-  starting_price   INTEGER NOT NULL,
+  starting_price   NUMERIC(10,2) NOT NULL,
   image            TEXT NOT NULL,
   doses            JSONB NOT NULL DEFAULT '[]',
   eligibility_note TEXT NOT NULL DEFAULT '',
@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS products (
   faqs             JSONB DEFAULT '[]',
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE products ALTER COLUMN starting_price TYPE NUMERIC(10,2) USING starting_price::numeric;
 
 -- ── Orders ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS orders (
