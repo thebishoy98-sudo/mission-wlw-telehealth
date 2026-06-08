@@ -53,15 +53,15 @@ services:
       - key: CRON_SECRET
         sync: false
 
-      # QuickBooks sandbox/payment configuration.
+      # QuickBooks production one-cent payment testing configuration.
       - key: USE_REAL_QUICKBOOKS
-        value: false
+        value: true
       - key: BYPASS_QB_PAYMENTS
-        sync: false
-      - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
         value: false
+      - key: NEXT_PUBLIC_QB_PAYMENTS_ENABLED
+        value: true
       - key: NEXT_PUBLIC_QB_PAYMENTS_ENVIRONMENT
-        value: sandbox
+        value: production
       - key: QB_ALLOW_RAW_CARD_CHARGES
         value: false
       - key: QB_CLIENT_ID
