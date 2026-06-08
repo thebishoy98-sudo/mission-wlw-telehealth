@@ -24,7 +24,7 @@ describe("questionnaire stepper — source contracts", () => {
   });
 
   it("navigates to /start/info when back is pressed on step 0", () => {
-    expect(source).toContain('router.push("/start/info")');
+    expect(source).toContain('router.push("/start/info?step=5")');
     expect(source).toContain("step === 0");
   });
 

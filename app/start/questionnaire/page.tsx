@@ -147,7 +147,7 @@ export default function Questionnaire() {
   const handleBack = () => {
     setStepError(null);
     if (step === 0) {
-      router.push("/start/info");
+      router.push("/start/info?step=5");
     } else {
       setStep(step - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });

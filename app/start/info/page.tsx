@@ -52,6 +52,10 @@ export default function PatientInfo() {
     const params = new URLSearchParams(window.location.search);
     const productId = params.get("productId");
     if (productId) setFormData((prev) => ({ ...prev, productId }));
+    const stepParam = parseInt(params.get("step") ?? "", 10);
+    if (!isNaN(stepParam) && stepParam > 0 && stepParam < STEPS.length) {
+      setStep(stepParam);
+    }
   }, []);
 
   useEffect(() => {

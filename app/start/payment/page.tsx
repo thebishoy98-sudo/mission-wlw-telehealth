@@ -456,9 +456,29 @@ export default function Payment() {
             <p className="text-xs font-bold text-teal-400 uppercase tracking-widest mb-1">Upgrade Available</p>
             <p className="text-sm font-semibold mb-0.5">Want faster results with Retatrutide?</p>
             <p className="text-xs text-white/60 mb-2.5">Our newest triple-agonist GLP-1 with up to 24% body weight loss in clinical data. From $499 per 8-week supply.</p>
-            <a href="/start/info?productId=product_retatrutide" className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-colors">
+            <button
+              type="button"
+              className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-colors"
+              onClick={() => {
+                fetch("/api/products", { cache: "no-store" })
+                  .then((r) => r.json())
+                  .then((payload) => {
+                    const reta = (payload.products as Types.Product[])?.find((p) => p.id === "product_retatrutide");
+                    saveIntakeState({
+                      ...intakeState,
+                      productId: "product_retatrutide",
+                      doseId: reta?.doses?.[0]?.id ?? "",
+                    });
+                    window.location.replace("/start/payment");
+                  })
+                  .catch(() => {
+                    saveIntakeState({ ...intakeState, productId: "product_retatrutide", doseId: "" });
+                    window.location.replace("/start/payment");
+                  });
+              }}
+            >
               Switch to Retatrutide &rarr;
-            </a>
+            </button>
           </div>
         )}
 
