@@ -142,6 +142,23 @@ export default function Payment() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!intakeState.phone) return;
+    fetch("/api/intake/save-partial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: intakeState.phone,
+        email: intakeState.email,
+        firstName: intakeState.firstName,
+        refCode: intakeState.refCode,
+        productId: intakeState.productId,
+        doseId: intakeState.doseId,
+        checkoutStep: "payment",
+      }),
+    }).catch(() => {});
+  }, [intakeState]);
+
   const handleApplyCode = () => {
     setDiscountError("");
     const code = discountInput.trim().toUpperCase();

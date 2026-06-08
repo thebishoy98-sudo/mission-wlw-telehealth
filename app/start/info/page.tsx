@@ -119,6 +119,23 @@ export default function PatientInfo() {
   const updateAddress = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, address: { ...prev.address, [field]: value } }));
 
+  const savePartialIntake = (checkoutStep = STEPS[step].id) => {
+    if (!formData.phone) return;
+    fetch("/api/intake/save-partial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: formData.phone,
+        email: formData.email,
+        firstName: formData.firstName,
+        refCode: formData.refCode,
+        productId: formData.productId,
+        doseId: selectedDose,
+        checkoutStep,
+      }),
+    }).catch(() => {});
+  };
+
   const validateStep = (s: number): Record<string, string> => {
     const e: Record<string, string> = {};
     if (s === 0) {
@@ -164,6 +181,7 @@ export default function PatientInfo() {
     const e = validateStep(step);
     setErrors(e);
     if (Object.keys(e).length > 0) return;
+    savePartialIntake();
     if (step < STEPS.length - 1) { directionRef.current = 1; setStep((s) => s + 1); return; }
     // Final step submit
     saveIntakeState({
@@ -173,11 +191,7 @@ export default function PatientInfo() {
       isReorder: false,
       reorderSourceOrderId: undefined,
     });
-    fetch("/api/intake/save-partial", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: formData.phone, email: formData.email, firstName: formData.firstName, refCode: formData.refCode }),
-    }).catch(() => {});
+    savePartialIntake("info_complete");
     router.push("/start/questionnaire");
   };
 

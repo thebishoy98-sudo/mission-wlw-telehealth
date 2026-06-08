@@ -388,7 +388,11 @@ CREATE TABLE IF NOT EXISTS partial_intakes (
   phone         TEXT NOT NULL,
   email         TEXT,
   first_name    TEXT,
+  product_id    TEXT,
+  dose_id       TEXT,
+  checkout_step TEXT,
   started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed     BOOLEAN NOT NULL DEFAULT false,
   completed_at  TIMESTAMPTZ,
   sms_1h_sent   BOOLEAN NOT NULL DEFAULT false,
@@ -396,6 +400,7 @@ CREATE TABLE IF NOT EXISTS partial_intakes (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_intakes_phone ON partial_intakes(phone);
 CREATE INDEX IF NOT EXISTS idx_partial_intakes_started_at ON partial_intakes(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_partial_intakes_completed_last_seen ON partial_intakes(completed, last_seen_at DESC);
 
 -- ── Affiliates ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS affiliates (
@@ -410,3 +415,7 @@ CREATE INDEX IF NOT EXISTS idx_affiliates_code ON affiliates(code);
 -- Track affiliate ref on orders and partial intakes
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT;
 ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT;
+ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS product_id TEXT;
+ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS dose_id TEXT;
+ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS checkout_step TEXT;
+ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
