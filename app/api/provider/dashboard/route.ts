@@ -69,12 +69,27 @@ export async function GET(req: NextRequest) {
       thisYear: activeOrders.filter((o) => new Date(o.createdAt) >= new Date(now.getFullYear(), 0, 1)).length,
     };
 
+    // Average time-to-review: hours from order.createdAt to review.chartViewedAt
+    const reviewedPairs = reviews
+      .filter((r) => r.chartViewedAt)
+      .map((r) => {
+        const order = orders.find((o) => o.id === r.orderId);
+        if (!order) return null;
+        return (new Date(r.chartViewedAt!).getTime() - new Date(order.createdAt).getTime()) / 3_600_000;
+      })
+      .filter((h): h is number => h !== null && h >= 0);
+    const avgReviewHours =
+      reviewedPairs.length > 0
+        ? Math.round((reviewedPairs.reduce((s, h) => s + h, 0) / reviewedPairs.length) * 10) / 10
+        : null;
+
     return NextResponse.json({
       orders,
       patients: Array.from(patients.values()),
       products,
       reviews,
       orderPeriods,
+      avgReviewHours,
     });
   } catch (error) {
     console.error("Provider dashboard load error:", error);

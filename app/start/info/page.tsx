@@ -10,6 +10,15 @@ import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { formatCurrency } from "@/lib/utils";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 const US_STATES = [
   ["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],
   ["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["FL","Florida"],["GA","Georgia"],
@@ -29,6 +38,15 @@ export default function PatientInfo() {
   const [formData, setFormData] = useState(getIntakeState());
   const [selectedDose, setSelectedDose] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Pre-select product from URL param (e.g. ?productId=product_tirzepatide)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("productId");
+    if (productId) {
+      setFormData((prev) => ({ ...prev, productId }));
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/products", { cache: "no-store" })
@@ -53,12 +71,43 @@ export default function PatientInfo() {
     }
   }, [formData.productId, formData.doseId, products, selectedDose]);
 
+  // Auto-fill city & state when a valid 5-digit ZIP is entered
+  useEffect(() => {
+    const zip = formData.address.zipCode;
+    if (zip.length !== 5) return;
+    fetch(`https://api.zippopotam.us/us/${zip}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const place = data?.places?.[0];
+        if (place) {
+          setFormData((prev) => ({
+            ...prev,
+            address: {
+              ...prev.address,
+              city: place["place name"] || prev.address.city,
+              state: place["state abbreviation"] || prev.address.state,
+            },
+          }));
+        }
+      })
+      .catch(() => {});
+  }, [formData.address.zipCode]);
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!formData.firstName.trim()) newErrors.firstName = "Required";
     if (!formData.lastName.trim()) newErrors.lastName = "Required";
-    if (!formData.email.trim()) newErrors.email = "Required";
-    if (!formData.phone.trim()) newErrors.phone = "Required";
+    if (!formData.email.trim()) {
+      newErrors.email = "Required";
+    } else if (!EMAIL_REGEX.test(formData.email.trim())) {
+      newErrors.email = "Enter a valid email address";
+    }
+    const phoneDigits = formData.phone.replace(/\D/g, "");
+    if (!formData.phone.trim()) {
+      newErrors.phone = "Required";
+    } else if (phoneDigits.length !== 10) {
+      newErrors.phone = "Enter a valid 10-digit US phone number";
+    }
     if (!formData.dateOfBirth) newErrors.dateOfBirth = "Required";
     if (!formData.gender) newErrors.gender = "Required";
     if (!formData.address.street1) newErrors.street1 = "Required";
@@ -142,7 +191,7 @@ export default function PatientInfo() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Email" type="email" autoComplete="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} error={errors.email} placeholder="jane@email.com" />
-            <Input label="Phone" type="tel" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} error={errors.phone} placeholder="(555) 000-0000" />
+            <Input label="Phone" type="tel" autoComplete="tel" inputMode="tel" value={formData.phone} onChange={(e) => updateField("phone", formatPhone(e.target.value))} error={errors.phone} placeholder="(555) 000-0000" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Date of Birth" type="date" autoComplete="bday" value={formData.dateOfBirth} onChange={(e) => updateField("dateOfBirth", e.target.value)} error={errors.dateOfBirth} />
@@ -182,6 +231,20 @@ export default function PatientInfo() {
             <Input label="ZIP Code" autoComplete="shipping postal-code" inputMode="numeric" pattern="[0-9]*" maxLength={5} value={formData.address.zipCode} onChange={(e) => updateAddress("zipCode", e.target.value.replace(/\D/g, "").slice(0, 5))} error={errors.zipCode} placeholder="90210" />
           </div>
         </div>
+      </div>
+
+      {/* SMS opt-in */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-7">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            defaultChecked
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-forest-800 focus:ring-forest-700 cursor-pointer"
+          />
+          <span className="text-sm text-gray-600 leading-relaxed">
+            I agree to receive treatment updates, dosing reminders, and wellness tips via text message from Mission WLW. Standard messaging rates may apply. You can opt out at any time by replying STOP.
+          </span>
+        </label>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">

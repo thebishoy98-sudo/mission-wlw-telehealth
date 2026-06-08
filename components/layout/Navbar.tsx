@@ -42,6 +42,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
       { label: "Products", href: "/admin/products" },
       { label: "Notifications", href: "/admin/notifications" },
       { label: "Affiliates", href: "/admin/affiliates" },
+      { label: "Promo Codes", href: "/admin/promo-codes" },
     ],
   };
 

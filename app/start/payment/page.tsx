@@ -423,7 +423,7 @@ export default function Payment() {
         {appliedCode ? (
           <div className="mt-4 flex items-center justify-between rounded-xl bg-green-50 border border-green-200 px-4 py-2.5 text-sm">
             <span className="text-green-800 font-semibold flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5" /> {appliedCode} — {formatCurrency(discountAmount)} off applied
+              <Tag className="w-3.5 h-3.5" /> {appliedCode}: {formatCurrency(discountAmount)} off applied
             </span>
             <button type="button" onClick={handleRemoveCode} className="text-green-600 hover:text-green-800 text-xs font-medium">Remove</button>
           </div>
@@ -450,8 +450,20 @@ export default function Payment() {
           </div>
         )}
 
+        {/* Retatrutide upsell nudge */}
+        {product && product.id !== "product_retatrutide" && (
+          <div className="mt-4 p-4 bg-forest-800 rounded-xl text-white">
+            <p className="text-xs font-bold text-teal-400 uppercase tracking-widest mb-1">Upgrade Available</p>
+            <p className="text-sm font-semibold mb-0.5">Want faster results with Retatrutide?</p>
+            <p className="text-xs text-white/60 mb-2.5">Our newest triple-agonist GLP-1 with up to 24% body weight loss in clinical data. From $499 per 8-week supply.</p>
+            <a href="/start/info?productId=product_retatrutide" className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-colors">
+              Switch to Retatrutide &rarr;
+            </a>
+          </div>
+        )}
+
         <div className="mt-5 p-4 bg-cream-100 rounded-xl text-sm text-gray-600">
-          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy — no additional approval steps needed.
+          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy. No additional approval steps needed.
         </div>
       </div>
 

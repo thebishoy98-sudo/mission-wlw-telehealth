@@ -39,10 +39,10 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
       {/* Panel */}
       <div
         className="relative w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
-        style={{ background: "linear-gradient(145deg, #0d0b07 0%, #1a1508 55%, #0a0904 100%)" }}
+        style={{ background: "linear-gradient(145deg, #011a38 0%, #022859 55%, #01152e 100%)" }}
       >
-        {/* Amber glow top */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-amber-400/20 blur-3xl pointer-events-none" />
+        {/* Teal glow top */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-teal-400/15 blur-3xl pointer-events-none" />
 
         {/* Close */}
         <button
@@ -56,8 +56,8 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
         <div className="relative px-8 pt-10 pb-8">
           {/* Badge */}
           <div className="flex justify-center mb-5">
-            <span className="inline-flex items-center gap-2 bg-amber-400 text-amber-950 text-[10px] font-black uppercase tracking-[0.18em] px-4 py-1.5 rounded-full shadow-lg shadow-amber-400/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-950 animate-pulse" />
+            <span className="inline-flex items-center gap-2 bg-teal-400 text-forest-900 text-[10px] font-black uppercase tracking-[0.18em] px-4 py-1.5 rounded-full shadow-lg shadow-teal-400/25">
+              <span className="w-1.5 h-1.5 rounded-full bg-forest-900 animate-pulse" />
               First to Market
             </span>
           </div>
@@ -65,8 +65,8 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
           {/* Vial image */}
           <div className="flex justify-center mb-6">
             <div className="relative">
-              <div className="absolute inset-0 rounded-3xl bg-amber-400/10 blur-2xl scale-125" />
-              <div className="relative bg-white/8 rounded-2xl p-3 border border-amber-400/20">
+              <div className="absolute inset-0 rounded-3xl bg-teal-400/8 blur-2xl scale-125" />
+              <div className="relative bg-white/8 rounded-2xl p-3 border border-teal-400/20">
                 <Image
                   src="/retatrutide-vial.jpg"
                   alt="Retatrutide pharmacy-grade vial"
@@ -86,11 +86,11 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
           >
             Pharmacy-Grade Retatrutide
             <br />
-            <span className="text-amber-400">Available Today</span>
+            <span className="text-teal-400">Available Today</span>
           </h2>
           <p className="text-center text-white/55 text-sm leading-relaxed mb-6 max-w-sm mx-auto">
             Mission WLW is one of the first telehealth platforms to offer legitimate 503B
-            compounded Retatrutide — the next-generation triple-agonist GLP-1 that outperforms
+            compounded Retatrutide - the next-generation triple-agonist GLP-1 that outperforms
             every predecessor. Order yours today.
           </p>
 
@@ -103,7 +103,7 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
               "Free overnight shipping",
             ].map((f) => (
               <div key={f} className="flex items-start gap-2 text-xs text-white/65">
-                <span className="text-amber-400 font-bold mt-0.5 shrink-0">✓</span>
+                <span className="text-teal-400 font-bold mt-0.5 shrink-0">&#10003;</span>
                 {f}
               </div>
             ))}
@@ -114,7 +114,7 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
             <Link
               href={ctaUrl}
               onClick={close}
-              className="flex-1 text-center bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold py-3.5 rounded-full text-sm transition-all active:scale-[.98] shadow-lg shadow-amber-400/25"
+              className="flex-1 text-center bg-teal-400 hover:bg-teal-300 text-forest-900 font-bold py-3.5 rounded-full text-sm transition-all active:scale-[.98] shadow-lg shadow-teal-400/20"
             >
               Order Retatrutide Now
             </Link>

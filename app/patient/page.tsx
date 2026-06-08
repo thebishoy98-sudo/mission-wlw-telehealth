@@ -12,9 +12,56 @@ import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, formatDateTime, formatCurrency } from "@/lib/utils";
-import { Package, Clock, CheckCircle2 } from "lucide-react";
+import { Package, Clock, CheckCircle2, Copy, Check } from "lucide-react";
 
 type PatientPharmacyOrder = Pick<Types.PharmacyOrder, "orderId" | "status" | "trackingNumber" | "shippedAt">;
+
+const TIMELINE_STEPS = [
+  { key: "submitted", label: "Submitted" },
+  { key: "review", label: "Under Review" },
+  { key: "approved", label: "Approved" },
+  { key: "pharmacy", label: "At Pharmacy" },
+  { key: "delivered", label: "Delivered" },
+];
+
+function getStepIndex(status: Types.OrderStatus): number {
+  if (status === "delivered" || status === "fulfilled") return 4;
+  if (status === "sent_to_pharmacy") return 3;
+  if (status === "approved") return 2;
+  if (status === "pending_review") return 1;
+  return 0;
+}
+
+function OrderTimeline({ status }: { status: Types.OrderStatus }) {
+  const current = getStepIndex(status);
+  return (
+    <div className="mt-3 mb-1">
+      <div className="flex items-center gap-0">
+        {TIMELINE_STEPS.map((step, i) => {
+          const done = i <= current;
+          const active = i === current;
+          return (
+            <div key={step.key} className="flex items-center flex-1 min-w-0">
+              <div className="flex flex-col items-center shrink-0">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
+                  done ? "bg-forest-800 text-white" : "bg-gray-100 text-gray-400"
+                } ${active ? "ring-2 ring-forest-400 ring-offset-1" : ""}`}>
+                  {done && i < current ? "✓" : i + 1}
+                </div>
+                <span className={`text-[9px] mt-0.5 font-medium leading-tight text-center max-w-[48px] ${done ? "text-forest-800" : "text-gray-400"}`}>
+                  {step.label}
+                </span>
+              </div>
+              {i < TIMELINE_STEPS.length - 1 && (
+                <div className={`h-0.5 flex-1 mx-0.5 mb-3.5 ${i < current ? "bg-forest-800" : "bg-gray-100"}`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function StatusIcon({ status }: { status: Types.OrderStatus }) {
   if (status === "delivered" || status === "fulfilled") {
@@ -173,6 +220,7 @@ function PatientPortalContent() {
                               "Tracking number will be provided here once your order ships."
                             )}
                           </p>
+                          <OrderTimeline status={order.status} />
                         </div>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => handleReorder(order)}>
@@ -186,7 +234,53 @@ function PatientPortalContent() {
           </div>
         )}
 
+        {/* Referral section */}
+        {user?.patientId && (
+          <ReferralSection patientId={user.patientId} />
+        )}
+
       </div>
+    </div>
+  );
+}
+
+function ReferralSection({ patientId }: { patientId: string }) {
+  const [copied, setCopied] = useState(false);
+  const code = `patient_${patientId.slice(-8)}`;
+  const link = typeof window !== "undefined"
+    ? `${window.location.origin}?ref=${code}`
+    : `?ref=${code}`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-lg font-semibold text-gray-900 mb-3">Refer a Friend</h2>
+      <Card>
+        <CardContent className="p-5">
+          <p className="text-sm text-gray-600 mb-4">
+            Share your personal referral link. Friends who sign up using your link get a welcome discount on their first order.
+          </p>
+          <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+            <span className="flex-1 text-xs font-mono text-gray-700 truncate">{link}</span>
+            <button
+              onClick={copy}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-forest-800 hover:text-forest-700 transition-colors"
+            >
+              {copied ? (
+                <><Check className="w-3.5 h-3.5 text-green-600" /><span className="text-green-600">Copied!</span></>
+              ) : (
+                <><Copy className="w-3.5 h-3.5" />Copy</>
+              )}
+            </button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

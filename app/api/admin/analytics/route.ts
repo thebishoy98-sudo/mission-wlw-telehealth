@@ -88,15 +88,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Product mix — use canonical names
-    const productMix: Record<string, { count: number; name: string }> = {};
+    // Product mix — use canonical names + revenue
+    const productMix: Record<string, { count: number; name: string; revenue: number }> = {};
     for (const order of activeOrders) {
       const id = order.productId ?? "unknown";
       if (!productMix[id]) {
         const canonical = canonicalProducts.find((p) => p.id === id);
-        productMix[id] = { count: 0, name: canonical?.name ?? id };
+        productMix[id] = { count: 0, name: canonical?.name ?? id, revenue: 0 };
       }
       productMix[id].count++;
+      const pmt = paymentByOrder.get(order.id);
+      if (pmt?.status === "completed") {
+        productMix[id].revenue += Number(pmt.amount) || 0;
+      }
     }
 
     return NextResponse.json({

@@ -17,6 +17,7 @@ type DashboardData = {
   products: Types.Product[];
   reviews: Types.ProviderReview[];
   orderPeriods?: { today: number; thisWeek: number; thisMonth: number; thisYear: number };
+  avgReviewHours?: number | null;
 };
 
 const patientDisplayName = (patient: Types.Patient | undefined) => {
@@ -33,6 +34,7 @@ function ProviderDashboardContent() {
   const [patients, setPatients] = useState<Record<string, Types.Patient>>({});
   const [reviews, setReviews] = useState<Record<string, Types.ProviderReview>>({});
   const [orderPeriods, setOrderPeriods] = useState<{ today: number; thisWeek: number; thisMonth: number; thisYear: number } | null>(null);
+  const [avgReviewHours, setAvgReviewHours] = useState<number | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingOrder, setMarkingOrder] = useState("");
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,7 @@ function ProviderDashboardContent() {
       setPatients(Object.fromEntries(data.patients.map((patient) => [patient.id, patient])));
       setReviews(Object.fromEntries(data.reviews.map((review) => [review.orderId, review])));
       if (data.orderPeriods) setOrderPeriods(data.orderPeriods);
+      if (data.avgReviewHours != null) setAvgReviewHours(data.avgReviewHours);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -157,6 +160,16 @@ function ProviderDashboardContent() {
               <p className="text-gray-600">Reviewed</p>
             </CardContent>
           </Card>
+          {avgReviewHours !== null && (
+            <Card>
+              <CardContent className="p-5 sm:p-6">
+                <div className="text-3xl font-bold text-forest-800 mb-2">
+                  {avgReviewHours < 1 ? `${Math.round(avgReviewHours * 60)}m` : `${avgReviewHours}h`}
+                </div>
+                <p className="text-gray-600">Avg. Review Time</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {orderPeriods && (

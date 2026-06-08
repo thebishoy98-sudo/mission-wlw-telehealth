@@ -27,7 +27,7 @@ type AnalyticsData = {
     thisYear: { orders: number; revenue: number };
   };
   monthly: Array<{ key: string; label: string; orders: number; patients: number; revenue: number }>;
-  productMix: Array<{ name: string; count: number }>;
+  productMix: Array<{ name: string; count: number; revenue: number }>;
 };
 
 const paymentAmount = (payment: Types.Payment) => {
@@ -313,6 +313,9 @@ function AdminDashboardContent() {
                     <div className="text-right">
                       <p className="text-2xl font-bold text-forest-800">{p.count}</p>
                       <p className="text-xs text-gray-400">orders</p>
+                      {p.revenue > 0 && (
+                        <p className="text-xs text-teal-700 font-semibold mt-0.5">{formatCurrency(p.revenue)}</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

@@ -54,6 +54,17 @@ const PRODUCTS = [
   },
 ];
 
+function productCtaUrl(base: string, productId: string) {
+  try {
+    const url = new URL(base, "http://x");
+    url.searchParams.set("productId", productId);
+    return url.pathname + (url.search ? url.search : "");
+  } catch {
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}productId=${productId}`;
+  }
+}
+
 export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
   return (
     <section id="pricing" className="bg-cream-100 py-16 sm:py-24">
@@ -62,11 +73,11 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
         <FadeUp className="mb-10">
           <div
             className="relative rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row items-center gap-4"
-            style={{ background: "linear-gradient(135deg, #13100a 0%, #1c1608 60%, #0e0c06 100%)" }}
+            style={{ background: "linear-gradient(135deg, #011a38 0%, #022859 60%, #01152e 100%)" }}
           >
-            <div className="absolute top-0 right-0 w-64 h-full bg-amber-400/5 blur-3xl pointer-events-none" />
+            <div className="absolute top-0 right-0 w-64 h-full bg-teal-400/5 blur-3xl pointer-events-none" />
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="shrink-0 bg-white/8 rounded-xl p-1.5 border border-amber-400/20">
+              <div className="shrink-0 bg-white/8 rounded-xl p-1.5 border border-teal-400/20">
                 <Image
                   src="/retatrutide-vial.jpg"
                   alt="Retatrutide vial"
@@ -78,12 +89,12 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] bg-teal-400 text-forest-900 px-2 py-0.5 rounded-full">
                     Now Available
                   </span>
                 </div>
                 <p className="text-white font-bold text-sm sm:text-base">
-                  Retatrutide — Pharmacy-Grade, First to Market
+                  Retatrutide - Pharmacy-Grade, First to Market
                 </p>
                 <p className="text-white/45 text-xs mt-0.5 truncate">
                   Triple-agonist GLP-1 · Licensed 503B compounding pharmacy · Ships today
@@ -91,10 +102,10 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
               </div>
             </div>
             <Link
-              href={ctaUrl}
-              className="shrink-0 bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-[.98] shadow-lg shadow-amber-400/20 whitespace-nowrap"
+              href={productCtaUrl(ctaUrl, "product_retatrutide")}
+              className="shrink-0 bg-teal-400 hover:bg-teal-300 text-forest-900 font-bold px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-[.98] shadow-lg shadow-teal-400/15 whitespace-nowrap"
             >
-              Order Now →
+              Order Now
             </Link>
           </div>
         </FadeUp>
@@ -118,7 +129,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
               <div
                 className={`rounded-2xl p-6 h-full flex flex-col ${
                   p.highlight
-                    ? "bg-[#13100a] text-white ring-2 ring-amber-400/60"
+                    ? "bg-forest-800 text-white ring-2 ring-teal-400/40"
                     : "bg-white text-gray-800 border border-gray-100 shadow-sm"
                 }`}
               >
@@ -126,7 +137,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                     <div
                       className={`min-w-0 pt-1 text-[11px] font-bold uppercase tracking-widest ${
-                        p.highlight ? "text-amber-400" : "text-forest-700"
+                        p.highlight ? "text-teal-400" : "text-forest-700"
                       }`}
                     >
                       {p.tagline}
@@ -134,7 +145,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     <span
                       className={`shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                         p.highlight
-                          ? "bg-amber-400 text-amber-950"
+                          ? "bg-teal-400 text-forest-900"
                           : "bg-forest-800/10 text-forest-800"
                       }`}
                     >
@@ -154,7 +165,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     </div>
                     <h3
                       className={`text-xl font-bold ${
-                        p.highlight ? "text-amber-400" : "text-forest-800"
+                        p.highlight ? "text-teal-400" : "text-forest-800"
                       }`}
                     >
                       {p.label}
@@ -176,7 +187,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   </div>
                   <div
                     className={`text-xs mt-1 ${
-                      p.highlight ? "text-amber-400/70" : "text-forest-700"
+                      p.highlight ? "text-teal-400/80" : "text-forest-700"
                     }`}
                   >
                     from ${p.fromSupply} / 8-week supply
@@ -193,10 +204,10 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     >
                       <span
                         className={`shrink-0 font-bold mt-0.5 ${
-                          p.highlight ? "text-amber-400" : "text-forest-700"
+                          p.highlight ? "text-teal-400" : "text-forest-700"
                         }`}
                       >
-                        ✓
+                        &#10003;
                       </span>
                       {b}
                     </li>
@@ -204,10 +215,10 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                 </ul>
 
                 <Link
-                  href={ctaUrl}
+                  href={productCtaUrl(ctaUrl, p.id)}
                   className={`block text-center font-bold py-3 rounded-full text-sm transition-all active:scale-[.98] ${
                     p.highlight
-                      ? "bg-amber-400 text-amber-950 hover:bg-amber-300 shadow-lg shadow-amber-400/20"
+                      ? "bg-teal-400 text-forest-900 hover:bg-teal-300 shadow-lg shadow-teal-400/15"
                       : "bg-forest-800 text-white hover:bg-forest-700"
                   }`}
                 >

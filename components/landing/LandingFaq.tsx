@@ -4,24 +4,28 @@ import { FadeUp } from "./FadeUp";
 
 const FAQS = [
   {
-    q: "Am I eligible for Tirzepatide?",
-    a: "Most adults with a BMI of 27 or higher and at least one weight-related health condition (such as high blood pressure, pre-diabetes, or high cholesterol) or a BMI of 30 or higher qualify. Your provider reviews your full health history during the intake process.",
+    q: "Am I eligible for GLP-1 treatment?",
+    a: "Most adults with a BMI of 27 or higher and at least one weight-related health condition (such as high blood pressure, pre-diabetes, or high cholesterol), or a BMI of 30 or higher, qualify. Your provider reviews your full health history during the intake process and determines the right medication for you.",
+  },
+  {
+    q: "What is Retatrutide and how is it different?",
+    a: "Retatrutide is the newest GLP-1 medication - a triple-agonist that targets GLP-1, GIP, and glucagon receptors simultaneously. Clinical trial data shows up to 24% body weight loss, which outperforms earlier single and dual-agonist options like Semaglutide and Tirzepatide. Mission WLW is one of the first telehealth platforms to offer it through a licensed 503B pharmacy.",
   },
   {
     q: "How quickly will I see results?",
-    a: "Most patients notice reduced appetite within the first 1 to 2 weeks. Visible weight loss typically begins in weeks 3 to 6. Significant results such as 10 percent or more body weight lost are usually seen by month 3 to 5 of consistent treatment.",
+    a: "Most patients notice reduced appetite within the first 1 to 2 weeks. Visible weight loss typically begins in weeks 3 to 6. Significant results - 10 percent or more body weight lost - are usually seen by month 3 to 5 of consistent treatment.",
   },
   {
     q: "Is this covered by insurance?",
-    a: "Our GLP-1 programs are self-pay. Programs start from $299 for an 8-week supply (Semaglutide) up to $499+ for Retatrutide. All supplies are included and there are no hidden fees.",
+    a: "Our GLP-1 programs are self-pay. Programs start from $299 for an 8-week supply (Semaglutide) up to $499 and above for Retatrutide. All supplies are included and there are no hidden fees.",
   },
   {
     q: "Do I need to come in person?",
-    a: "No. Our entire process is online. Your provider consultation happens via secure video or asynchronous message review. Medication is shipped directly to your home.",
+    a: "No. Our entire process is online. Your provider consultation happens via secure asynchronous review. Medication is shipped directly to your home.",
   },
   {
     q: "What are the side effects?",
-    a: "The most common side effects are mild nausea, reduced appetite, and occasional fatigue, especially in the first few weeks. These typically pass as your body adjusts. We start at a low dose and increase gradually to keep you comfortable.",
+    a: "The most common side effects are mild nausea, reduced appetite, and occasional fatigue - especially in the first few weeks. These typically pass as your body adjusts. We start at a low dose and increase gradually to keep you comfortable.",
   },
   {
     q: "Can I cancel anytime?",
