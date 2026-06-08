@@ -67,7 +67,7 @@ function StatusIcon({ status }: { status: Types.OrderStatus }) {
   if (status === "delivered" || status === "fulfilled") {
     return <CheckCircle2 size={16} className="text-green-500" />;
   }
-  return <Clock size={16} className="text-amber-500" />;
+  return <Clock size={16} className="text-teal-500" />;
 }
 
 function PatientPortalContent() {

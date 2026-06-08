@@ -167,12 +167,12 @@ export default function Questionnaire() {
           <p className="text-gray-500 text-base leading-relaxed mb-6 max-w-md mx-auto">
             Based on your response to <strong className="text-gray-700">&ldquo;{ineligibleQuestion.text}&rdquo;</strong>, you are not eligible for GLP-1 treatment at this time.
           </p>
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-5 text-left mb-8 max-w-md mx-auto">
+          <div className="bg-teal-50 border border-teal-100 rounded-xl p-5 text-left mb-8 max-w-md mx-auto">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-teal-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-amber-900 text-sm mb-1">Why we cannot proceed</p>
-                <p className="text-amber-700 text-sm leading-relaxed">
+                <p className="font-semibold text-teal-900 text-sm mb-1">Why we cannot proceed</p>
+                <p className="text-teal-700 text-sm leading-relaxed">
                   GLP-1 medications are contraindicated for patients with a personal or family history of thyroid cancer, MEN 2, or who are currently pregnant or breastfeeding. Your safety is our priority.
                 </p>
               </div>
@@ -287,7 +287,7 @@ export default function Questionnaire() {
         )}
 
         {q.warnIf && answers[q.id] === q.warnIf && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
             Note: Your response will be flagged for provider review before your order is dispatched.
           </div>
         )}
