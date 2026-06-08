@@ -122,7 +122,19 @@ export default function PatientInfo() {
       else if (digits.length !== 10) e.phone = "Enter a valid 10-digit US phone number";
     }
     if (s === 3) {
-      if (!formData.dateOfBirth) e.dateOfBirth = "Required";
+      if (!formData.dateOfBirth) {
+        e.dateOfBirth = "Required";
+      } else {
+        const dob = new Date(formData.dateOfBirth);
+        const today = new Date();
+        const birthYear = dob.getFullYear();
+        const age = today.getFullYear() - birthYear - (
+          today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0
+        );
+        if (birthYear < 1920) e.dateOfBirth = "Date of birth cannot be before 1920";
+        else if (dob > today) e.dateOfBirth = "Date of birth cannot be in the future";
+        else if (age < 18) e.dateOfBirth = "You must be at least 18 years old";
+      }
       if (!formData.gender) e.gender = "Required";
     }
     if (s === 4) {
