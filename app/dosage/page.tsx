@@ -16,7 +16,7 @@ export default function DosagePage() {
 
         <div className="space-y-8 text-sm leading-7 text-gray-700">
 
-          <div className="bg-teal-50 border border-teal-200 rounded-xl px-5 py-4 text-teal-900 text-sm">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-gray-800 text-sm">
             <strong>Important:</strong> This medication is prescribed to you specifically. Do not share it
             with anyone else. Call your provider or email service@missionwlw.com before making any changes
             to your dosing schedule.

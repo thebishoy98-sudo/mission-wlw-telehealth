@@ -124,7 +124,7 @@ export default function AdminNotificationsPage() {
               {loading ? (
                 <p className="text-sm text-gray-500">Loading...</p>
               ) : settings.phones.length === 0 ? (
-                <p className="rounded-lg border border-teal-100 bg-teal-50 p-4 text-sm text-teal-800">
+                <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                   No admin phone numbers are configured yet.
                 </p>
               ) : (

@@ -207,12 +207,12 @@ export default function PatientDetail() {
                       const question = questionnaire.find((q) => q.id === answer.questionId);
                       const isSoftFlag = question?.warnIf && answer.answer === question.warnIf;
                       return (
-                        <div key={answer.id} className={`border-b border-gray-50 pb-4 last:border-0 ${isSoftFlag ? "rounded-lg border border-teal-200 bg-teal-50 p-3" : ""}`}>
+                        <div key={answer.id} className={`border-b border-gray-50 pb-4 last:border-0 ${isSoftFlag ? "rounded-lg border border-gray-200 bg-gray-50 p-3" : ""}`}>
                           <p className="font-medium text-gray-800 text-sm mb-1 flex items-center gap-2">
                             {question?.text || answer.questionId}
-                            {isSoftFlag && <span className="text-teal-700 text-xs font-bold bg-teal-100 px-2 py-0.5 rounded-full">Provider Review Required</span>}
+                            {isSoftFlag && <span className="text-gray-700 text-xs font-bold bg-gray-100 px-2 py-0.5 rounded-full">Provider Review Required</span>}
                           </p>
-                          <p className={`text-sm ${isSoftFlag ? "text-teal-900 font-semibold" : "text-gray-600"}`}>{answer.answer || <span className="text-gray-400 italic">No answer</span>}</p>
+                          <p className={`text-sm ${isSoftFlag ? "text-gray-900 font-semibold" : "text-gray-600"}`}>{answer.answer || <span className="text-gray-400 italic">No answer</span>}</p>
                         </div>
                       );
                     })}
@@ -370,7 +370,7 @@ export default function PatientDetail() {
                     {review?.chartViewedAt ? (
                       <Badge variant="success">Confirmed</Badge>
                     ) : (
-                      <span className="font-medium text-teal-600">Not yet confirmed</span>
+                      <span className="font-medium text-gray-500">Not yet confirmed</span>
                     )}
                   </div>
                   {review?.chartViewedAt ? (

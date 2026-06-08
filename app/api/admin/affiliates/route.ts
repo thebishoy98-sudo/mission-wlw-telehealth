@@ -9,10 +9,13 @@ function slugify(name: string): string {
 }
 
 // GET /api/admin/affiliates — list all affiliates with click + conversion counts
+// GET /api/admin/affiliates?code=xxx — list individual orders for one affiliate
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   if (!process.env.POSTGRES_URL) return NextResponse.json({ affiliates: [] });
+
+  const code = new URL(req.url).searchParams.get("code");
 
   try {
     await sql`
@@ -24,6 +27,30 @@ export async function GET(req: NextRequest) {
         created_by TEXT NOT NULL DEFAULT 'admin'
       )
     `;
+
+    // Drill-down: orders for a single affiliate
+    if (code) {
+      const { rows } = await sql`
+        SELECT
+          o.id,
+          o.status,
+          o.payment_status,
+          o.product_id,
+          o.dose_id,
+          o.created_at,
+          pat.first_name,
+          pat.last_name,
+          pat.email,
+          pay.amount,
+          pay.status AS pay_status
+        FROM orders o
+        LEFT JOIN patients pat ON pat.id = o.patient_id
+        LEFT JOIN payments pay ON pay.order_id = o.id
+        WHERE o.ref_code = ${code}
+        ORDER BY o.created_at DESC
+      `;
+      return NextResponse.json({ orders: rows });
+    }
 
     const { rows } = await sql`
       SELECT

@@ -96,7 +96,7 @@ export default function Confirmation() {
                 Sent to Pharmacy
               </span>
             ) : hasPharmacyIssue ? (
-              <span className="font-semibold text-teal-600">Pharmacy Review</span>
+              <span className="font-semibold text-gray-600">Pharmacy Review</span>
             ) : (
               <span className="font-semibold text-blue-600">Processing</span>
             )}

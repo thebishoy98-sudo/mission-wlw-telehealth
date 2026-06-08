@@ -146,7 +146,7 @@ function ProviderDashboardContent() {
           </Card>
           <Card>
             <CardContent className="p-5 sm:p-6">
-              <div className="text-3xl font-bold text-teal-600 mb-2">
+              <div className="text-3xl font-bold text-forest-800 mb-2">
                 {unreviewedOrders.length}
               </div>
               <p className="text-gray-600">Needs Chart Review</p>
@@ -225,7 +225,7 @@ function ProviderDashboardContent() {
                               Chart reviewed
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium">
                               <Eye className="w-3 h-3" />
                               Not yet reviewed
                             </span>

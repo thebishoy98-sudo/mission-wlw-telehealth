@@ -418,7 +418,7 @@ export default function OrdersManagement() {
                                 {pharmacyOrder?.lifeFileOrderId && <p className="mt-1 max-w-[8rem] truncate text-xs text-gray-500">LF {pharmacyOrder.lifeFileOrderId}</p>}
                               </td>
                               <td className="px-4 py-4 text-sm">
-                                <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-teal-100 text-teal-800"}>
+                                <Badge className={getIdentityGate(order).canDispatch ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}>
                                   {order.identityStatus ?? "missing"}
                                 </Badge>
                               </td>
@@ -472,7 +472,7 @@ export default function OrdersManagement() {
                       <CardContent className="p-6">
                         <h3 className="font-bold text-gray-900 mb-3">What Was Ordered</h3>
                         <div className="flex items-start gap-3">
-                          <div className="shrink-0 bg-gray-50 rounded-xl p-1.5">
+                          <div className="shrink-0 bg-white border border-gray-200 rounded-xl p-1.5">
                             {prod.image && (
                               <Image src={prod.image} alt={prod.name} width={32} height={52} className="object-contain" style={{ maxHeight: "52px", width: "auto" }} />
                             )}
@@ -518,10 +518,10 @@ export default function OrdersManagement() {
                       )}
 
                       {((selectedDiagnostics?.practiceqAutomation && !selectedPracticeQSkipped) || latestErroredLogs.length > 0) && (
-                        <div className="mt-4 rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm">
+                        <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm">
                           <p className="font-semibold text-gray-900">Latest Integration Details</p>
                           {latestErroredLogs.map((log) => (
-                            <div key={log.id} className="mt-2 border-t border-teal-100 pt-2">
+                            <div key={log.id} className="mt-2 border-t border-gray-100 pt-2">
                               <p className="font-medium text-gray-800">
                                 {log.integrationName}: {log.action}
                               </p>
@@ -534,7 +534,7 @@ export default function OrdersManagement() {
                             </div>
                           ))}
                           {selectedDiagnostics?.practiceqAutomation && !selectedPracticeQSkipped && (
-                            <div className="mt-2 border-t border-teal-100 pt-2">
+                            <div className="mt-2 border-t border-gray-100 pt-2">
                               <p className="font-medium text-gray-800">PracticeQ Automation</p>
                               <p>Status: {selectedDiagnostics.practiceqAutomation.status}</p>
                               <p>Attempts: {selectedDiagnostics.practiceqAutomation.attempts}</p>
@@ -676,7 +676,7 @@ export default function OrdersManagement() {
                       <p className="text-sm text-gray-500">No PracticeQ record is linked to this order.</p>
                     ) : !selectedPracticeQ.available ? (
                       <div className="space-y-2 text-sm">
-                        <Badge className="bg-teal-100 text-teal-800">Unavailable</Badge>
+                        <Badge className="bg-gray-100 text-gray-700">Unavailable</Badge>
                         <p className="text-gray-600">{selectedPracticeQ.reason}</p>
                         {selectedPracticeQ.clientId && <p className="font-mono text-xs text-gray-500">Client {selectedPracticeQ.clientId}</p>}
                       </div>
