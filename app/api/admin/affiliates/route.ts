@@ -28,6 +28,21 @@ export async function GET(req: NextRequest) {
       )
     `;
     await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
+    // Ensure partial_intakes exists (may not have been migrated on this env yet)
+    await sql`
+      CREATE TABLE IF NOT EXISTS partial_intakes (
+        id           TEXT PRIMARY KEY,
+        phone        TEXT NOT NULL,
+        email        TEXT,
+        first_name   TEXT,
+        started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed    BOOLEAN NOT NULL DEFAULT false,
+        completed_at TIMESTAMPTZ,
+        sms_1h_sent  BOOLEAN NOT NULL DEFAULT false,
+        sms_24h_sent BOOLEAN NOT NULL DEFAULT false
+      )
+    `.catch(() => {});
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_intakes_phone ON partial_intakes(phone)`.catch(() => {});
     await sql`ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
 
     // Drill-down: orders for a single affiliate
