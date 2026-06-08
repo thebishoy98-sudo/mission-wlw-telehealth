@@ -232,6 +232,8 @@ export const orderDb = {
 
   async create(o: Order): Promise<Order> {
     if (!isDbAvailable()) return o;
+    // Ensure ref_code column exists on the live table (migration guard)
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
