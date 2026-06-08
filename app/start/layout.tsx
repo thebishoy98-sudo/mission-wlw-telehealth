@@ -17,7 +17,7 @@ export default function StartLayout({ children }: { children: React.ReactNode })
   const currentStep = steps.findIndex((s) => s.path === pathname);
 
   return (
-    <div className="min-h-screen bg-gray-50/60">
+    <div className="min-h-screen bg-gray-50/60 overflow-x-hidden">
       {/* Progress header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
