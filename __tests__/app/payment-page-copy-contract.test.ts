@@ -18,7 +18,7 @@ describe("payment page launch copy", () => {
   });
 
   it("does not call the configured charge override a test charge in the patient checkout", () => {
-    expect(source).toContain("Today's charge");
+    expect(source).toContain("Today&apos;s charge");
     expect(source).not.toContain("Testing charge override");
   });
 

@@ -25,6 +25,8 @@ import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
 import { validateSharedSecret } from "@/lib/webhook-auth";
+import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
+import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 
 export async function POST(req: NextRequest) {
   // Verify API key header
@@ -97,8 +99,9 @@ export async function POST(req: NextRequest) {
       db.practiceqDb.update(packet.id, { status: "completed" });
       await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
       const approvalUpdate = {
-        status: "sent_to_pharmacy" as const,
+        status: "approved" as const,
         practiceQStatus: "completed" as const,
+        pharmacyStatus: "draft" as const,
         identityStatus: "manual_approved" as const,
         identityReason: "Chart approved in PracticeQ/provider portal.",
         identityReviewedAt: new Date().toISOString(),
@@ -133,9 +136,38 @@ export async function POST(req: NextRequest) {
               db.pharmacyOrderDb.getByOrder(orderId);
             if (!existingPharmacyOrder) {
               try {
-                const pharmacyOrder = await pharmacy.createPharmacyOrder(order);
+                const patient = await getPatient();
+                const product = normalizeProduct(
+                  (await dbServer.productDb.getById(order.productId).catch(() => null)) ??
+                  db.productDb.getById(order.productId) ??
+                  tirzepatideProduct
+                );
+                const normalized = normalizeOrderForPharmacyDispatch(order, product, [order.doseId]);
+                if (!patient || !normalized.normalizedOrder) {
+                  throw new Error(`Invalid order data - ${normalized.reason ?? "missing patient, product, or dose"}`);
+                }
+                const pharmacyOrder = await pharmacy.createPharmacyOrder(normalized.normalizedOrder, { patient, product });
                 await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
-              } catch {}
+                const pharmacyUpdate = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
+                db.orderDb.update(orderId, pharmacyUpdate);
+                await dbServer.orderDb.update(orderId, pharmacyUpdate).catch(() => {});
+              } catch (error) {
+                const errorMessage = (error as Error).message;
+                const pharmacyErrorUpdate = { status: "approved" as const, pharmacyStatus: "error" as const };
+                db.orderDb.update(orderId, pharmacyErrorUpdate);
+                await dbServer.orderDb.update(orderId, pharmacyErrorUpdate).catch(() => {});
+                await dbServer.integrationLogDb.create({
+                  id: generateId(),
+                  timestamp: new Date().toISOString(),
+                  integrationName: pharmacy.getPharmacyProvider() === "appsheet" ? "appsheet" : "lifefile",
+                  action: "PracticeQ-approved pharmacy submission failed",
+                  orderId,
+                  patientId,
+                  status: "error",
+                  details: { source: "practiceq_webhook" },
+                  error: errorMessage,
+                }).catch(() => {});
+              }
             }
           }
           const patient = await getPatient();

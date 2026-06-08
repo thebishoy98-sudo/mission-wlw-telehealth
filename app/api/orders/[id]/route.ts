@@ -31,7 +31,6 @@ export async function GET(
   const product = serverProduct ?? db.productDb.getById(order.productId);
   const pharmacyOrder = serverPharmacyOrder ?? db.pharmacyOrderDb.getByOrder(order.id);
   const practiceqPacket = serverPracticeQPacket ?? db.practiceqDb.getByOrder(order.id);
-  const practiceqMirror = await getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId).catch(() => null);
   const canViewIdentity = isAdminRequest(req) || isProviderRequest(req);
   const isPrivilegedRequest = canViewIdentity;
   const requestedEmail = req.nextUrl.searchParams.get("email")?.trim().toLowerCase() ?? "";
@@ -41,6 +40,9 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
   }
+  const practiceqMirror = isPrivilegedRequest
+    ? await getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId).catch(() => null)
+    : null;
   const [uploads, review, integrationLogs, consent] = canViewIdentity
     ? await Promise.all([
         dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
@@ -53,7 +55,20 @@ export async function GET(
     : [[], null, [], null];
 
   return NextResponse.json({
-    order,
+    order: isPrivilegedRequest
+      ? order
+      : {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          pharmacyStatus: order.pharmacyStatus,
+          practiceQStatus: order.practiceQStatus,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+          submittedAt: order.submittedAt,
+          approvedAt: order.approvedAt,
+          rejectionReason: order.rejectionReason,
+        },
     patient: patient
       ? {
           id: patient.id,
@@ -71,7 +86,7 @@ export async function GET(
           shippedAt: pharmacyOrder.shippedAt,
         }
       : null,
-    practiceq: practiceqMirror ?? (practiceqPacket
+    practiceq: isPrivilegedRequest ? (practiceqMirror ?? (practiceqPacket
       ? {
           available: false,
           status: practiceqPacket.status,
@@ -79,7 +94,7 @@ export async function GET(
           intakeId: practiceqPacket.id,
           answers: [],
         }
-      : null),
+      : null)) : undefined,
     identity: canViewIdentity
       ? {
           status: order.identityStatus ?? "missing",

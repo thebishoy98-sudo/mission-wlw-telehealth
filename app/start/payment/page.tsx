@@ -421,7 +421,7 @@ export default function Payment() {
           )}
           {chargeAmountOverride !== null && productTotal !== total && (
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-600">Today's charge</span>
+              <span className="text-gray-600">Today&apos;s charge</span>
               <span className="font-semibold text-forest-800">{formatCurrency(total)}</span>
             </div>
           )}
@@ -501,7 +501,7 @@ export default function Payment() {
         )}
 
         <div className="mt-5 p-4 bg-cream-100 rounded-xl text-sm text-gray-600">
-          <strong className="text-gray-800">No waiting required.</strong> Once payment is confirmed, your prescription goes directly to our pharmacy. No additional approval steps needed.
+          <strong className="text-gray-800">Secure checkout.</strong> After payment, your identity and clinical details are reviewed before eligible prescriptions are sent to pharmacy.
         </div>
       </div>
 

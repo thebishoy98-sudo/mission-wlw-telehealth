@@ -154,6 +154,9 @@ export async function proxy(req: NextRequest) {
         { status: 429, headers: { "Retry-After": "600" } }
       );
     }
+  } else if (path === "/api/auth/session" && req.method === "GET") {
+    // Session hydration is called on most pages and is read-only. Keep brute-force
+    // throttling on login/OTP endpoints without breaking normal navigation.
   } else if (path.startsWith("/api/auth/")) {
     if (!rateLimit(`${ip}:auth`, 10, 60 * 1000)) {
       return NextResponse.json(
