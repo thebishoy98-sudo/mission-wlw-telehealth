@@ -33,7 +33,21 @@ export async function POST(req: NextRequest) {
         WHERE phone = ${phone} AND completed = false
       `.catch(() => {});
     } else {
-      // Ensure ref_code column exists (idempotent)
+      // Ensure table and ref_code column exist (idempotent — survives fresh DB)
+      await sql`
+        CREATE TABLE IF NOT EXISTS partial_intakes (
+          id           TEXT PRIMARY KEY,
+          phone        TEXT NOT NULL,
+          email        TEXT,
+          first_name   TEXT,
+          started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          completed    BOOLEAN NOT NULL DEFAULT false,
+          completed_at TIMESTAMPTZ,
+          sms_1h_sent  BOOLEAN NOT NULL DEFAULT false,
+          sms_24h_sent BOOLEAN NOT NULL DEFAULT false
+        )
+      `.catch(() => {});
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_intakes_phone ON partial_intakes(phone)`.catch(() => {});
       await sql`ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
       // Upsert: reset counters if previous row is already completed (new attempt)
       await sql`
