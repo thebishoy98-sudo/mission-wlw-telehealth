@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -31,6 +33,12 @@ const US_STATES = [
   ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],
 ];
 
+const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; fromMonthly: number; highlight: boolean }> = {
+  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", fromMonthly: 250, highlight: true },
+  product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", fromMonthly: 175, highlight: false },
+  product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", fromMonthly: 149, highlight: false },
+};
+
 const STEPS = [
   { id: "treatment", title: "Choose your treatment", subtitle: "Select the medication you're interested in" },
   { id: "name", title: "What's your name?", subtitle: "As it appears on your ID" },
@@ -47,6 +55,7 @@ export default function PatientInfo() {
   const [selectedDose, setSelectedDose] = useState<string>("");
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const directionRef = useRef(1);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -155,7 +164,7 @@ export default function PatientInfo() {
     const e = validateStep(step);
     setErrors(e);
     if (Object.keys(e).length > 0) return;
-    if (step < STEPS.length - 1) { setStep((s) => s + 1); return; }
+    if (step < STEPS.length - 1) { directionRef.current = 1; setStep((s) => s + 1); return; }
     // Final step submit
     saveIntakeState({
       ...formData,
@@ -190,21 +199,74 @@ export default function PatientInfo() {
       <p className="text-xs text-gray-400 text-center">Step {step + 1} of {STEPS.length}</p>
 
       {/* Step card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 overflow-hidden">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: directionRef.current * 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: directionRef.current * -32 }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          >
         <h2 className="text-2xl font-bold text-gray-900 mb-1">{STEPS[step].title}</h2>
         <p className="text-gray-500 text-sm mb-7">{STEPS[step].subtitle}</p>
 
         {step === 0 && (
           <div className="space-y-5">
-            <Select
-              label="Treatment"
-              options={[{ value: "", label: "Select a treatment..." }, ...products.map((p) => ({ value: p.id, label: p.name }))]}
-              value={formData.productId}
-              onChange={(e) => { updateField("productId", e.target.value); setSelectedDose(""); }}
-              error={errors.productId}
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {products.map((p, i) => {
+                const meta = PRODUCT_META[p.id] ?? { img: "", tagline: "", badge: "", fromMonthly: 0, highlight: false };
+                const selected = formData.productId === p.id;
+                return (
+                  <motion.button
+                    key={p.id}
+                    type="button"
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.06, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => { updateField("productId", p.id); setSelectedDose(""); setErrors({}); }}
+                    className={`relative text-left rounded-2xl p-4 border-2 transition-colors w-full ${
+                      selected
+                        ? meta.highlight
+                          ? "border-red-400 bg-forest-800"
+                          : "border-forest-700 bg-forest-50"
+                        : "border-gray-200 bg-white hover:border-forest-300"
+                    }`}
+                  >
+                    {selected && (
+                      <span className="absolute top-3 right-3 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-[11px] font-bold leading-none">&#10003;</span>
+                    )}
+                    <div className="flex items-center gap-3 mb-3">
+                      {meta.img && (
+                        <Image src={meta.img} alt={p.name} width={28} height={44} className="object-contain shrink-0" style={{ maxHeight: 44, width: "auto" }} />
+                      )}
+                      <div>
+                        <p className={`font-bold text-sm leading-tight ${selected && meta.highlight ? "text-red-400" : "text-forest-800"}`}>{p.name}</p>
+                        <p className={`text-xs mt-0.5 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>{meta.tagline}</p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mb-2 ${
+                      selected && meta.highlight ? "bg-red-400 text-forest-900" : "bg-forest-100 text-forest-700"
+                    }`}>
+                      {meta.badge}
+                    </span>
+                    <p className={`text-xl font-bold leading-none ${selected && meta.highlight ? "text-white" : "text-forest-800"}`}>
+                      ${meta.fromMonthly}
+                      <span className={`text-xs font-normal ml-0.5 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/mo</span>
+                    </p>
+                  </motion.button>
+                );
+              })}
+            </div>
+            {errors.productId && <p className="text-red-500 text-xs mt-1">{errors.productId}</p>}
             {selectedProduct && (
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28 }}
+              >
                 <Select
                   label="Prescription option"
                   options={selectedProduct.doses.map((d) => ({
@@ -217,7 +279,7 @@ export default function PatientInfo() {
                 <p className="mt-2 text-xs text-gray-400">
                   8-week prescription. Your provider confirms the dose before dispatch.
                 </p>
-              </div>
+              </motion.div>
             )}
           </div>
         )}
@@ -293,12 +355,14 @@ export default function PatientInfo() {
             </label>
           </div>
         )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Navigation */}
       <div className="flex gap-3">
         {step > 0 ? (
-          <Button variant="outline" onClick={() => setStep((s) => s - 1)} className="flex-1">
+          <Button variant="outline" onClick={() => { directionRef.current = -1; setStep((s) => s - 1); }} className="flex-1">
             Back
           </Button>
         ) : (
