@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
         created_by TEXT NOT NULL DEFAULT 'admin'
       )
     `;
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
+    await sql`ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
 
     // Drill-down: orders for a single affiliate
     if (code) {

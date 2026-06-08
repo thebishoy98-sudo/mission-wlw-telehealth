@@ -43,6 +43,7 @@ export interface IntakeFormState {
   orderId?: string;
   isReorder?: boolean;
   reorderSourceOrderId?: string;
+  refCode?: string;
   identityStatus?: "missing" | "pending" | "verified" | "needs_review" | "rejected" | "manual_approved";
   identityAiResult?: { verdict: string; confidence: number; summary: string; flags: string[] };
 }

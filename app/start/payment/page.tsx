@@ -342,6 +342,7 @@ export default function Payment() {
           [clinicalConsentStatusKey]: "pending",
           [accountingStatusKey]: "pending",
           identityStatus: intakeState.identityStatus ?? "missing",
+          refCode: intakeState.refCode ?? undefined,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
         },

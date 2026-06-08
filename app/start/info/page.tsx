@@ -51,7 +51,12 @@ export default function PatientInfo() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const productId = params.get("productId");
-    if (productId) setFormData((prev) => ({ ...prev, productId }));
+    const ref = params.get("ref") || params.get("aff");
+    setFormData((prev) => ({
+      ...prev,
+      ...(productId ? { productId } : {}),
+      ...(ref ? { refCode: ref } : {}),
+    }));
     const stepParam = parseInt(params.get("step") ?? "", 10);
     if (!isNaN(stepParam) && stepParam > 0 && stepParam < STEPS.length) {
       setStep(stepParam);
@@ -162,7 +167,7 @@ export default function PatientInfo() {
     fetch("/api/intake/save-partial", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: formData.phone, email: formData.email, firstName: formData.firstName }),
+      body: JSON.stringify({ phone: formData.phone, email: formData.email, firstName: formData.firstName, refCode: formData.refCode }),
     }).catch(() => {});
     router.push("/start/questionnaire");
   };

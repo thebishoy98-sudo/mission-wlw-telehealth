@@ -15,11 +15,12 @@ import { generateId } from "@/lib/utils";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { phone, email, firstName, completed } = body as {
+    const { phone, email, firstName, completed, refCode } = body as {
       phone?: string;
       email?: string;
       firstName?: string;
       completed?: boolean;
+      refCode?: string;
     };
 
     if (!phone) return NextResponse.json({ ok: true });
@@ -32,13 +33,16 @@ export async function POST(req: NextRequest) {
         WHERE phone = ${phone} AND completed = false
       `.catch(() => {});
     } else {
+      // Ensure ref_code column exists (idempotent)
+      await sql`ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
       // Upsert: reset counters if previous row is already completed (new attempt)
       await sql`
-        INSERT INTO partial_intakes (id, phone, email, first_name, started_at)
-        VALUES (${generateId()}, ${phone}, ${email ?? null}, ${firstName ?? null}, NOW())
+        INSERT INTO partial_intakes (id, phone, email, first_name, ref_code, started_at)
+        VALUES (${generateId()}, ${phone}, ${email ?? null}, ${firstName ?? null}, ${refCode ?? null}, NOW())
         ON CONFLICT (phone) DO UPDATE SET
           email       = COALESCE(EXCLUDED.email, partial_intakes.email),
           first_name  = COALESCE(EXCLUDED.first_name, partial_intakes.first_name),
+          ref_code    = COALESCE(EXCLUDED.ref_code, partial_intakes.ref_code),
           started_at  = CASE WHEN partial_intakes.completed THEN NOW() ELSE partial_intakes.started_at END,
           completed   = false,
           completed_at = NULL,

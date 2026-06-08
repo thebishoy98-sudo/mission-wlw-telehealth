@@ -236,12 +236,12 @@ export const orderDb = {
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
         identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
-        identity_upload_token, created_at, updated_at)
+        identity_upload_token, ref_code, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus}, ${o.practiceqClientId ?? null},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
         ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
-        ${o.identityUploadToken ?? null}, ${o.createdAt}, ${o.updatedAt})
+        ${o.identityUploadToken ?? null}, ${o.refCode ?? null}, ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
   },
@@ -1007,6 +1007,7 @@ function rowToOrder(r: any): Order {
     identityAiResult: r.identity_ai_result ?? undefined,
     identityUploadToken: r.identity_upload_token ?? undefined,
     practiceqClientId: r.practiceq_client_id === undefined || r.practiceq_client_id === null ? undefined : String(r.practiceq_client_id),
+    refCode: r.ref_code ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
