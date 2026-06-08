@@ -175,7 +175,7 @@ export default function PatientDetail() {
                     return (
                       <div className="flex items-start gap-3">
                         {prod.image && (
-                          <div className="shrink-0 bg-gray-50 rounded-xl p-1.5">
+                          <div className="shrink-0 bg-white border border-gray-200 rounded-xl p-1.5">
                             <Image src={prod.image} alt={prod.name} width={28} height={44} className="object-contain" style={{ maxHeight: "44px", width: "auto" }} />
                           </div>
                         )}
