@@ -77,7 +77,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <section>
+          <section id="hipaa">
             <h2 className="mb-3 text-base font-bold text-gray-950">4. HIPAA and Health Information</h2>
             <p>
               Health information you provide may be considered Protected Health Information under HIPAA. We

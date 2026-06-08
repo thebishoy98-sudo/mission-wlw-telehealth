@@ -13,10 +13,10 @@ const LINKS = {
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },
     { label: "Telehealth Consent", href: "/consent" },
-    { label: "HIPAA Notice", href: "/privacy" },
+    { label: "HIPAA Notice", href: "/privacy#hipaa" },
   ],
   Account: [
-    { label: "Patient Login", href: "/login" },
+    { label: "Patient Login", href: "/login/patient" },
     { label: "Start Assessment", href: "/start/info" },
     { label: "Order History", href: "/patient" },
     { label: "Dosage Instructions", href: "/dosage" },

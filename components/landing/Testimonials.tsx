@@ -87,7 +87,7 @@ const BG_COLORS = [
 
 export function Testimonials() {
   return (
-    <section className="bg-white py-16 sm:py-24">
+    <section id="reviews" className="bg-white py-16 sm:py-24">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <FadeUp className="text-center mb-12 sm:mb-16">
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">
