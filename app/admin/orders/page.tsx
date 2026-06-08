@@ -464,6 +464,33 @@ export default function OrdersManagement() {
                 </Card>
               ) : (
                 <>
+                {(() => {
+                  const prod = products[selectedOrder.productId];
+                  const dose = prod?.doses?.find((d) => d.id === selectedOrder.doseId);
+                  return prod ? (
+                    <Card>
+                      <CardContent className="p-6">
+                        <h3 className="font-bold text-gray-900 mb-3">What Was Ordered</h3>
+                        <div className="flex items-start gap-3">
+                          <div className="shrink-0 bg-gray-50 rounded-xl p-1.5">
+                            {prod.image && (
+                              <Image src={prod.image} alt={prod.name} width={32} height={52} className="object-contain" style={{ maxHeight: "52px", width: "auto" }} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-gray-900">{prod.name}</p>
+                            {dose && (
+                              <>
+                                <p className="text-sm text-gray-600">{dose.label}{dose.strength ? ` - ${dose.strength}` : ""}</p>
+                                <p className="text-sm font-semibold text-forest-800">{formatCurrency(dose.price)} - 8-week supply</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null;
+                })()}
                 <Card>
                   <CardContent className="p-6">
                     <h3 className="font-bold text-gray-900 mb-4">Order Details</h3>

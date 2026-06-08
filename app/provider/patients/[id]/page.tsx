@@ -165,6 +165,36 @@ export default function PatientDetail() {
               </CardContent>
             </Card>
 
+            {chart.product && (
+              <Card>
+                <CardContent className="p-5 sm:p-6">
+                  <h3 className="text-base font-bold text-gray-900 mb-3">Prescribed Treatment</h3>
+                  {(() => {
+                    const prod = chart.product!;
+                    const dose = prod.doses?.find((d) => d.id === selectedOrder.doseId);
+                    return (
+                      <div className="flex items-start gap-3">
+                        {prod.image && (
+                          <div className="shrink-0 bg-gray-50 rounded-xl p-1.5">
+                            <Image src={prod.image} alt={prod.name} width={28} height={44} className="object-contain" style={{ maxHeight: "44px", width: "auto" }} />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-gray-900">{prod.name}</p>
+                          {dose && (
+                            <>
+                              <p className="text-sm text-gray-600">{dose.label}{dose.strength ? ` - ${dose.strength}` : ""}</p>
+                              <p className="text-sm text-forest-800 font-semibold">{dose.patientDescription ?? ""}</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
             {answers.length > 0 && (
               <Card>
                 <CardContent className="p-5 sm:p-6">
