@@ -175,10 +175,21 @@ export async function proxy(req: NextRequest) {
 
   // ── Admin dashboard protection ─────────────────────────────────────────────
   if (path.startsWith("/admin") && !(await checkAdminAuth(req))) {
-    // Redirect to a simple login page (or return 401 for API calls)
     const loginUrl = new URL("/login/admin", req.url);
     loginUrl.searchParams.set("redirect", path);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // ── Provider dashboard protection ──────────────────────────────────────────
+  if (path.startsWith("/provider")) {
+    const token = req.cookies.get(STAFF_SESSION_COOKIE)?.value;
+    const isProvider = await verifyStaffSessionCookieForProxy(token, "provider");
+    const isAdmin = await verifyStaffSessionCookieForProxy(token, "admin");
+    if (!isProvider && !isAdmin) {
+      const loginUrl = new URL("/login/provider", req.url);
+      loginUrl.searchParams.set("redirect", path);
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   // ── Add audit headers for downstream API routes ────────────────────────────
