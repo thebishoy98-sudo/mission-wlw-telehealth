@@ -1,6 +1,6 @@
 import type { ConsentRecord, Patient } from "@/types";
 
-export const CONSENT_VERSION = "tirzepatide-fl-v1";
+export const CONSENT_VERSION = "glp1-fl-v2";
 
 export function patientLegalName(patient: Pick<Patient, "firstName" | "lastName">) {
   return [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
@@ -74,15 +74,15 @@ Informed Consent Instructions: This is an informed consent document to provide w
 Patient Name: ${patientName}
 Date of Birth: ${dob}
 
-I consent to treatment by Mission Weight Loss and Wellness using Tirzepatide (GIP/GLP-1 RA)/Pyridoxine (B6) injections for elective chronic weight management treatment.
+I consent to treatment by Mission Weight Loss and Wellness using compounded GLP-1 receptor agonist medication (which may include Semaglutide, Tirzepatide, Retatrutide, or other GLP-1/GIP/glucagon receptor agonists as prescribed by my licensed provider) for elective chronic weight management treatment.
 
 Treatment benefits will vary by individual, but may include reduced appetite, feeling a sense of fullness for longer durations after eating, delayed gastric emptying, and increased fat-burning mechanisms which may result in weight loss. Additional therapeutic benefits related to weight management may include improved blood sugar levels and reduced risk of adverse cardiovascular events.
 
 Purpose of Treatment and General Information:
 
-What is Tirzepatide Weight Management Treatment: Tirzepatide weight management injections are used for weight loss along with a diet and exercise plan. These injections are delivered beneath the surface of the skin (subcutaneously) for chronic weight management in adults with obesity (BMI >30) or who are overweight (BMI >27) with at least one weight-related condition, including high blood pressure, diabetes type 2, and/or high cholesterol. Tirzepatide mimics both GIP and GLP-1 receptor agonist hormones, which trigger insulin creation, sensation of fullness, and appetite reduction.
+What is GLP-1 Weight Management Treatment: GLP-1 receptor agonist weight management injections are used for weight loss along with a diet and exercise plan. These injections are delivered beneath the surface of the skin (subcutaneously) for chronic weight management in adults with obesity (BMI >30) or who are overweight (BMI >27) with at least one weight-related condition, including high blood pressure, diabetes type 2, and/or high cholesterol. GLP-1 receptor agonists mimic one or more gut hormones (GLP-1, GIP, and/or glucagon) that trigger insulin release, sensation of fullness, and appetite reduction.
 
-What To Expect During Treatment: Your treatment provider will review your health and medication history to ensure you are a good candidate for weight loss injections. You may request nutrition and exercise recommendations to be used along with Tirzepatide injections for chronic weight management. You will be taught how to perform injections at home just below the surface of the skin and will be prescribed a dosage adjusted for your individual needs.
+What To Expect During Treatment: Your treatment provider will review your health and medication history to ensure you are a good candidate for weight loss injections and will select the appropriate medication and starting dose for your individual needs. You may request nutrition and exercise recommendations to be used along with your prescribed injections. You will be taught how to perform injections at home just below the surface of the skin and will be prescribed a dosage adjusted for your individual needs.
 
 Common side effects include nausea, vomiting, diarrhea, indigestion, abdominal pain, constipation, fatigue, and dizziness. Multiple injections will be needed over several months to achieve desired results.
 
@@ -101,15 +101,15 @@ Possible Risks and Side Effects:
 - Fatigue, dizziness, headache, and low blood sugar, especially in patients with type 2 diabetes using insulin or sulfonylureas.
 - Increased heart rate, allergic reaction or hypersensitivity, infection, pancreatitis, gallbladder inflammation or gallstones, gastrointestinal blockage or ileus, dehydration, acute kidney injury, renal impairment, thyroid C-cell tumors, and changes in vision.
 
-This list is not exhaustive of all possible risks associated with Tirzepatide/Pyridoxine weight management treatment, as there are known and unknown side effects and risks associated with any medication or treatment.
+This list is not exhaustive of all possible risks associated with GLP-1 receptor agonist weight management treatment, as there are known and unknown side effects and risks associated with any medication or treatment.
 
-Tirzepatide injections are contraindicated in patients who are pregnant or breastfeeding, have ever had Medullary Thyroid Cancer (MTC), have Multiple Endocrine Neoplasia Syndrome type 2 (MEN 2), or have ever had a serious allergic reaction to Tirzepatide or any ingredients in Tirzepatide, including compound formulations that may include vitamin B12 and/or vitamin B6.
+GLP-1 receptor agonist injections are contraindicated in patients who are pregnant or breastfeeding, have ever had Medullary Thyroid Cancer (MTC), have Multiple Endocrine Neoplasia Syndrome type 2 (MEN 2), or have ever had a serious allergic reaction to any GLP-1 receptor agonist or any of its ingredients, including compound formulations that may include vitamin B12 and/or vitamin B6.
 
 Please tell your treatment provider if you plan to become pregnant, have or have had problems with your pancreas or kidneys, have type 1 diabetes, type 2 diabetes, diabetic retinopathy, take sulfonylureas or insulin, or have depression, mental health issues, and/or suicidal thoughts.
 
 Possible Medication Interactions and/or Reduced Effectiveness:
 
-I understand that certain herbal products, medications, supplements, and minerals may affect the way Tirzepatide works, resulting in reduced efficacy of treatment and/or additional side effects. Tirzepatide slows stomach emptying and can affect absorption of oral medications.
+I understand that certain herbal products, medications, supplements, and minerals may affect the way my prescribed GLP-1 medication works, resulting in reduced efficacy of treatment and/or additional side effects. GLP-1 receptor agonists slow stomach emptying and can affect absorption of oral medications.
 
 Liability Release Related to Adverse Effects:
 
@@ -121,7 +121,7 @@ By acknowledging this Consent Form I attest that my primary residence is within 
 
 Treatment Liability Waiver:
 
-I acknowledge that elective supplementation therapies, including Tirzepatide/Pyridoxine Weight Management Treatment, may be considered medically unnecessary. It may or may not mitigate, alleviate, or cure the condition for which it has been prescribed. Based on the risks and potential benefits of this proposed treatment, I have elected to receive this treatment by providers and staff at Mission Weight Loss and Wellness.
+I acknowledge that elective supplementation therapies, including compounded GLP-1 receptor agonist weight management treatment, may be considered medically unnecessary. It may or may not mitigate, alleviate, or cure the condition for which it has been prescribed. Based on the risks and potential benefits of this proposed treatment, I have elected to receive this treatment by providers and staff at Mission Weight Loss and Wellness.
 
 I understand that I may suspend or terminate my treatment at any time by informing my medical provider. I fully understand and confirm that this treatment may be considered unproven by scientific testing and peer-reviewed publications and therefore may be considered medically unnecessary or not currently indicated.
 
