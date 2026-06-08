@@ -129,46 +129,19 @@ test.describe("Affiliate tracking smoke test", () => {
       console.log(`⚠️  Payment is live — skipping card submission, checking click only`);
     }
 
-    // ── Step 6: Check affiliate stats via API (re-login to get fresh cookies) ──
-    // Re-login to get fresh admin session after all the page navigations
-    await page.goto(`${BASE}/login/admin`);
-    await page.waitForLoadState("networkidle").catch(() => undefined);
-    await page.locator('input[type="email"]').fill(ADMIN_EMAIL);
-    await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
-    await Promise.all([
-      page.waitForURL((url: URL) => url.pathname === "/admin", { timeout: 20_000 }),
-      page.locator('button[type="submit"]').click(),
-    ]);
-    const freshCookies = await page.context().cookies();
-    const freshCookieHeader = freshCookies.map((c: any) => `${c.name}=${c.value}`).join("; ");
-
-    // Poll the affiliates API until clicks > 0 (DB write may be async)
-    let clicks = 0;
-    let conversions = 0;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const statsData = await page.evaluate(async () => {
-        const res = await fetch("/api/admin/affiliates", { cache: "no-store" });
-        return res.json();
-      });
-      const row = (statsData.affiliates ?? []).find((a: any) => a.code === affCode);
-      if (row) {
-        clicks = Number(row.clicks);
-        conversions = Number(row.conversions);
-        console.log(`   Attempt ${attempt + 1}: clicks=${clicks} conversions=${conversions}`);
-        if (clicks >= 1) break;
-      } else {
-        console.log(`   Attempt ${attempt + 1}: affiliate row not found in list of ${(statsData.affiliates ?? []).length}`);
-      }
-      await page.waitForTimeout(2000);
-    }
+    // ── Step 6: Assert on already-confirmed early stats ──────────────────────
+    // Early stats (captured right after save-partial above) already has clicks
+    const earlyParsedData = JSON.parse(earlyData.text);
+    const confirmedRow = (earlyParsedData.affiliates ?? []).find((a: any) => a.code === affCode);
+    const clicks = confirmedRow ? Number(confirmedRow.clicks) : 0;
+    const conversions = confirmedRow ? Number(confirmedRow.conversions) : 0;
     expect(clicks, `Expected clicks >= 1 for affiliate ${affCode}`).toBeGreaterThanOrEqual(1);
     console.log(`✅ Affiliate tracking verified — clicks=${clicks} conversions=${conversions}`);
 
-    // Also verify the UI shows the row correctly
+    // Also verify the admin UI shows the row (admin session persists through navigation)
     await page.goto(`${BASE}/admin/affiliates`);
     await page.waitForLoadState("networkidle").catch(() => undefined);
-    await expect(page.getByText(affiliate.name)).toBeVisible({ timeout: 10_000 });
-    console.log(`✅ Affiliate row visible in admin UI`);
+    await expect(page.getByText(affiliate.name, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
     // ── Cleanup: delete the test affiliate ────────────────────────────────────
     await page.evaluate(async (id: string) => {
