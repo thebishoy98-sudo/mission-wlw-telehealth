@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { FadeUp } from "./FadeUp";
 
 const PRODUCTS = [
@@ -66,6 +67,34 @@ function productCtaUrl(base: string, productId: string) {
 }
 
 export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    const PROMO_EXPIRY_KEY = "promo_expiry_ts";
+    let expiry: number;
+    try {
+      const stored = sessionStorage.getItem(PROMO_EXPIRY_KEY);
+      expiry = stored && Number(stored) > Date.now()
+        ? Number(stored)
+        : Date.now() + 24 * 60 * 60 * 1000;
+      if (!stored || Number(stored) <= Date.now()) {
+        sessionStorage.setItem(PROMO_EXPIRY_KEY, String(expiry));
+      }
+    } catch {
+      expiry = Date.now() + 24 * 60 * 60 * 1000;
+    }
+    const fmt = (ms: number) => {
+      if (ms <= 0) return "00:00:00";
+      const s = Math.floor(ms / 1000);
+      return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60]
+        .map((n) => String(n).padStart(2, "0")).join(":");
+    };
+    const tick = () => setCountdown(fmt(expiry - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <section id="pricing" className="bg-cream-100 py-16 sm:py-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -230,6 +259,13 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
         </div>
 
         <FadeUp className="mt-8 text-center">
+          {countdown && (
+            <div className="inline-flex items-center gap-2 bg-red-50 border border-red-100 text-red-700 text-xs font-semibold px-4 py-2 rounded-full mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Consultation fee waiver expires in{" "}
+              <span className="font-mono">{countdown}</span>
+            </div>
+          )}
           <p className="text-xs text-gray-400 max-w-xl mx-auto leading-relaxed">
             Consultation fee waived for new patients this month. Final medication and dose
             are determined by your licensed provider. All medications are compounded by a

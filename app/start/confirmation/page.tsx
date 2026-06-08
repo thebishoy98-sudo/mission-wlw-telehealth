@@ -21,6 +21,8 @@ export default function Confirmation() {
   const [order, setOrder] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
   const [consentAutomation, setConsentAutomation] = useState<ConsentAutomationStatus | null>(null);
+  const [referralLink, setReferralLink] = useState<string | null>(null);
+  const [referralCopied, setReferralCopied] = useState(false);
 
   useEffect(() => {
     if (orderId && patientId) {
@@ -28,6 +30,18 @@ export default function Confirmation() {
       setPatient(db.patientDb.getById(patientId));
     }
   }, [orderId, patientId]);
+
+  useEffect(() => {
+    if (!patient) return;
+    fetch("/api/intake/referral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firstName: patient.firstName, lastName: patient.lastName, orderId }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (d.link) setReferralLink(d.link); })
+      .catch(() => {});
+  }, [patient, orderId]);
 
   useEffect(() => {
     if (!orderId || !patientId) return;
@@ -104,6 +118,41 @@ export default function Confirmation() {
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Submitted</span>
             <span className="text-gray-700">{new Date(order.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+          </div>
+        </div>
+
+        {/* Referral card */}
+        <div className="bg-gradient-to-br from-forest-50 to-emerald-50 border border-forest-200 rounded-xl p-5 text-left mb-6">
+          <div className="flex items-start gap-3">
+            <span className="text-xl shrink-0">&#127873;</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-900 mb-0.5">Give $50 off, earn $50 credit</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Share your link with a friend. They get $50 off their first order and you get $50 toward your next supply.
+              </p>
+              {referralLink ? (
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={referralLink}
+                    className="flex-1 min-w-0 text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 font-mono text-gray-700 truncate"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(referralLink).then(() => {
+                        setReferralCopied(true);
+                        setTimeout(() => setReferralCopied(false), 2500);
+                      }).catch(() => {});
+                    }}
+                    className="shrink-0 bg-forest-800 text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-forest-700 transition-colors"
+                  >
+                    {referralCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Generating your referral link...</p>
+              )}
+            </div>
           </div>
         </div>
 
