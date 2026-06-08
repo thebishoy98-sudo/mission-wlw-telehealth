@@ -46,16 +46,20 @@ function HeightPicker({ value, onChange }: { value: string; onChange: (v: string
 }
 
 function WeightInput({ value, onChange, placeholder = "e.g. 185" }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const handleChange = (raw: string) => {
+    // Strip everything except digits
+    const digits = raw.replace(/\D/g, "");
+    // Clamp to 3 digits max (700 lbs upper bound)
+    onChange(digits.slice(0, 3));
+  };
   return (
     <div className="relative max-w-xs">
       <input
-        type="number"
-        inputMode="decimal"
-        min={50}
-        max={700}
+        type="text"
+        inputMode="numeric"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         className="w-full px-4 pr-14 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-700 text-sm"
       />
       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium pointer-events-none">lbs</span>
@@ -134,6 +138,11 @@ export default function Questionnaire() {
     if (q.required && !answersRef.current[q.id]?.trim()) {
       setStepError("Please answer this question before continuing.");
       return;
+    }
+    if (q.id === "pq_current_weight" || q.id === "pq_ideal_weight") {
+      const w = parseInt(answersRef.current[q.id] || "", 10);
+      if (isNaN(w) || w < 50) { setStepError("Please enter a valid weight (50 lbs minimum)."); return; }
+      if (w > 700) { setStepError("Please enter a valid weight (700 lbs maximum)."); return; }
     }
     if (step < questions.length - 1) {
       setStep(step + 1);
