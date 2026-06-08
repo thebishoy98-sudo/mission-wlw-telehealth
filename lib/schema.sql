@@ -396,3 +396,17 @@ CREATE TABLE IF NOT EXISTS partial_intakes (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_intakes_phone ON partial_intakes(phone);
 CREATE INDEX IF NOT EXISTS idx_partial_intakes_started_at ON partial_intakes(started_at DESC);
+
+-- ── Affiliates ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS affiliates (
+  id         TEXT PRIMARY KEY,
+  code       TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by TEXT NOT NULL DEFAULT 'admin'
+);
+CREATE INDEX IF NOT EXISTS idx_affiliates_code ON affiliates(code);
+
+-- Track affiliate ref on orders and partial intakes
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT;
+ALTER TABLE partial_intakes ADD COLUMN IF NOT EXISTS ref_code TEXT;
