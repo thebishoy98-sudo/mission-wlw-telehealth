@@ -453,12 +453,12 @@ export default function Payment() {
         {/* Retatrutide upsell nudge */}
         {product && product.id !== "product_retatrutide" && (
           <div className="mt-4 p-4 bg-forest-800 rounded-xl text-white">
-            <p className="text-xs font-bold text-teal-400 uppercase tracking-widest mb-1">Upgrade Available</p>
+            <p className="text-xs font-bold text-red-400 uppercase tracking-widest mb-1">Upgrade Available</p>
             <p className="text-sm font-semibold mb-0.5">Want faster results with Retatrutide?</p>
             <p className="text-xs text-white/60 mb-2.5">Our newest triple-agonist GLP-1 with up to 24% body weight loss in clinical data. From $499 per 8-week supply.</p>
             <button
               type="button"
-              className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-colors"
+              className="text-red-400 hover:text-red-300 text-xs font-semibold transition-colors"
               onClick={() => {
                 fetch("/api/products", { cache: "no-store" })
                   .then((r) => r.json())

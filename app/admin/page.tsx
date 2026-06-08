@@ -314,7 +314,7 @@ function AdminDashboardContent() {
                       <p className="text-2xl font-bold text-forest-800">{p.count}</p>
                       <p className="text-xs text-gray-400">orders</p>
                       {p.revenue > 0 && (
-                        <p className="text-xs text-teal-700 font-semibold mt-0.5">{formatCurrency(p.revenue)}</p>
+                        <p className="text-xs text-red-700 font-semibold mt-0.5">{formatCurrency(p.revenue)}</p>
                       )}
                     </div>
                   </CardContent>
