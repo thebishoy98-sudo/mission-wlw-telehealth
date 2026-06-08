@@ -101,7 +101,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
         {/* Retatrutide launch banner */}
         <FadeUp className="mb-10">
           <div
-            className="relative rounded-2xl overflow-hidden px-6 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row items-center gap-4"
+            className="relative rounded-2xl overflow-hidden px-5 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row sm:items-center gap-4"
             style={{ background: "linear-gradient(135deg, #011a38 0%, #022859 60%, #01152e 100%)" }}
           >
             <div className="absolute top-0 right-0 w-64 h-full bg-red-400/5 blur-3xl pointer-events-none" />
@@ -125,14 +125,14 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                 <p className="text-white font-bold text-sm sm:text-base">
                   Retatrutide - Pharmacy-Grade, First to Market
                 </p>
-                <p className="text-white/45 text-xs mt-0.5 truncate">
+                <p className="text-white/45 text-xs mt-0.5 leading-relaxed">
                   Triple-agonist GLP-1 · Licensed 503B compounding pharmacy · Ships today
                 </p>
               </div>
             </div>
             <Link
               href={productCtaUrl(ctaUrl, "product_retatrutide")}
-              className="shrink-0 bg-red-400 hover:bg-red-300 text-forest-900 font-bold px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-[.98] shadow-lg shadow-red-400/15 whitespace-nowrap"
+              className="w-full sm:w-auto text-center shrink-0 bg-red-400 hover:bg-red-300 text-forest-900 font-bold px-5 py-2.5 rounded-full text-sm transition-all active:scale-[.98] shadow-lg shadow-red-400/15"
             >
               Order Now
             </Link>
