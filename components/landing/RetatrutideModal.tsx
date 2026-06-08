@@ -112,7 +112,7 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href={ctaUrl}
+              href={ctaUrl.includes("?") ? `${ctaUrl}&productId=product_retatrutide` : `${ctaUrl}?productId=product_retatrutide`}
               onClick={close}
               className="flex-1 text-center bg-red-400 hover:bg-red-300 text-forest-900 font-bold py-3.5 rounded-full text-sm transition-all active:scale-[.98] shadow-lg shadow-red-400/20"
             >
