@@ -98,7 +98,7 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
           <div className="grid grid-cols-2 gap-2 mb-7">
             {[
               "Triple GLP-1 / GIP / Glucagon",
-              "Licensed 503B Pharmacy",
+              "US-Based Pharmacy",
               "Provider prescription included",
               "Free overnight shipping",
             ].map((f) => (
