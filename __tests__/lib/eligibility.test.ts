@@ -130,6 +130,38 @@ describe("checkEligibility", () => {
 
     expect(result.eligible).toBe(false);
   });
+
+  it("disqualifies recent gastric bypass answers when configured as a blocker", () => {
+    const gastricQuestions: Question[] = [
+      makeQuestion(
+        "pq_gastric_bypass",
+        "Have you had gastric bypass surgery within the past 6 months?",
+        true,
+        "Yes"
+      ),
+    ];
+
+    const result = checkEligibility([makeAnswer("pq_gastric_bypass", "Yes")], gastricQuestions);
+
+    expect(result).toMatchObject({
+      eligible: false,
+      disqualifyingQuestion: "Have you had gastric bypass surgery within the past 6 months?",
+    });
+  });
+
+  it("does not disqualify requested-medication allergy answers unless the question is configured as disqualifying", () => {
+    const allergyQuestions: Question[] = [
+      makeQuestion(
+        "pq_medication_allergies",
+        "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
+        true
+      ),
+    ];
+
+    const result = checkEligibility([makeAnswer("pq_medication_allergies", "Yes")], allergyQuestions);
+
+    expect(result.eligible).toBe(true);
+  });
 });
 
 describe("validateCompleteness", () => {

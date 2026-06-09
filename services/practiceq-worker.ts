@@ -2673,8 +2673,11 @@ function buildRequiredPracticeQRawAnswerChecks(context: {
     ["pq_current_weight", "What is your current body weight?", "220"],
     ["pq_ideal_weight", "What is your ideal body weight?", "180"],
     ["pq_conditions", "Select any that apply to you?", "None apply to me"],
-    ["pq_surgical_history", "Any surgical history?", "No"],
-    ["pq_medication_allergies", "Any Allergies to medication?", "No"],
+    [
+      "pq_medication_allergies",
+      "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
+      "No",
+    ],
     ["pq_intake_purpose", "This intake form is for....", "Tirzepatide"],
   ] as const;
 
@@ -2690,8 +2693,12 @@ function normalizeExpectedPracticeQRawAnswer(questionText: string, answer: strin
   const normalizedAnswer = normalizePracticeQLookup(answer);
   if (normalizedQuestion.includes("this intake form is for") && normalizedAnswer.includes("weight loss")) return "Tirzepatide";
   if (normalizedQuestion.includes("select any") && isNegativeRawPracticeQAnswer(answer)) return "None apply to me";
-  if (normalizedQuestion.includes("surgical history") && isNegativeRawPracticeQAnswer(answer)) return "No";
-  if (normalizedQuestion.includes("allergies to medication") && isNegativeRawPracticeQAnswer(answer)) return "No";
+  if (
+    (normalizedQuestion.includes("known allergy") || normalizedQuestion.includes("allergies to medication")) &&
+    isNegativeRawPracticeQAnswer(answer)
+  ) {
+    return "No";
+  }
   return answer;
 }
 

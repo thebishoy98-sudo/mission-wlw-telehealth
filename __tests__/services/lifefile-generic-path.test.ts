@@ -94,6 +94,33 @@ describe("lifefile generic path — Retatrutide", () => {
     expect(drug.daysSupply).toBe(56);
   });
 
+  it.each([
+    [
+      "retatrutide_16mg_8_week",
+      "16mg/1mL vial",
+      "Take 12.5 units (2mg) subcutaneous injection once a week for eight weeks.",
+    ],
+    [
+      "retatrutide_32mg_8_week",
+      "32mg/2mL vial",
+      "Take 25 units (4mg) subcutaneous injection once a week for eight weeks.",
+    ],
+    [
+      "retatrutide_48mg_8_week",
+      "48mg/3mL vial",
+      "Take 37.5 units (6mg) subcutaneous injection once a week for eight weeks.",
+    ],
+  ])("sends exact RETA vial strength and SIG for %s", async (doseId, expectedStrength, expectedDirections) => {
+    seedWith(retatrutideProduct, doseId);
+    const order = db.orderDb.getById("o_gen")!;
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+    const drug = (pharmacyOrder.payload.order.rxs as Record<string, unknown>[])[0];
+
+    expect(drug.drugStrength).toBe(expectedStrength);
+    expect(drug.quantity).toBe(1);
+    expect(drug.directions).toBe(expectedDirections);
+  });
+
   it("saves pharmacy order and integration log", async () => {
     const order = db.orderDb.getById("o_gen")!;
     await lifefile.createPharmacyOrder(order);

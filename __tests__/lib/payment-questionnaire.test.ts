@@ -13,7 +13,7 @@ const questions: Question[] = [
   {
     id: "allergies",
     category: "medical",
-    text: "Any Allergies to medication?",
+    text: "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
     type: "textarea",
     required: true,
     displayOrder: 2,
@@ -25,7 +25,10 @@ describe("validatePaymentQuestionnaire", () => {
     const result = validatePaymentQuestionnaire([], questions);
 
     expect(result.complete).toBe(false);
-    expect(result.missingQuestions).toEqual(["What is your height?", "Any Allergies to medication?"]);
+    expect(result.missingQuestions).toEqual([
+      "What is your height?",
+      "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
+    ]);
   });
 
   it("accepts payment when required questionnaire answers are present", () => {

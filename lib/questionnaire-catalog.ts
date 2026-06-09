@@ -2,6 +2,12 @@ import { seedQuestions } from "@/data/seed-data";
 import type { Question } from "@/types";
 
 const requiredPracticeQQuestionTexts = new Set(seedQuestions.map((question) => normalizeQuestionText(question.text)));
+const requiredPracticeQQuestionIds = new Set(seedQuestions.map((question) => question.id));
+const retiredPracticeQQuestionIds = new Set(["pq_surgical_history"]);
+const retiredPracticeQQuestionTexts = new Set([
+  normalizeQuestionText("Any surgical history?"),
+  normalizeQuestionText("Any Allergies to medication?"),
+]);
 
 export function ensurePracticeQRequiredQuestions(questions: Question[]): Question[] {
   const byText = new Map(questions.map((question) => [normalizeQuestionText(question.text), question]));
@@ -10,7 +16,15 @@ export function ensurePracticeQRequiredQuestions(questions: Question[]): Questio
 
   for (const question of questions) {
     const normalizedText = normalizeQuestionText(question.text);
-    if (mergedTexts.has(normalizedText) || requiredPracticeQQuestionTexts.has(normalizedText)) continue;
+    if (
+      mergedTexts.has(normalizedText) ||
+      requiredPracticeQQuestionTexts.has(normalizedText) ||
+      requiredPracticeQQuestionIds.has(question.id) ||
+      retiredPracticeQQuestionIds.has(question.id) ||
+      retiredPracticeQQuestionTexts.has(normalizedText)
+    ) {
+      continue;
+    }
     merged.push(question);
     mergedTexts.add(normalizedText);
   }

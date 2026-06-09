@@ -311,22 +311,13 @@ export const seedQuestions: Types.Question[] = [
     disqualifying: "I'm Pregnant, I'm Breastfeeding, Allergic to Tirzepatide, History of Multiple Endocrine Neoplasia Syndrome Type 2 (MEN 2), History of Medullary Thyroid Cancer",
   },
   {
-    id: "pq_surgical_history",
-    category: "screening",
-    text: "Any surgical history?",
+    id: "pq_medication_allergies",
+    category: "allergies",
+    text: "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
     type: "radio",
     options: ["No", "Yes"],
     required: true,
     displayOrder: 5,
-  },
-  {
-    id: "pq_medication_allergies",
-    category: "allergies",
-    text: "Any Allergies to medication?",
-    type: "radio",
-    options: ["No", "Yes"],
-    required: true,
-    displayOrder: 6,
   },
   {
     id: "pq_intake_purpose",
@@ -335,7 +326,7 @@ export const seedQuestions: Types.Question[] = [
     type: "radio",
     options: ["Weight loss", "Medication refill", "Dose adjustment", "General consultation"],
     required: true,
-    displayOrder: 7,
+    displayOrder: 6,
   },
   {
     id: "pq_gastric_bypass",
@@ -344,8 +335,8 @@ export const seedQuestions: Types.Question[] = [
     type: "radio",
     options: ["Yes", "No"],
     required: true,
-    displayOrder: 8,
-    warnIf: "Yes",
+    displayOrder: 7,
+    disqualifying: "Yes",
   },
 ];
 

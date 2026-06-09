@@ -74,8 +74,7 @@ function practiceQFallbackPrompt(questionId: string): string | null {
     pq_current_weight: "What is your current body weight?",
     pq_ideal_weight: "What is your ideal body weight?",
     pq_conditions: "Medical conditions",
-    pq_surgical_history: "Surgical history",
-    pq_medication_allergies: "Medication allergies",
+    pq_medication_allergies: "Known allergy to requested medication or ingredients",
     pq_intake_purpose: "Purpose of visit",
   };
   return prompts[questionId] ?? null;
