@@ -306,11 +306,11 @@ export default function Questionnaire() {
       </div>
 
       {/* Nav */}
-      <div className="flex gap-3">
-        <Button variant="outline" type="button" onClick={handleBack} className="w-28 shrink-0">
+      <div className="flex w-full min-w-0 gap-3">
+        <Button variant="outline" type="button" onClick={handleBack} className="w-24 shrink-0 sm:w-28">
           Back
         </Button>
-        <Button fullWidth type="button" onClick={handleNext}>
+        <Button type="button" onClick={handleNext} className="min-w-0 flex-1">
           {isLast ? "Continue" : "Next →"}
         </Button>
       </div>
