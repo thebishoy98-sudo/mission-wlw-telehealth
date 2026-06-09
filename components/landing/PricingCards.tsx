@@ -126,7 +126,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   Retatrutide - Pharmacy-Grade, First to Market
                 </p>
                 <p className="text-white/45 text-xs mt-0.5 leading-relaxed">
-                  Triple-agonist GLP-1 · Licensed 503B compounding pharmacy · Ships today
+                  Triple-agonist GLP-1 · US-based pharmacy · Ships today
                 </p>
               </div>
             </div>

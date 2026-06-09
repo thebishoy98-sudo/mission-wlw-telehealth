@@ -89,9 +89,9 @@ export function RetatrutideModal({ ctaUrl }: { ctaUrl: string }) {
             <span className="text-red-400">Available Today</span>
           </h2>
           <p className="text-center text-white/55 text-sm leading-relaxed mb-6 max-w-sm mx-auto">
-            Mission WLW is one of the first telehealth platforms to offer legitimate 503B
-            compounded Retatrutide - the next-generation triple-agonist GLP-1 that outperforms
-            every predecessor. Order yours today.
+            Mission WLW is one of the first telehealth platforms to offer Retatrutide through a
+            US-based pharmacy - the next-generation triple-agonist GLP-1 that outperforms every
+            predecessor. Order yours today.
           </p>
 
           {/* Features */}
