@@ -75,7 +75,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {[
                   "HIPAA Compliant",
-                  "Licensed 503B Pharmacy",
+                  "US-Based Pharmacy",
                   "Board-Certified Providers",
                   "Free Overnight Shipping",
                 ].map((badge) => (
@@ -137,7 +137,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                     </div>
                     <div>
                       <div className="text-sm font-semibold">3 GLP-1 Programs</div>
-                      <div className="text-[11px] text-white/55">Licensed 503B Pharmacy</div>
+                      <div className="text-[11px] text-white/55">US-Based Pharmacy</div>
                       <div className="text-[11px] text-rose-300 mt-0.5">From $149 / month</div>
                     </div>
                   </div>
