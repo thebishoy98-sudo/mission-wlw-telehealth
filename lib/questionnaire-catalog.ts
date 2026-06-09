@@ -10,7 +10,11 @@ const retiredPracticeQQuestionTexts = new Set([
 ]);
 
 export function ensurePracticeQRequiredQuestions(questions: Question[]): Question[] {
-  const byText = new Map(questions.map((question) => [normalizeQuestionText(question.text), question]));
+  const byText = new Map(
+    questions
+      .filter((question) => !requiredPracticeQQuestionIds.has(question.id))
+      .map((question) => [normalizeQuestionText(question.text), question])
+  );
   const merged: Question[] = seedQuestions.map((seedQuestion) => byText.get(normalizeQuestionText(seedQuestion.text)) ?? seedQuestion);
   const mergedTexts = new Set(merged.map((question) => normalizeQuestionText(question.text)));
 

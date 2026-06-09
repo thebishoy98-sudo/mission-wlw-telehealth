@@ -76,4 +76,28 @@ describe("ensurePracticeQRequiredQuestions", () => {
       "Do you have a known allergy to the medication you're requesting or any of its ingredients?"
     );
   });
+
+  it("uses canonical seed metadata when an existing required question row is stale", () => {
+    const dbQuestions: Question[] = [
+      {
+        id: "pq_gastric_bypass",
+        category: "medical_history",
+        text: "Have you had gastric bypass surgery within the past 6 months?",
+        type: "radio",
+        options: ["Yes", "No"],
+        required: true,
+        displayOrder: 8,
+        warnIf: "Yes",
+      },
+    ];
+
+    const merged = ensurePracticeQRequiredQuestions(dbQuestions);
+    const gastricBypass = merged.find((question) => question.id === "pq_gastric_bypass");
+
+    expect(gastricBypass).toMatchObject({
+      displayOrder: 7,
+      disqualifying: "Yes",
+    });
+    expect(gastricBypass?.warnIf).toBeUndefined();
+  });
 });
