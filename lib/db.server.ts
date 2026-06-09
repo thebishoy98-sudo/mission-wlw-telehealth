@@ -1240,4 +1240,88 @@ export const adminMaintenanceDb = {
       orders: orderIds.length,
     };
   },
+
+  async deletePortalDataExceptLatestRetatrutideOrder() {
+    if (!isDbAvailable()) {
+      return { target: null, deleted: {} };
+    }
+
+    const targetRows = await sql`
+      SELECT o.id, o.patient_id, o.status, o.pharmacy_status, o.created_at,
+             po.life_file_order_id, po.status AS pharmacy_order_status
+      FROM orders o
+      LEFT JOIN products p ON p.id = o.product_id
+      LEFT JOIN pharmacy_orders po ON po.order_id = o.id
+      WHERE LOWER(COALESCE(p.name, '')) LIKE '%reta%'
+         OR LOWER(COALESCE(p.slug, '')) LIKE '%reta%'
+         OR LOWER(COALESCE(o.product_id, '')) LIKE '%reta%'
+      ORDER BY o.created_at DESC, po.submitted_at DESC NULLS LAST
+      LIMIT 1
+    `;
+    const target = targetRows.rows[0];
+    if (!target) {
+      return { target: null, deleted: {} };
+    }
+
+    const targetOrderId = String(target.id);
+    const targetPatientId = String(target.patient_id);
+    const client = new Client({
+      connectionString: process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+    await client.connect();
+    const deleteCounts: Record<string, number> = {};
+
+    const deleteIfExists = async (table: string, statement: string, values: unknown[] = []) => {
+      const exists = await client.query("SELECT to_regclass($1) AS name", [`public.${table}`]);
+      if (!exists.rows[0]?.name) {
+        deleteCounts[table] = 0;
+        return;
+      }
+      const result = await client.query(statement, values);
+      deleteCounts[table] = result.rowCount ?? 0;
+    };
+
+    try {
+      await client.query("BEGIN");
+      await deleteIfExists("ai_conversations", "DELETE FROM ai_conversations WHERE COALESCE(order_id, '') <> $1", [targetOrderId]);
+      await deleteIfExists("spruce_messages", "DELETE FROM spruce_messages WHERE COALESCE(order_id, '') <> $1", [targetOrderId]);
+      await deleteIfExists("integration_logs", "DELETE FROM integration_logs WHERE COALESCE(order_id, '') <> $1", [targetOrderId]);
+      await deleteIfExists("practiceq_automation_jobs", "DELETE FROM practiceq_automation_jobs WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("practiceq_packets", "DELETE FROM practiceq_packets WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("provider_reviews", "DELETE FROM provider_reviews WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("pharmacy_orders", "DELETE FROM pharmacy_orders WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("quickbooks_records", "DELETE FROM quickbooks_records WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("uploads", "DELETE FROM uploads WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("consent_records", "DELETE FROM consent_records WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("questionnaire_answers", "DELETE FROM questionnaire_answers WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("payments", "DELETE FROM payments WHERE order_id <> $1", [targetOrderId]);
+      await deleteIfExists("orders", "DELETE FROM orders WHERE id <> $1", [targetOrderId]);
+      await deleteIfExists("patient_login_otps", "DELETE FROM patient_login_otps WHERE patient_id <> $1", [targetPatientId]);
+      await deleteIfExists("patients", "DELETE FROM patients WHERE id <> $1", [targetPatientId]);
+      await deleteIfExists("partial_intakes", "DELETE FROM partial_intakes");
+
+      await client.query(
+        "UPDATE orders SET status = 'sent_to_pharmacy', pharmacy_status = 'submitted', updated_at = NOW() WHERE id = $1",
+        [targetOrderId]
+      );
+      await client.query("UPDATE pharmacy_orders SET status = 'submitted' WHERE order_id = $1", [targetOrderId]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      await client.end();
+    }
+
+    return {
+      target: {
+        orderId: targetOrderId,
+        orderSuffix: String(targetOrderId).slice(-8),
+        patientId: targetPatientId,
+        lifeFileOrderId: target.life_file_order_id ?? null,
+      },
+      deleted: deleteCounts,
+    };
+  },
 };

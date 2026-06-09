@@ -7,6 +7,11 @@ export async function POST(req: Request) {
   if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));
+  if (body.confirm === "retain-latest-retatrutide-order") {
+    const deleted = await dbServer.adminMaintenanceDb.deletePortalDataExceptLatestRetatrutideOrder();
+    return NextResponse.json({ success: true, deleted });
+  }
+
   if (body.confirm !== "delete-smoke-test-data") {
     return NextResponse.json({ error: "Confirmation is required." }, { status: 400 });
   }
