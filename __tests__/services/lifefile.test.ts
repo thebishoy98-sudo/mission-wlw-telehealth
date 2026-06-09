@@ -166,6 +166,7 @@ describe("lifefile.createPharmacyOrder", () => {
       email: "service@missionwlw.com",
     });
     expect(body.order.shipping.service).toBe(6230);
+    expect(body.order.billing?.payorType).not.toBe("pat");
     expect(body.order.rxs[0].lfProductID).toBe(305492221);
 
     process.env = original;

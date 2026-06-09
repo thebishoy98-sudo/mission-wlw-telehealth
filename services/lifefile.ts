@@ -393,9 +393,6 @@ export const createPharmacyOrder = async (
         country: clip(ship.country, 2, "US"),
         service: c.shippingServiceId || DEFAULT_SHIPPING_SERVICE_ID,
       },
-      billing: {
-        payorType: "pat" as const,
-      },
       rxs,
     },
   };
