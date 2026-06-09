@@ -1177,7 +1177,12 @@ function normalizePracticeQAnswerForQuestion(questionText: string, answer: strin
     return "Tirzepatide";
   }
   if (normalizedQuestion.includes("surgical history") && normalizedAnswer === "no") return "No";
-  if (normalizedQuestion.includes("allergies to medication") && normalizedAnswer === "no") return "No";
+  if (
+    (normalizedQuestion.includes("known allergy") || normalizedQuestion.includes("allergies to medication")) &&
+    normalizedAnswer === "no"
+  ) {
+    return "No";
+  }
   if (normalizedQuestion.includes("select any") && isNegativePracticeQAnswer(answer)) return "None apply to me";
   return answer;
 }

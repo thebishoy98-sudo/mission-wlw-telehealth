@@ -80,6 +80,7 @@ describe("PracticeQ remote worker resilience", () => {
     expect(workerSource).toContain("This intake form is for....");
     expect(workerSource).toContain("Tirzepatide");
     expect(workerSource).toContain("known allergy to the medication you're requesting");
+    expect(workerSource).toContain("Any Allergies to medication?");
   });
 
   it("fills remaining IntakeQ vitals when label matching only fills part of the page", () => {

@@ -2653,7 +2653,7 @@ function missingRequiredPracticeQRawAnswers(
   if (!checks.length) return [];
 
   return checks.flatMap((check) => {
-    const question = findPracticeQRawQuestion(intake, check.questionText);
+    const question = findPracticeQRawQuestion(intake, [check.questionText, ...check.aliases]);
     if (!question) return [`${check.questionText} expected ${check.expected}, but the PracticeQ question was not found`];
     const actual = readPracticeQRawQuestionAnswer(question);
     return practiceQRawAnswerMatches(actual, check.expected)
@@ -2684,7 +2684,10 @@ function buildRequiredPracticeQRawAnswerChecks(context: {
   return required.map(([questionId, fallbackText, fallbackExpected]) => {
     const questionText = questionById.get(questionId)?.text ?? fallbackText;
     const expected = normalizeExpectedPracticeQRawAnswer(questionText, answerByQuestionId.get(questionId) || fallbackExpected);
-    return { questionText, expected };
+    const aliases = questionId === "pq_medication_allergies"
+      ? ["Any Allergies to medication?", "Medication allergies"]
+      : [];
+    return { questionText, expected, aliases };
   });
 }
 
@@ -2702,13 +2705,15 @@ function normalizeExpectedPracticeQRawAnswer(questionText: string, answer: strin
   return answer;
 }
 
-function findPracticeQRawQuestion(intake: any, questionText: string) {
+function findPracticeQRawQuestion(intake: any, questionTexts: string[]) {
   const questions = Array.isArray(intake?.Questions) ? intake.Questions : [];
-  const expected = normalizePracticeQLookup(questionText);
+  const expectedTexts = questionTexts.map(normalizePracticeQLookup).filter(Boolean);
   return questions.find((question: any) => {
     const actual = normalizePracticeQLookup(String(question?.Text ?? question?.QuestionText ?? question?.Question ?? question?.Label ?? ""));
     if (!actual) return false;
-    return actual === expected || actual.includes(expected) || expected.includes(actual);
+    return expectedTexts.some((expected) =>
+      actual === expected || actual.includes(expected) || expected.includes(actual)
+    );
   });
 }
 
