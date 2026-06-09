@@ -40,15 +40,19 @@ const identityVideoConstraints: MediaStreamConstraints = {
     height: { ideal: 480, max: 640 },
     frameRate: { ideal: 15, max: 20 },
   },
-  audio: false,
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+  },
 };
 
 const mediaRecorderOptions = (): MediaRecorderOptions => {
-  const candidates = ["video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const candidates = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
   const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
   return {
     ...(mimeType ? { mimeType } : {}),
     videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+    audioBitsPerSecond: 24_000,
   };
 };
 
@@ -205,7 +209,7 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
       }, 1000);
     } catch {
       setRecording(false);
-      setCaptureError("Camera access was blocked. Please allow camera access and try again.");
+      setCaptureError("Camera or microphone access was blocked. Please allow access and try again.");
     }
   };
 
