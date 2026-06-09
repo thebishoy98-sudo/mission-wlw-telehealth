@@ -129,10 +129,10 @@ export function findPracticeQChoiceForLabel(
   if (isConsentPrompt(label) && fillPlan.some((item) => isConsentPrompt(item.prompt))) return true;
 
   const normalizedContext = normalizePrompt(questionContext);
-  const answer = fillPlan.find((item) => {
+  const answer = (findPracticeQPromptAlias(normalizedContext, fillPlan) ?? fillPlan.find((item) => {
     const prompt = normalizePrompt(item.prompt);
     return prompt.length > 2 && (normalizedContext.includes(prompt) || prompt.includes(normalizedContext));
-  })?.value;
+  }))?.value;
 
   return answer ? answerMatchesPracticeQChoice(answer, label) : false;
 }

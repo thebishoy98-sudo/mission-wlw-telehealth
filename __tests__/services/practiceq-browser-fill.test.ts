@@ -84,6 +84,7 @@ describe("PracticeQ browser fill plan", () => {
     ]);
 
     expect(findPracticeQAnswerForPrompt("Any Allergies to medication?", plan)).toBe("No");
+    expect(findPracticeQChoiceForLabel("No", "Any Allergies to medication?", plan)).toBe(true);
   });
 
   it("formats browser date input values for PracticeQ's MM/DD/YYYY field", () => {
