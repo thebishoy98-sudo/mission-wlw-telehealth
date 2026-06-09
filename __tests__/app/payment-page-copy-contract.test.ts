@@ -26,4 +26,11 @@ describe("payment page launch copy", () => {
     expect(source).toContain('fetch("/api/products", { cache: "no-store" })');
     expect(source).toContain("setProduct(found ?? null)");
   });
+
+  it("keeps discount codes optional during checkout", () => {
+    expect(source).toContain("Have a discount code?");
+    expect(source).toContain("Optional discount code");
+    expect(source).toContain("discountCode: appliedCode || undefined");
+    expect(source).not.toContain("Discount code is required");
+  });
 });

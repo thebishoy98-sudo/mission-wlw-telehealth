@@ -98,6 +98,7 @@ export default function Payment() {
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const [showDiscountCode, setShowDiscountCode] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [appliedCode, setAppliedCode] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -195,6 +196,7 @@ export default function Payment() {
     if (!productReady) return;
     if (!paymentsDisabled && (digits.length < 15 || !cardExpiry || cardCvc.length < 3)) return;
     setPaymentError("");
+    setDiscountError("");
     setProcessing(true);
 
     setProcessingStep(paymentsDisabled ? "Submitting order..." : "Securing payment details...");
@@ -457,12 +459,12 @@ export default function Payment() {
             </span>
             <button type="button" onClick={handleRemoveCode} className="text-green-600 hover:text-green-800 text-xs font-medium">Remove</button>
           </div>
-        ) : (
+        ) : showDiscountCode ? (
           <div className="mt-4">
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="Discount code"
+                placeholder="Optional discount code"
                 value={discountInput}
                 onChange={(e) => { setDiscountInput(e.target.value.toUpperCase()); setDiscountError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleApplyCode())}
@@ -478,6 +480,15 @@ export default function Payment() {
             </div>
             {discountError && <p className="mt-1.5 text-xs text-red-500">{discountError}</p>}
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowDiscountCode(true)}
+            className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 hover:text-forest-900"
+          >
+            <Tag className="w-3.5 h-3.5" />
+            Have a discount code?
+          </button>
         )}
 
         {/* Retatrutide upsell nudge */}
