@@ -63,6 +63,29 @@ describe("PracticeQ browser fill plan", () => {
     expect(findPracticeQAnswerForPrompt("Unknown prompt", plan)).toBeNull();
   });
 
+  it("maps the legacy PracticeQ medication allergy prompt to the updated Mission allergy question", () => {
+    const plan = buildPracticeQFillPlan(patient, [
+      {
+        id: "a_allergy",
+        orderId: "order_1",
+        questionId: "pq_medication_allergies",
+        answer: "No",
+        createdAt: "2026-05-27T00:00:00.000Z",
+      },
+    ], [
+      {
+        id: "pq_medication_allergies",
+        category: "allergies",
+        text: "Do you have a known allergy to the medication you're requesting or any of its ingredients?",
+        type: "radio",
+        required: true,
+        displayOrder: 5,
+      },
+    ]);
+
+    expect(findPracticeQAnswerForPrompt("Any Allergies to medication?", plan)).toBe("No");
+  });
+
   it("formats browser date input values for PracticeQ's MM/DD/YYYY field", () => {
     expect(formatPracticeQDate("1998-04-14")).toBe("04/14/1998");
     expect(formatPracticeQDate("4/14/1998")).toBe("04/14/1998");

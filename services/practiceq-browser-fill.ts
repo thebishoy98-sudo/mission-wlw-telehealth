@@ -88,6 +88,9 @@ export function findPracticeQAnswerForPrompt(
   const exact = fillPlan.find((item) => normalizePrompt(item.prompt) === normalizedPrompt);
   if (exact) return exact.value;
 
+  const alias = findPracticeQPromptAlias(normalizedPrompt, fillPlan);
+  if (alias) return alias.value;
+
   const partial = fillPlan
     .map((item) => ({ item, candidate: normalizePrompt(item.prompt) }))
     .filter(({ candidate }) =>
@@ -95,6 +98,15 @@ export function findPracticeQAnswerForPrompt(
     )
     .sort((a, b) => b.candidate.length - a.candidate.length)[0];
   return partial?.item.value ?? null;
+}
+
+function findPracticeQPromptAlias(normalizedPrompt: string, fillPlan: PracticeQFillItem[]) {
+  if (!normalizedPrompt.includes("allergies to medication")) return null;
+
+  return fillPlan.find((item) => {
+    const prompt = normalizePrompt(item.prompt);
+    return prompt.includes("known allergy") && prompt.includes("medication");
+  }) ?? null;
 }
 
 export function requiresUnhandledPatientConsent(text: string, fillPlan: PracticeQFillItem[]): boolean {
