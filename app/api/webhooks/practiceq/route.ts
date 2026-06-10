@@ -21,6 +21,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
 import * as pharmacy from "@/services/pharmacy";
+import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
 import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
 import { getIdentityGate } from "@/lib/identity";
@@ -151,6 +152,9 @@ export async function POST(req: NextRequest) {
                 const pharmacyUpdate = { status: "sent_to_pharmacy" as const, pharmacyStatus: "submitted" as const };
                 db.orderDb.update(orderId, pharmacyUpdate);
                 await dbServer.orderDb.update(orderId, pharmacyUpdate).catch(() => {});
+                if (patient) {
+                  await sendOrderSentToPharmacyMessage(patient, orderId).catch(() => {});
+                }
               } catch (error) {
                 const errorMessage = (error as Error).message;
                 const pharmacyErrorUpdate = { status: "approved" as const, pharmacyStatus: "error" as const };

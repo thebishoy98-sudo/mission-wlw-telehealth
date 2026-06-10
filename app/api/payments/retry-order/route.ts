@@ -19,6 +19,7 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import * as quickbooks from "@/services/quickbooks";
 import * as pharmacy from "@/services/pharmacy";
 import * as spruceServer from "@/services/spruce.server";
+import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
 import { sendAdminNotification } from "@/services/admin-notifications";
 import {
   queuePracticeQAutomationForOrder,
@@ -335,6 +336,7 @@ export async function POST(req: NextRequest) {
         });
         await dbServer.pharmacyOrderDb.create(pharmacyOrder).catch(() => {});
         await dbServer.orderDb.update(orderId, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" }).catch(() => {});
+        await sendOrderSentToPharmacyMessage(patient, orderId).catch(() => {});
         logPhiDisclosure(patient.id, orderId, pharmacyProvider, auditCtx.actor);
       } catch (e) {
         errors.push(`Pharmacy: ${(e as Error).message}`);

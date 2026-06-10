@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as pharmacy from "@/services/pharmacy";
-import * as spruceServer from "@/services/spruce.server";
+import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
 import { getIdentityGate } from "@/lib/identity";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
 import { preferCompletePatientForIntegrations, resolvePatient } from "@/lib/patient-resolver";
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
       db.orderDb.update(orderId, update);
       await dbServer.orderDb.update(orderId, update).catch(() => {});
       if (patient) {
-        await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId }).catch(() => {});
+        await sendOrderSentToPharmacyMessage(patient, orderId).catch(() => {});
       }
       logPhiDisclosure(order.patientId, orderId, pharmacyIntegration, auditCtx.actor);
     } catch (error) {

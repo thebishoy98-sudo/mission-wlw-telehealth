@@ -5,7 +5,7 @@ import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { logPhiAccess, logPhiDisclosure } from "@/lib/phi-audit";
 import * as pharmacy from "@/services/pharmacy";
 import * as practiceq from "@/services/practiceq";
-import * as spruceServer from "@/services/spruce.server";
+import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
 
 type CompletionResult =
   | { status: "missing_job" | "missing_order" | "waiting_for_identity" | "already_dispatched" }
@@ -226,7 +226,7 @@ export async function completePracticeQSession(jobId: string): Promise<Completio
         environment: process.env.LIFEFILE_ENVIRONMENT ?? "",
       },
     }).catch(() => null);
-    await spruceServer.sendMessage(patient, "order_sent_to_pharmacy", { orderId: dispatchOrder.id }).catch(() => null);
+    await sendOrderSentToPharmacyMessage(patient, dispatchOrder.id).catch(() => null);
     logPhiDisclosure(dispatchOrder.patientId, dispatchOrder.id, provider, "practiceq-remote-worker");
     return { status: "sent_to_pharmacy", pharmacyOrderId: pharmacyOrder.id };
   } catch (error) {
