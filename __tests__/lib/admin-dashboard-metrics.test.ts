@@ -136,4 +136,29 @@ describe("admin dashboard metrics", () => {
       { count: 1, name: "Retatrutide", revenue: 325 },
     ]);
   });
+
+  it("excludes failed payment-link retry attempts until the retry completes", () => {
+    const orders = [order("order_retry", "patient_retry", "failed")];
+    const failedAttempt = [payment("order_retry", "failed", 325)];
+
+    const beforeRetry = buildAdminDashboardStats({
+      orders,
+      patients: [patient("patient_retry")],
+      payments: failedAttempt,
+    });
+    expect(beforeRetry.totalOrders).toBe(0);
+    expect(beforeRetry.totalRevenue).toBe(0);
+    expect(filterPaidDashboardOrders(orders, failedAttempt)).toEqual([]);
+
+    // A successful retry upgrades the same payment row on the same order.
+    const paidOrders = [order("order_retry", "patient_retry", "completed")];
+    const completedRetry = [payment("order_retry", "completed", 325)];
+    const afterRetry = buildAdminDashboardStats({
+      orders: paidOrders,
+      patients: [patient("patient_retry")],
+      payments: completedRetry,
+    });
+    expect(afterRetry.totalOrders).toBe(1);
+    expect(afterRetry.totalRevenue).toBe(325);
+  });
 });

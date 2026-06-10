@@ -91,6 +91,8 @@ export default function OrdersManagement() {
   const [practiceQLoading, setPracticeQLoading] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [paymentLink, setPaymentLink] = useState("");
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -142,6 +144,7 @@ export default function OrdersManagement() {
   useEffect(() => { void loadOrders(); }, [loadOrders]);
 
   useEffect(() => {
+    setPaymentLink("");
     if (!selectedOrder) {
       setSelectedPracticeQ(null);
       setSelectedConsent(null);
@@ -279,6 +282,30 @@ export default function OrdersManagement() {
       setToast({ message: "Identity approved by admin.", type: "success" });
     } catch (error) {
       setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
+  const handleCreatePaymentLink = async (order: Types.Order) => {
+    setPaymentLinkLoading(true);
+    try {
+      const response = await fetch("/api/admin/orders/payment-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Payment link creation failed");
+      setPaymentLink(payload.url);
+      try {
+        await navigator.clipboard.writeText(payload.url);
+        setToast({ message: "Payment link created and copied to clipboard.", type: "success" });
+      } catch {
+        setToast({ message: "Payment link created.", type: "success" });
+      }
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    } finally {
+      setPaymentLinkLoading(false);
     }
   };
 
@@ -772,6 +799,39 @@ export default function OrdersManagement() {
                             placeholder="UPS123456789"
                           />
                           <Button fullWidth onClick={() => handleAddTracking(selectedOrder)}>Submit Tracking</Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {selectedOrder.paymentStatus !== "completed" && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-bold text-gray-900 mb-2">Payment Recovery</h3>
+                      <p className="mb-4 text-sm text-gray-600">
+                        Send the patient a secure link to pay for this exact order without
+                        redoing intake, questionnaire, or identity verification.
+                      </p>
+                      <Button fullWidth onClick={() => handleCreatePaymentLink(selectedOrder)} disabled={paymentLinkLoading}>
+                        {paymentLinkLoading ? "Creating..." : "Create Payment Link"}
+                      </Button>
+                      {paymentLink && (
+                        <div className="mt-3 space-y-2">
+                          <p className="break-all rounded-xl border border-gray-100 bg-gray-50 p-3 font-mono text-xs text-gray-700">
+                            {paymentLink}
+                          </p>
+                          <Button
+                            fullWidth
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(paymentLink)
+                                .then(() => setToast({ message: "Payment link copied.", type: "success" }))
+                                .catch(() => setToast({ message: "Copy failed - select and copy the link manually.", type: "error" }));
+                            }}
+                          >
+                            Copy Link
+                          </Button>
                         </div>
                       )}
                     </CardContent>

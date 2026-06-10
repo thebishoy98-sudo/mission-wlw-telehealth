@@ -401,6 +401,10 @@ export const paymentDb = {
     await sql`
       UPDATE payments SET
         status         = COALESCE(${data.status ?? null}, status),
+        amount         = COALESCE(${data.amount ?? null}, amount),
+        card_last4     = COALESCE(${data.cardLast4 ?? null}, card_last4),
+        card_brand     = COALESCE(${data.cardBrand ?? null}, card_brand),
+        transaction_id = COALESCE(${data.transactionId ?? null}, transaction_id),
         processed_at   = COALESCE(${data.processedAt ?? null}, processed_at),
         refunded_at    = COALESCE(${data.refundedAt ?? null}, refunded_at),
         refund_amount  = COALESCE(${data.refundAmount ?? null}, refund_amount)
