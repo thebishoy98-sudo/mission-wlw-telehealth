@@ -8,13 +8,14 @@ const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const STORAGE_KEY = "tele_intake_form_state";
 
 function makeIntakeState(overrides: Record<string, unknown> = {}) {
+  const stamp = Date.now();
   return {
     firstName: "Smoke",
     lastName: "Patient",
     dateOfBirth: "1985-03-20",
     gender: "male",
-    phone: "4075550199",
-    email: `smoke-${Date.now()}@test.example.com`,
+    phone: `407${String(stamp).slice(-7)}`,
+    email: `smoke-${stamp}@test.example.com`,
     address: { street1: "456 Smoke Ave", city: "Tampa", state: "FL", zipCode: "33601", country: "USA" },
     shippingAddress: { street1: "456 Smoke Ave", city: "Tampa", state: "FL", zipCode: "33601", country: "USA" },
     productId: "product_tirzepatide",
@@ -23,9 +24,10 @@ function makeIntakeState(overrides: Record<string, unknown> = {}) {
       pq_height: "5'10\"",
       pq_current_weight: "225",
       pq_ideal_weight: "185",
-      pq_conditions: "",
-      pq_surgical_history: "None",
-      pq_medication_allergies: "None",
+      pq_conditions: "None apply to me",
+      pq_medication_allergies: "No",
+      pq_intake_purpose: "Weight loss",
+      pq_gastric_bypass: "No",
     },
     consentAcknowledged: true,
     signedName: "Smoke Patient",
@@ -49,14 +51,27 @@ async function seedIntakeAndGotoPayment(page: any, overrides: Record<string, unk
   await page.reload();
 }
 
+async function openDiscountCodeInput(page: any) {
+  await expect(page.getByRole("button", { name: /submit order/i })).toBeEnabled({ timeout: 10_000 });
+  const button = page.getByRole("button", { name: /have a discount code/i });
+  await expect(button).toBeVisible({ timeout: 10_000 });
+  await button.click();
+  const input = page.getByPlaceholder("Optional discount code");
+  await expect(input).toBeVisible({ timeout: 10_000 });
+  return input;
+}
+
+test.beforeEach(async ({ page }, testInfo) => {
+  const titleHash = Array.from(testInfo.title).reduce((hash, char) => hash + char.charCodeAt(0), 0);
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": `127.0.1.${(titleHash + testInfo.retry) % 200 + 10}` });
+});
+
 test.describe("Order placement smoke tests", () => {
   test("tirzepatide 20mg order completes end-to-end (bypass payment)", async ({ page }) => {
     await seedIntakeAndGotoPayment(page);
 
     // Payment bypass notice must be visible
-    await expect(
-      page.getByText(/Payment collection is disabled|Payment.*disabled/i)
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Payment collection is disabled for this sandbox order.")).toBeVisible({ timeout: 10_000 });
 
     // Submit order
     await page.getByRole("button", { name: /submit order/i }).click();
@@ -82,11 +97,11 @@ test.describe("Order placement smoke tests", () => {
   test("SUMMER50 promo code reduces tirzepatide 20mg total by $50", async ({ page }) => {
     await seedIntakeAndGotoPayment(page);
 
-    await page.locator('input[placeholder="Discount code"]').fill("SUMMER50");
+    await (await openDiscountCodeInput(page)).fill("SUMMER50");
     await page.getByRole("button", { name: /apply/i }).click();
 
     // Code and discount must appear
-    await expect(page.getByText(/SUMMER50/i)).toBeVisible();
+    await expect(page.getByText("SUMMER50: $50.00 off applied")).toBeVisible();
     await expect(page.getByText(/\$50/i).first()).toBeVisible();
 
     // Total should be 349 - 50 = 299
@@ -99,7 +114,7 @@ test.describe("Order placement smoke tests", () => {
   test("invalid promo code shows error, does not change total", async ({ page }) => {
     await seedIntakeAndGotoPayment(page);
 
-    await page.locator('input[placeholder="Discount code"]').fill("BADCODE");
+    await (await openDiscountCodeInput(page)).fill("BADCODE");
     await page.getByRole("button", { name: /apply/i }).click();
 
     await expect(page.getByText(/Invalid discount code/i)).toBeVisible();
