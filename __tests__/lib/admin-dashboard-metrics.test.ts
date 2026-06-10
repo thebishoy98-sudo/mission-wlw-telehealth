@@ -1,4 +1,5 @@
 import {
+  buildAdminAnalytics,
   buildAdminDashboardStats,
   filterPaidDashboardOrders,
   sumCompletedPaymentRevenue,
@@ -95,5 +96,44 @@ describe("admin dashboard metrics", () => {
         payment("pending", "pending", 525),
       ])
     ).toBe(325);
+  });
+
+  it("builds analytics periods and product mix from completed payments only", () => {
+    const orders = [
+      order("order_paid_tirz", "patient_a", "completed"),
+      order("order_paid_reta", "patient_b", "completed"),
+      order("order_failed", "patient_c", "failed"),
+      order("order_pending", "patient_d", "pending"),
+    ];
+    orders[1].productId = "product_retatrutide";
+    orders.forEach((item) => {
+      item.createdAt = "2026-06-10T12:00:00.000Z";
+    });
+
+    const analytics = buildAdminAnalytics({
+      orders,
+      payments: [
+        payment("order_paid_tirz", "completed", 349),
+        payment("order_paid_reta", "completed", 325),
+        payment("order_failed", "failed", 455),
+        payment("order_pending", "pending", 525),
+      ],
+      now: new Date("2026-06-10T18:00:00.000Z"),
+    });
+
+    expect(analytics.totals).toMatchObject({ allTime: 2, week7: 2, month30: 2, ytd: 2 });
+    expect(analytics.orderPeriods.today).toEqual({ orders: 2, revenue: 674 });
+    expect(analytics.orderPeriods.thisWeek).toEqual({ orders: 2, revenue: 674 });
+    expect(analytics.orderPeriods.thisMonth).toEqual({ orders: 2, revenue: 674 });
+    expect(analytics.orderPeriods.thisYear).toEqual({ orders: 2, revenue: 674 });
+    expect(analytics.monthly.find((month) => month.key === "2026-06")).toMatchObject({
+      orders: 2,
+      patients: 2,
+      revenue: 674,
+    });
+    expect(analytics.productMix).toEqual([
+      { count: 1, name: "Tirzepatide", revenue: 349 },
+      { count: 1, name: "Retatrutide", revenue: 325 },
+    ]);
   });
 });
