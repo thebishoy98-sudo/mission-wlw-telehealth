@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatDateTime, formatCurrency } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatDateTime, formatCurrency, getFedExTrackingUrl } from "@/lib/utils";
 import { Package, Clock, CheckCircle2, Copy, Check } from "lucide-react";
 
 type PatientPharmacyOrder = Pick<Types.PharmacyOrder, "orderId" | "status" | "trackingNumber" | "shippedAt">;
@@ -214,7 +214,14 @@ function PatientPortalContent() {
                             {trackingNumber ? (
                               <>
                                 Tracking number:{" "}
-                                <span className="font-mono font-semibold text-gray-700">{trackingNumber}</span>
+                                <a
+                                  href={getFedExTrackingUrl(trackingNumber)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-mono font-semibold text-forest-800 underline underline-offset-2 hover:text-forest-900"
+                                >
+                                  {trackingNumber}
+                                </a>
                               </>
                             ) : (
                               "Tracking number will be provided here once your order ships."

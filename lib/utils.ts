@@ -12,6 +12,9 @@ export const formatCurrency = (amount: number | string | null | undefined): stri
   }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
 };
 
+export const getFedExTrackingUrl = (trackingNumber: string): string =>
+  `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber.trim())}`;
+
 export const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat("en-US", {

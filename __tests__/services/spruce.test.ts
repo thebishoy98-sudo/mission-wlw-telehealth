@@ -48,6 +48,16 @@ describe("spruce.sendMessage", () => {
     expect(spruceLog).toBeDefined();
   });
 
+  it("sends shipped messages with a FedEx tracking link", () => {
+    const result = spruce.sendMessage("p1", "order_shipped", {
+      orderId: "o1",
+      trackingNumber: "784578178554",
+    });
+
+    expect(result.messageText).toContain("FedEx");
+    expect(result.messageText).toContain("https://www.fedex.com/fedextrack/?trknbr=784578178554");
+  });
+
   it("throws when patient not found", () => {
     expect(() => spruce.sendMessage("nonexistent", "payment_received")).toThrow();
   });
@@ -68,6 +78,17 @@ describe("spruce.scheduleMessage", () => {
     const result = spruce.scheduleMessage("p1", "reorder_reminder", futureDate, { orderId: "o1" });
     expect(result.status).toBe("scheduled");
     expect(result.scheduledFor).toBe(futureDate);
+  });
+
+  it("schedules shipped messages with a FedEx tracking link", () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const result = spruce.scheduleMessage("p1", "order_shipped", futureDate, {
+      orderId: "o1",
+      trackingNumber: "784578178554",
+    });
+
+    expect(result.messageText).toContain("FedEx");
+    expect(result.messageText).toContain("https://www.fedex.com/fedextrack/?trknbr=784578178554");
   });
 });
 

@@ -80,7 +80,7 @@ export const sendMessage = (
   // Fallback templates for server-side (template DB not seeded server-side)
   const DEFAULT_TEMPLATES: Record<string, string> = {
     payment_received: "Your payment was received. Your order is being processed.",
-    order_shipped: "Your order has shipped! Tracking: {{trackingNumber}}",
+    order_shipped: "Your medication is on the way! Track your FedEx package: https://www.fedex.com/fedextrack/?trknbr={{trackingNumber}} - Reply with any questions.",
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",
@@ -162,7 +162,7 @@ export const scheduleMessage = (
 
   const DEFAULT_TEMPLATES: Record<string, string> = {
     payment_received: "Your payment was received. Your order is being processed.",
-    order_shipped: "Your order has shipped! Tracking: {{trackingNumber}}",
+    order_shipped: "Your medication is on the way! Track your FedEx package: https://www.fedex.com/fedextrack/?trknbr={{trackingNumber}} - Reply with any questions.",
     order_delivered: "Your order has been delivered.",
     provider_approved: "Your prescription has been approved.",
     needs_more_info: "We need more info to process your order. Please check your email.",

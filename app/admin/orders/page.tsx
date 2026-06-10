@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Image as ImageIcon, Video } from "lucide-react";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency, formatDateTime } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency, formatDateTime, getFedExTrackingUrl } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
 import { buildConsentCertificate } from "@/lib/consent";
@@ -326,6 +326,7 @@ export default function OrdersManagement() {
 
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
+  const selectedTrackingNumber = selectedPharmacyOrder?.trackingNumber?.trim() ?? "";
   const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
   const selectedPracticeQSkipped = selectedOrder ? isPracticeQSkippedForOrder(selectedOrder) : false;
   const selectedPracticeQAutomationError =
@@ -524,7 +525,24 @@ export default function OrdersManagement() {
                     <div className="space-y-2 text-sm">
                       <p><strong>LifeFile order number:</strong> <span className="font-mono text-xs">{getDisplayOrderNumber(selectedOrder, selectedPharmacyOrder)}</span></p>
                       {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>Order ID:</strong> <span className="font-mono text-xs">{selectedOrder.id.slice(-8)}</span></p>}
-                      <p><strong>Status:</strong> {getOrderStatusLabel(selectedOrder)}</p>
+                      <p>
+                        <strong>Status:</strong> {getOrderStatusLabel(selectedOrder)}
+                        {selectedTrackingNumber && (
+                          <>
+                            {" "}
+                            <span className="text-gray-400">|</span>{" "}
+                            <strong>Tracking:</strong>{" "}
+                            <a
+                              href={getFedExTrackingUrl(selectedTrackingNumber)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono text-xs font-semibold text-forest-800 underline underline-offset-2 hover:text-forest-900"
+                            >
+                              {selectedTrackingNumber}
+                            </a>
+                          </>
+                        )}
+                      </p>
                       <p><strong>Created:</strong> {formatDateTime(selectedOrder.createdAt)}</p>
                       <p><strong>Identity:</strong> {selectedOrder.identityStatus ?? "missing"}</p>
                       {selectedOrder.identityReason && <p className="text-gray-600">{selectedOrder.identityReason}</p>}
@@ -796,7 +814,7 @@ export default function OrdersManagement() {
                             label="Tracking Number"
                             value={trackingNumber}
                             onChange={(event) => setTrackingNumber(event.target.value)}
-                            placeholder="UPS123456789"
+                            placeholder="784578178554"
                           />
                           <Button fullWidth onClick={() => handleAddTracking(selectedOrder)}>Submit Tracking</Button>
                         </div>

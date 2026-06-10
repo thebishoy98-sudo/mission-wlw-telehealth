@@ -41,6 +41,15 @@ describe("renderSpruceTemplate", () => {
     expect(text).not.toContain("still need identity verification");
     expect(text).not.toContain("Upload your ID");
   });
+
+  it("renders shipped messages with a FedEx tracking link", () => {
+    const text = renderSpruceTemplate("order_shipped", {
+      trackingNumber: "784578178554",
+    });
+
+    expect(text).toContain("FedEx");
+    expect(text).toContain("https://www.fedex.com/fedextrack/?trknbr=784578178554");
+  });
 });
 
 describe("buildSpruceMessageRecord", () => {

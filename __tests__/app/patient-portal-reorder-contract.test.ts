@@ -17,6 +17,8 @@ describe("patient portal reorder and tracking contract", () => {
   it("shows tracking inline on order cards and removes the separate track order button", () => {
     expect(patientOrdersRoute).toContain("pharmacyOrders");
     expect(patientPage).toContain("Tracking number:");
+    expect(patientPage).toContain("getFedExTrackingUrl(trackingNumber)");
+    expect(patientPage).toContain('target="_blank"');
     expect(patientPage).toContain("Tracking number will be provided here once your order ships.");
     expect(patientPage).not.toContain("Track order status");
     expect(confirmationPage).not.toContain("Track My Order");
