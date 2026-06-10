@@ -1,3 +1,5 @@
+import type { Order } from "@/types";
+
 export const generateId = (): string => {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 };
@@ -80,6 +82,13 @@ export const getStatusLabel = (status: string): string => {
     paid: "Paid",
   };
   return labels[status] || status;
+};
+
+export const getOrderStatusLabel = (order: Pick<Order, "status" | "paymentStatus">): string => {
+  if (order.status === "cancelled" && order.paymentStatus === "failed") {
+    return "Payment Declined";
+  }
+  return getStatusLabel(order.status);
 };
 
 export const calculateDaysAgo = (dateString: string): number => {

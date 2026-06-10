@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, formatDateTime } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatDateTime } from "@/lib/utils";
 import { ClipboardCheck, Eye } from "lucide-react";
 
 type DashboardData = {
@@ -284,7 +284,7 @@ function ProviderDashboardContent() {
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <Badge className={getStatusColor(order.status)}>
-                              {getStatusLabel(order.status)}
+                              {getOrderStatusLabel(order)}
                             </Badge>
                           </td>
                           <td className="px-6 py-4 text-sm">

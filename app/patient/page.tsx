@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, formatDateTime, formatCurrency } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatDateTime, formatCurrency } from "@/lib/utils";
 import { Package, Clock, CheckCircle2, Copy, Check } from "lucide-react";
 
 type PatientPharmacyOrder = Pick<Types.PharmacyOrder, "orderId" | "status" | "trackingNumber" | "shippedAt">;
@@ -204,7 +204,7 @@ function PatientPortalContent() {
                           )}
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             <Badge className={getStatusColor(order.status)}>
-                              {getStatusLabel(order.status)}
+                              {getOrderStatusLabel(order)}
                             </Badge>
                             <span className="text-xs text-gray-400">
                               {formatDateTime(order.createdAt)}

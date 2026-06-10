@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Image as ImageIcon, Video } from "lucide-react";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, formatCurrency, formatDateTime } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency, formatDateTime } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
 import { buildConsentCertificate } from "@/lib/consent";
@@ -398,7 +398,7 @@ export default function OrdersManagement() {
                                 })()}
                               </td>
                               <td className="px-4 py-4 text-sm">
-                                <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
+                                <Badge className={getStatusColor(order.status)}>{getOrderStatusLabel(order)}</Badge>
                                 <p className="mt-1 font-mono text-xs text-gray-500">{getDisplayOrderNumber(order, pharmacyOrder)}</p>
                                 {pharmacyOrder?.lifeFileOrderId && <p className="text-[11px] text-gray-400">Order ID {order.id.slice(-8)}</p>}
                               </td>
@@ -497,7 +497,7 @@ export default function OrdersManagement() {
                     <div className="space-y-2 text-sm">
                       <p><strong>LifeFile order number:</strong> <span className="font-mono text-xs">{getDisplayOrderNumber(selectedOrder, selectedPharmacyOrder)}</span></p>
                       {selectedPharmacyOrder?.lifeFileOrderId && <p><strong>Order ID:</strong> <span className="font-mono text-xs">{selectedOrder.id.slice(-8)}</span></p>}
-                      <p><strong>Status:</strong> {getStatusLabel(selectedOrder.status)}</p>
+                      <p><strong>Status:</strong> {getOrderStatusLabel(selectedOrder)}</p>
                       <p><strong>Created:</strong> {formatDateTime(selectedOrder.createdAt)}</p>
                       <p><strong>Identity:</strong> {selectedOrder.identityStatus ?? "missing"}</p>
                       {selectedOrder.identityReason && <p className="text-gray-600">{selectedOrder.identityReason}</p>}

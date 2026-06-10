@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
-import { getStatusLabel, getStatusColor, formatCurrency } from "@/lib/utils";
+import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 
 type AdminDashboardData = {
@@ -357,7 +357,7 @@ function AdminDashboardContent() {
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <Badge className={getStatusColor(order.status)}>
-                          {getStatusLabel(order.status)}
+                          {getOrderStatusLabel(order)}
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-sm">

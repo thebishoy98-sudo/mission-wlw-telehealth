@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { buildConsentCertificate } from "@/lib/consent";
 import { getDisplayOrderNumber } from "@/lib/order-display";
-import { formatDateTime, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { formatDateTime, getStatusColor, getOrderStatusLabel, getStatusLabel } from "@/lib/utils";
 import type {
   ConsentRecord,
   Order,
@@ -154,7 +154,7 @@ export default function PatientDetail() {
               <CardContent className="p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{patient.firstName} {patient.lastName}</h2>
-                  <Badge className={getStatusColor(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</Badge>
+                  <Badge className={getStatusColor(selectedOrder.status)}>{getOrderStatusLabel(selectedOrder)}</Badge>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
                   <p>Email: {patient.email}</p>
@@ -413,7 +413,7 @@ export default function PatientDetail() {
                   </div>
                   <div className="flex justify-between items-center flex-wrap gap-1">
                     <span className="text-gray-500">Status</span>
-                    <Badge className={getStatusColor(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</Badge>
+                    <Badge className={getStatusColor(selectedOrder.status)}>{getOrderStatusLabel(selectedOrder)}</Badge>
                   </div>
                 </div>
               </CardContent>
