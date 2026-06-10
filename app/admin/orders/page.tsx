@@ -61,6 +61,16 @@ type OrderDetailData = {
       details?: Record<string, unknown>;
       error?: string;
     }>;
+    spruceMessages: Array<{
+      id: string;
+      templateKey: string;
+      phoneNumber: string;
+      messageText: string;
+      status: Types.SpruceMessage["status"];
+      scheduledFor?: string;
+      sentAt?: string;
+      createdAt: string;
+    }>;
   };
 };
 
@@ -333,6 +343,7 @@ export default function OrdersManagement() {
     selectedDiagnostics?.practiceqAutomation?.status === "completed"
       ? undefined
       : selectedDiagnostics?.practiceqAutomation?.lastError;
+  const selectedSpruceMessages = selectedDiagnostics?.spruceMessages ?? [];
   const chartFileHref = (fileId: string) => ["/api/provider/", "practice", "q-files/", fileId].join("");
   const latestErroredLogs = selectedDiagnostics?.integrationLogs
     .filter((log) => log.status === "error")
@@ -626,6 +637,32 @@ export default function OrdersManagement() {
                         </Button>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-bold text-gray-900 mb-4">Patient Text Updates</h3>
+                    {selectedSpruceMessages.length === 0 ? (
+                      <p className="text-sm text-gray-500">No patient text updates have been recorded for this order.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedSpruceMessages.map((message) => (
+                          <div key={message.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={getStatusColor(message.status)}>{getStatusLabel(message.status)}</Badge>
+                              <span className="font-mono text-xs text-gray-500">{message.templateKey}</span>
+                              <span className="text-xs text-gray-500">Created {formatDateTime(message.createdAt)}</span>
+                              {message.sentAt && (
+                                <span className="text-xs text-gray-500">Sent {formatDateTime(message.sentAt)}</span>
+                              )}
+                            </div>
+                            <p className="mt-2 break-words text-gray-700">{message.messageText}</p>
+                            <p className="mt-1 font-mono text-xs text-gray-500">{message.phoneNumber}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

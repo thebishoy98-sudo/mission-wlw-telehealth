@@ -43,7 +43,7 @@ export async function GET(
   const practiceqMirror = isPrivilegedRequest
     ? await getPracticeQMirrorForOrder(order, practiceqPacket, practiceqAutomationJob?.intakeId).catch(() => null)
     : null;
-  const [uploads, review, integrationLogs, consent] = canViewIdentity
+  const [uploads, review, integrationLogs, consent, spruceMessages] = canViewIdentity
     ? await Promise.all([
         dbServer.uploadDb.getByOrder(order.id).catch(() => db.uploadDb.getByOrder(order.id)),
         dbServer.providerReviewDb.getByOrder(order.id).catch(() => db.providerReviewDb.getByOrder(order.id)),
@@ -51,8 +51,9 @@ export async function GET(
           db.integrationLogDb.getAll().filter((log) => log.orderId === order.id)
         ),
         dbServer.consentDb.getByOrder(order.id).catch(() => db.consentDb.getByOrder(order.id)),
+        dbServer.spruceMessageDb.getByOrder(order.id).catch(() => db.spruceDb.getByOrder(order.id)),
       ])
-    : [[], null, [], null];
+    : [[], null, [], null, []];
 
   return NextResponse.json({
     order: isPrivilegedRequest
@@ -127,6 +128,16 @@ export async function GET(
             status: log.status,
             details: log.details,
             error: log.error,
+          })),
+          spruceMessages: spruceMessages.map((message) => ({
+            id: message.id,
+            templateKey: message.templateKey,
+            phoneNumber: message.phoneNumber,
+            messageText: message.messageText,
+            status: message.status,
+            scheduledFor: message.scheduledFor,
+            sentAt: message.sentAt,
+            createdAt: message.createdAt,
           })),
         }
       : undefined,

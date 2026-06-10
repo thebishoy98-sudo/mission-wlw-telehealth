@@ -194,7 +194,7 @@ services:
   - type: cron
     name: mission-wlw-cron-pharmacy-tracking
     runtime: node
-    schedule: "30 13 * * *"  # daily at 1:30pm UTC
+    schedule: "*/15 * * * *"  # every 15 minutes
     buildCommand: npm ci --include=dev && npm run build
     startCommand: >
       node -e "
