@@ -11,8 +11,7 @@ const PRODUCTS = [
     tagline: "Triple GLP-1 Agonist",
     img: "/retatrutide-vial.jpg",
     badge: "First to Market",
-    fromMonthly: 250,
-    fromSupply: 499,
+    fromSupply: 325,
     highlight: true,
     bullets: [
       "Newest triple-agonist GLP-1",
@@ -27,7 +26,6 @@ const PRODUCTS = [
     tagline: "Dual GLP-1 / GIP Agonist",
     img: "/tirzepatide-vial.jpg",
     badge: "Most Popular",
-    fromMonthly: 175,
     fromSupply: 349,
     highlight: false,
     bullets: [
@@ -43,7 +41,6 @@ const PRODUCTS = [
     tagline: "GLP-1 Receptor Agonist",
     img: "/semaglutide-vial.jpg",
     badge: "Available",
-    fromMonthly: 149,
     fromSupply: 299,
     highlight: false,
     bullets: [
@@ -201,25 +198,14 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                     </h3>
                   </div>
                   <div
-                    className={`flex items-baseline gap-1 ${
+                    className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 ${
                       p.highlight ? "text-white" : "text-forest-800"
                     }`}
                   >
-                    <span className="text-3xl font-bold">${p.fromMonthly}</span>
-                    <span
-                      className={`text-sm ${
-                        p.highlight ? "text-white/60" : "text-gray-400"
-                      }`}
-                    >
-                      / month
+                    <span className="text-3xl font-bold">from ${p.fromSupply}</span>
+                    <span className={`text-sm ${p.highlight ? "text-white/60" : "text-gray-400"}`}>
+                      / 8-week supply
                     </span>
-                  </div>
-                  <div
-                    className={`text-xs mt-1 ${
-                      p.highlight ? "text-red-400/80" : "text-forest-700"
-                    }`}
-                  >
-                    from ${p.fromSupply} / 8-week supply
                   </div>
                 </div>
 

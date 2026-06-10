@@ -138,7 +138,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                     <div>
                       <div className="text-sm font-semibold">3 GLP-1 Programs</div>
                       <div className="text-[11px] text-white/55">US-Based Pharmacy</div>
-                      <div className="text-[11px] text-rose-300 mt-0.5">From $149 / month</div>
+                      <div className="text-[11px] text-rose-300 mt-0.5">From $299 / 8-week supply</div>
                     </div>
                   </div>
                 </div>

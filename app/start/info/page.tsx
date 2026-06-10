@@ -33,10 +33,10 @@ const US_STATES = [
   ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],
 ];
 
-const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; fromMonthly: number; highlight: boolean }> = {
-  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", fromMonthly: 250, highlight: true },
-  product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", fromMonthly: 175, highlight: false },
-  product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", fromMonthly: 149, highlight: false },
+const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; highlight: boolean }> = {
+  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", highlight: true },
+  product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", highlight: false },
+  product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", highlight: false },
 };
 
 const STEPS = [
@@ -229,7 +229,7 @@ export default function PatientInfo() {
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {products.map((p, i) => {
-                const meta = PRODUCT_META[p.id] ?? { img: "", tagline: "", badge: "", fromMonthly: 0, highlight: false };
+                const meta = PRODUCT_META[p.id] ?? { img: "", tagline: "", badge: "", highlight: false };
                 const selected = formData.productId === p.id;
                 return (
                   <motion.button
@@ -267,8 +267,8 @@ export default function PatientInfo() {
                       {meta.badge}
                     </span>
                     <p className={`text-xl font-bold leading-none ${selected && meta.highlight ? "text-white" : "text-forest-800"}`}>
-                      ${meta.fromMonthly}
-                      <span className={`text-xs font-normal ml-0.5 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/mo</span>
+                      {formatCurrency(p.startingPrice)}
+                      <span className={`block text-xs font-normal mt-1 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/ 8-week supply</span>
                     </p>
                   </motion.button>
                 );
