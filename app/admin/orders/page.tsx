@@ -107,6 +107,7 @@ export default function OrdersManagement() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDeclinedOrders, setShowDeclinedOrders] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -349,6 +350,14 @@ export default function OrdersManagement() {
     .filter((log) => log.status === "error")
     .filter((log) => !(selectedPracticeQSkipped && log.integrationName === "practiceq"))
     .slice(0, 3) ?? [];
+  const visibleOrders = showDeclinedOrders
+    ? orders
+    : orders.filter((order) => order.paymentStatus !== "failed");
+
+  useEffect(() => {
+    if (!selectedOrder || visibleOrders.some((order) => order.id === selectedOrder.id)) return;
+    setSelectedOrder(visibleOrders[0] ?? null);
+  }, [selectedOrder, visibleOrders]);
 
   return (
     <>
@@ -377,8 +386,17 @@ export default function OrdersManagement() {
                   )}
                 </div>
               </form>
+              <label className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={showDeclinedOrders}
+                  onChange={(event) => setShowDeclinedOrders(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-forest-800 focus:ring-forest-700"
+                />
+                Show payment declined
+              </label>
               <p className="mt-3 text-sm text-gray-500">
-                Showing {orders.length} of {pagination.total} matching orders
+                Showing {visibleOrders.length} of {orders.length} loaded orders
                 {searchQuery ? ` for "${searchQuery}"` : ""}.
               </p>
             </CardContent>
@@ -408,7 +426,7 @@ export default function OrdersManagement() {
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {orders.map((order) => {
+                        {visibleOrders.map((order) => {
                           const patient = patients[order.patientId];
                           const payment = payments[order.id];
                           const pharmacyOrder = pharmacyOrders[order.id];
