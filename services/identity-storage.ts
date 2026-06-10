@@ -50,8 +50,9 @@ export async function buildIdentityUploads({
     filename: documentFile.filename,
     dataUrl: idImageData,
   });
-  const videoData = identityVideoData ?? selfieFrameData;
-  const selfieFile = dataUrlToFileMetadata(videoData, identityVideoData ? "identity-video" : "identity-frame");
+  const normalizedVideoData = identityVideoData?.trim() ? identityVideoData : null;
+  const videoData = normalizedVideoData ?? selfieFrameData;
+  const selfieFile = dataUrlToFileMetadata(videoData, normalizedVideoData ? "identity-video" : "identity-frame");
   const selfieUpload = await storeIdentityMedia({
     orderId,
     type: "selfie_video",
