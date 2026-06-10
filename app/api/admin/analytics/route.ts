@@ -3,6 +3,12 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { requireAdmin } from "@/lib/server-auth";
 import { canonicalProducts } from "@/data/products";
+import {
+  completedPaymentByOrder,
+  filterPaidDashboardOrders,
+  isCompletedPayment,
+  paymentAmount,
+} from "@/lib/admin-dashboard-metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -12,28 +18,31 @@ export async function GET(req: NextRequest) {
 
   try {
     const allOrders = await dbServer.orderDb.getAll().catch(() => db.orderDb.getAll());
-    const activeOrders = allOrders.filter(
-      (o) => o.status !== "draft" && o.status !== "cancelled"
-    );
+    const activeOrders = allOrders.filter((o) => o.status !== "draft" && o.status !== "cancelled");
+    const allPayments = await dbServer.paymentDb
+      .getByOrders(activeOrders.map((o) => o.id))
+      .catch(() => []);
+    const paidOrders = filterPaidDashboardOrders(activeOrders, allPayments);
+    const paymentByOrder = completedPaymentByOrder(allPayments);
 
     const now = new Date();
     const ms7d = 7 * 24 * 60 * 60 * 1000;
     const ms30d = 30 * 24 * 60 * 60 * 1000;
     const yearStart = new Date(now.getFullYear(), 0, 1);
 
-    const uniquePatients = (orders: typeof activeOrders) =>
+    const uniquePatients = (orders: typeof paidOrders) =>
       new Set(orders.map((o) => o.patientId)).size;
 
     const totals = {
-      allTime: uniquePatients(activeOrders),
+      allTime: uniquePatients(paidOrders),
       week7: uniquePatients(
-        activeOrders.filter((o) => new Date(o.createdAt).getTime() >= now.getTime() - ms7d)
+        paidOrders.filter((o) => new Date(o.createdAt).getTime() >= now.getTime() - ms7d)
       ),
       month30: uniquePatients(
-        activeOrders.filter((o) => new Date(o.createdAt).getTime() >= now.getTime() - ms30d)
+        paidOrders.filter((o) => new Date(o.createdAt).getTime() >= now.getTime() - ms30d)
       ),
       ytd: uniquePatients(
-        activeOrders.filter((o) => new Date(o.createdAt) >= yearStart)
+        paidOrders.filter((o) => new Date(o.createdAt) >= yearStart)
       ),
     };
 
@@ -50,47 +59,42 @@ export async function GET(req: NextRequest) {
       monthlyMap[key] = { orders: 0, patients: new Set(), revenue: 0 };
     }
 
-    const allPayments = await dbServer.paymentDb
-      .getByOrders(activeOrders.map((o) => o.id))
-      .catch(() => []);
-    const paymentByOrder = new Map(allPayments.map((p) => [p.orderId, p] as [string, typeof p]));
-
     // Period order + revenue stats
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    function periodStats(orders: typeof activeOrders) {
+    function periodStats(orders: typeof paidOrders) {
       const revenue = orders.reduce((sum, o) => {
         const p = paymentByOrder.get(o.id);
-        return sum + (p?.status === "completed" ? Number(p.amount) || 0 : 0);
+        return sum + (isCompletedPayment(p) ? paymentAmount(p) : 0);
       }, 0);
       return { orders: orders.length, revenue };
     }
 
     const orderPeriods = {
-      today: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= todayStart)),
-      thisWeek: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= weekStart)),
-      thisMonth: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= monthStart)),
-      thisYear: periodStats(activeOrders.filter((o) => new Date(o.createdAt) >= yearStart)),
+      today: periodStats(paidOrders.filter((o) => new Date(o.createdAt) >= todayStart)),
+      thisWeek: periodStats(paidOrders.filter((o) => new Date(o.createdAt) >= weekStart)),
+      thisMonth: periodStats(paidOrders.filter((o) => new Date(o.createdAt) >= monthStart)),
+      thisYear: periodStats(paidOrders.filter((o) => new Date(o.createdAt) >= yearStart)),
     };
 
-    for (const order of activeOrders) {
+    for (const order of paidOrders) {
       const d = new Date(order.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (monthlyMap[key]) {
         monthlyMap[key].orders++;
         monthlyMap[key].patients.add(order.patientId);
         const payment = paymentByOrder.get(order.id);
-        if (payment?.status === "completed") {
-          monthlyMap[key].revenue += Number(payment.amount) || 0;
+        if (isCompletedPayment(payment)) {
+          monthlyMap[key].revenue += paymentAmount(payment);
         }
       }
     }
 
     // Product mix — use canonical names + revenue
     const productMix: Record<string, { count: number; name: string; revenue: number }> = {};
-    for (const order of activeOrders) {
+    for (const order of paidOrders) {
       const id = order.productId ?? "unknown";
       if (!productMix[id]) {
         const canonical = canonicalProducts.find((p) => p.id === id);
@@ -98,8 +102,8 @@ export async function GET(req: NextRequest) {
       }
       productMix[id].count++;
       const pmt = paymentByOrder.get(order.id);
-      if (pmt?.status === "completed") {
-        productMix[id].revenue += Number(pmt.amount) || 0;
+      if (isCompletedPayment(pmt)) {
+        productMix[id].revenue += paymentAmount(pmt);
       }
     }
 

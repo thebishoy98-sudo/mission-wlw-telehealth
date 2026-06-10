@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency } from "@/lib/utils";
+import { buildAdminDashboardStats, isCompletedPayment, paymentAmount } from "@/lib/admin-dashboard-metrics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 
 type AdminDashboardData = {
@@ -28,11 +29,6 @@ type AnalyticsData = {
   };
   monthly: Array<{ key: string; label: string; orders: number; patients: number; revenue: number }>;
   productMix: Array<{ name: string; count: number; revenue: number }>;
-};
-
-const paymentAmount = (payment: Types.Payment) => {
-  const amount = Number(payment.amount);
-  return Number.isFinite(amount) ? amount : 0;
 };
 
 function AdminDashboardContent() {
@@ -75,24 +71,7 @@ function AdminDashboardContent() {
         const allPatients = data.patients;
         const allPharmacyOrders = data.pharmacyOrders;
 
-        const totalRevenue = allPayments
-          .filter((p) => p.status === "completed")
-          .reduce((sum, p) => sum + paymentAmount(p), 0);
-
-        const paidOrders = allPayments.filter((p) => p.status === "completed").length;
-        const fulfilled = allOrders.filter(
-          (o) => o.status === "delivered" || o.status === "fulfilled"
-        ).length;
-
-        setStats({
-          totalOrders: allOrders.length,
-          totalPatients: allPatients.length,
-          totalRevenue,
-          paidOrders,
-          pendingPayments: allOrders.filter((o) => o.paymentStatus === "pending").length,
-          fulfilled,
-          averageOrderValue: paidOrders > 0 ? totalRevenue / paidOrders : 0,
-        });
+        setStats(buildAdminDashboardStats({ orders: allOrders, patients: allPatients, payments: allPayments }));
 
         setOrders(
           allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -109,7 +88,7 @@ function AdminDashboardContent() {
           const dayRevenue = allPayments
             .filter(
               (p) =>
-                p.status === "completed" &&
+                isCompletedPayment(p) &&
                 new Date(p.createdAt).toDateString() === date.toDateString()
             )
             .reduce((sum, p) => sum + paymentAmount(p), 0);
