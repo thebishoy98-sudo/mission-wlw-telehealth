@@ -16,7 +16,7 @@ const STEPS = [
   {
     num: "03",
     title: "Receive Your Medication",
-    desc: "Your prescription is sent to a licensed 503B pharmacy and shipped directly to your door in 2 to 5 business days, in discreet packaging.",
+    desc: "Your prescription is sent to a US-based pharmacy and shipped directly to your door in 2 to 5 business days, in discreet packaging.",
   },
   {
     num: "04",

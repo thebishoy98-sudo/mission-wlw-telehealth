@@ -255,7 +255,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
           <p className="text-xs text-gray-400 max-w-xl mx-auto leading-relaxed">
             Consultation fee waived for new patients this month. Final medication and dose
             are determined by your licensed provider. All medications are compounded by a
-            licensed 503B pharmacy.
+            US-based pharmacy.
           </p>
         </FadeUp>
       </div>

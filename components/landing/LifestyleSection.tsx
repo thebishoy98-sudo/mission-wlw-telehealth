@@ -13,7 +13,7 @@ const BENEFITS = [
   },
   {
     title: "Delivered to Your Door",
-    desc: "A licensed 503B pharmacy ships your medication directly to you every 8 weeks in discreet packaging.",
+    desc: "A US-based pharmacy ships your medication directly to you every 8 weeks in discreet packaging.",
   },
   {
     title: "Always-On Support",

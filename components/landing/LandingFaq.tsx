@@ -9,7 +9,7 @@ const FAQS = [
   },
   {
     q: "What is Retatrutide and how is it different?",
-    a: "Retatrutide is the newest GLP-1 medication - a triple-agonist that targets GLP-1, GIP, and glucagon receptors simultaneously. Clinical trial data shows up to 24% body weight loss, which outperforms earlier single and dual-agonist options like Semaglutide and Tirzepatide. Mission WLW is one of the first telehealth platforms to offer it through a licensed 503B pharmacy.",
+    a: "Retatrutide is the newest GLP-1 medication - a triple-agonist that targets GLP-1, GIP, and glucagon receptors simultaneously. Clinical trial data shows up to 24% body weight loss, which outperforms earlier single and dual-agonist options like Semaglutide and Tirzepatide. Mission WLW is one of the first telehealth platforms to offer it through a US-based pharmacy.",
   },
   {
     q: "How quickly will I see results?",

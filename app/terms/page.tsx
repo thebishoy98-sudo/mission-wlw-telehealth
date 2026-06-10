@@ -77,7 +77,7 @@ export default function TermsPage() {
             <p className="mb-3">
               Prescriptions are issued solely at the discretion of the independent licensed provider who reviews
               your case. Mission does not guarantee that a prescription will be issued. Compounded medications
-              are prepared by licensed 503B pharmacies and are not FDA-approved drug products, though they are
+              are prepared by a US-based pharmacy and are not FDA-approved drug products, though they are
               prepared under applicable compounding regulations.
             </p>
             <p>

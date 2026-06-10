@@ -90,7 +90,7 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
           <p className="text-[11px] text-white/35 leading-relaxed">
             <strong className="text-white/50">Important Safety Information:</strong> Tirzepatide is
             a prescription medication requiring a medical evaluation. Results vary. Compounded
-            Tirzepatide is prepared at licensed 503B pharmacies and is not an FDA-approved drug
+            Tirzepatide is prepared by a US-based pharmacy and is not an FDA-approved drug
             product. Mission Weight Loss and Wellness is a telehealth platform connecting patients
             with independent licensed providers.
           </p>
