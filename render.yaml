@@ -204,14 +204,7 @@ services:
     runtime: node
     schedule: "*/15 * * * *"  # every 15 minutes
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/pharmacy-tracking-sync',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
+    startCommand: node scripts/run-pharmacy-tracking-cron.mjs
     envVars:
       - key: NODE_VERSION
         value: 22
