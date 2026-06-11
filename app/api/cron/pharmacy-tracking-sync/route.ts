@@ -23,7 +23,7 @@ function isAuthorized(req: NextRequest) {
   return { ok: true };
 }
 
-export async function POST(req: NextRequest) {
+async function runTrackingSync(req: NextRequest) {
   const auth = isAuthorized(req);
   if (!auth.ok) return auth.response;
 
@@ -67,5 +67,13 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 502 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  return runTrackingSync(req);
+}
+
+export async function POST(req: NextRequest) {
+  return runTrackingSync(req);
 }
 
