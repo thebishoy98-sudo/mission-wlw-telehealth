@@ -11,7 +11,7 @@ const PRODUCTS = [
     tagline: "Triple GLP-1 Agonist",
     img: "/retatrutide-vial.jpg",
     badge: "First to Market",
-    fromSupply: 325,
+    fromTreatment: 162.5,
     highlight: true,
     bullets: [
       "Newest triple-agonist GLP-1",
@@ -26,7 +26,7 @@ const PRODUCTS = [
     tagline: "Dual GLP-1 / GIP Agonist",
     img: "/tirzepatide-vial.jpg",
     badge: "Most Popular",
-    fromSupply: 349,
+    fromTreatment: 174.5,
     highlight: false,
     bullets: [
       "Proven weight loss results",
@@ -41,7 +41,7 @@ const PRODUCTS = [
     tagline: "GLP-1 Receptor Agonist",
     img: "/semaglutide-vial.jpg",
     badge: "Available",
-    fromSupply: 299,
+    fromTreatment: 149.5,
     highlight: false,
     bullets: [
       "Well-established GLP-1 therapy",
@@ -144,7 +144,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
             GLP-1 Weight Loss Programs
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            8-week prescription with all supplies included. Your provider selects the right
+            4-week treatment pricing with all supplies included. Your provider selects the right
             medication and dose during your consultation.
           </p>
         </FadeUp>
@@ -202,9 +202,9 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                       p.highlight ? "text-white" : "text-forest-800"
                     }`}
                   >
-                    <span className="text-3xl font-bold">from ${p.fromSupply}</span>
+                    <span className="text-3xl font-bold">from ${p.fromTreatment.toFixed(2)}</span>
                     <span className={`text-sm ${p.highlight ? "text-white/60" : "text-gray-400"}`}>
-                      / 8-week supply
+                      / 4-week treatment
                     </span>
                   </div>
                 </div>

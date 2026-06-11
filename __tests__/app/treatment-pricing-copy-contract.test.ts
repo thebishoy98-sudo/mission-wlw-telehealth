@@ -9,25 +9,25 @@ describe("treatment pricing copy", () => {
   const heroSource = fs.readFileSync(path.join(process.cwd(), "components/landing/Hero.tsx"), "utf8");
   const stickyCtaSource = fs.readFileSync(path.join(process.cwd(), "components/landing/StickyCtaBar.tsx"), "utf8");
 
-  it("shows start treatment cards as 8-week supply pricing from the product catalog", () => {
-    expect(startInfoSource).toContain("formatCurrency(p.startingPrice)");
-    expect(startInfoSource).toContain("/ 8-week supply");
+  it("shows start treatment cards as 4-week treatment advertising prices", () => {
+    expect(startInfoSource).toContain("formatCurrency(p.startingPrice / 2)");
+    expect(startInfoSource).toContain("/ 4-week treatment");
     expect(startInfoSource).not.toContain("fromMonthly");
     expect(startInfoSource).not.toContain(">/mo<");
   });
 
-  it("keeps public Retatrutide pricing aligned to the catalog", () => {
-    expect(pricingCardsSource).toContain("fromSupply: 325");
+  it("advertises public Retatrutide pricing as half-price 4-week treatment", () => {
+    expect(pricingCardsSource).toContain("fromTreatment: 162.5");
     expect(pricingCardsSource).not.toContain("fromMonthly: 250");
     expect(pricingCardsSource).not.toContain("/ month");
-    expect(paymentSource).toContain("From $325 per 8-week supply.");
-    expect(faqSource).toContain("Retatrutide starts at $325");
+    expect(paymentSource).toContain("From $162.50 per 4-week treatment.");
+    expect(faqSource).toContain("Retatrutide starts at $162.50");
     expect(faqSource).not.toContain("$499 and above for Retatrutide");
   });
 
-  it("does not advertise monthly landing prices for 8-week programs", () => {
-    expect(heroSource).toContain("From $299 / 8-week supply");
-    expect(stickyCtaSource).toContain("From $299 / 8-week supply");
+  it("does not advertise monthly landing prices for 4-week treatment programs", () => {
+    expect(heroSource).toContain("From $149.50 / 4-week treatment");
+    expect(stickyCtaSource).toContain("From $149.50 / 4-week treatment");
     expect(heroSource).not.toContain("/ month");
     expect(stickyCtaSource).not.toContain("/month");
   });

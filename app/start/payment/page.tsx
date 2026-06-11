@@ -496,7 +496,7 @@ export default function Payment() {
           <div className="mt-4 p-4 bg-forest-800 rounded-xl text-white">
             <p className="text-xs font-bold text-red-400 uppercase tracking-widest mb-1">Upgrade Available</p>
             <p className="text-sm font-semibold mb-0.5">Want faster results with Retatrutide?</p>
-            <p className="text-xs text-white/60 mb-2.5">Our newest triple-agonist GLP-1 with up to 24% body weight loss in clinical data. From $325 per 8-week supply.</p>
+            <p className="text-xs text-white/60 mb-2.5">Our newest triple-agonist GLP-1 with up to 24% body weight loss in clinical data. From $162.50 per 4-week treatment.</p>
             <button
               type="button"
               className="text-red-400 hover:text-red-300 text-xs font-semibold transition-colors"

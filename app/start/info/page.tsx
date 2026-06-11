@@ -267,8 +267,8 @@ export default function PatientInfo() {
                       {meta.badge}
                     </span>
                     <p className={`text-xl font-bold leading-none ${selected && meta.highlight ? "text-white" : "text-forest-800"}`}>
-                      {formatCurrency(p.startingPrice)}
-                      <span className={`block text-xs font-normal mt-1 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/ 8-week supply</span>
+                      {formatCurrency(p.startingPrice / 2)}
+                      <span className={`block text-xs font-normal mt-1 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/ 4-week treatment</span>
                     </p>
                   </motion.button>
                 );

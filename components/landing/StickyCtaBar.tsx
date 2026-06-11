@@ -20,7 +20,7 @@ export function StickyCtaBar({ ctaUrl }: { ctaUrl: string }) {
         <div className="flex items-center justify-between px-4 py-3">
           <div>
             <p className="text-white font-semibold text-sm leading-tight">Start losing weight today</p>
-            <p className="text-white/60 text-xs">From $299 / 8-week supply · No waiting</p>
+            <p className="text-white/60 text-xs">From $149.50 / 4-week treatment · No waiting</p>
           </div>
           <Link
             href={ctaUrl}
@@ -34,7 +34,7 @@ export function StickyCtaBar({ ctaUrl }: { ctaUrl: string }) {
       <div className="hidden sm:flex fixed bottom-6 right-6 z-50 items-center gap-4 bg-forest-800 shadow-2xl rounded-2xl px-5 py-4 border border-white/10">
         <div>
           <p className="text-white font-semibold text-sm leading-tight">Start losing weight today</p>
-          <p className="text-white/55 text-xs mt-0.5">From $299 / 8-week supply · No waiting</p>
+          <p className="text-white/55 text-xs mt-0.5">From $149.50 / 4-week treatment · No waiting</p>
         </div>
         <Link
           href={ctaUrl}
