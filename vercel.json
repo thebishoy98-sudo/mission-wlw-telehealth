@@ -12,10 +12,6 @@
     {
       "path": "/api/cron/pharmacy-tracking-sync",
       "schedule": "30 13 * * *"
-    },
-    {
-      "path": "/api/cron/fedex-tracking-sync",
-      "schedule": "*/30 * * * *"
     }
   ]
 }

@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchTrackingScriptUpdates } from "@/services/pharmacy-tracking-script";
 import { fetchAppSheetTrackingUpdates, isAppSheetTrackingConfigured } from "@/services/appsheet-tracking";
 import { applyLifeFileWebhookPayload } from "@/lib/lifefile-webhook-handler";
+import { runFedExTrackingSync } from "@/lib/fedex-tracking-sync";
 
 function isAuthorized(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -51,11 +52,14 @@ export async function POST(req: NextRequest) {
       results.push({ status: response.status, body });
     }
 
+    const fedex = await runFedExTrackingSync();
+
     return NextResponse.json({
       processed: updates.length,
       sources: {
         trackingScript: scriptResult.status === "fulfilled" ? scriptResult.value.length : { error: scriptResult.reason?.message ?? String(scriptResult.reason) },
         appSheet: appSheetResult.status === "fulfilled" ? appSheetResult.value.length : { error: appSheetResult.reason?.message ?? String(appSheetResult.reason) },
+        fedex,
       },
       results,
       runAt: new Date().toISOString(),

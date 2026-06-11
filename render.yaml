@@ -221,27 +221,6 @@ services:
         sync: false
 
   - type: cron
-    name: mission-wlw-cron-fedex-tracking
-    runtime: node
-    schedule: "*/30 * * * *"  # every 30 minutes
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/fedex-tracking-sync',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
     name: mission-wlw-cron-refill-reminders
     runtime: node
     schedule: "0 14 * * *"   # daily at 2pm UTC
