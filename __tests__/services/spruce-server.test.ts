@@ -50,6 +50,15 @@ describe("renderSpruceTemplate", () => {
     expect(text).toContain("FedEx");
     expect(text).toContain("https://www.fedex.com/fedextrack/?trknbr=784578178554");
   });
+
+  it("renders out-for-delivery messages with a FedEx tracking link", () => {
+    const text = renderSpruceTemplate("order_out_for_delivery", {
+      trackingNumber: "784578178554",
+    });
+
+    expect(text).toContain("out for delivery today");
+    expect(text).toContain("https://www.fedex.com/fedextrack/?trknbr=784578178554");
+  });
 });
 
 describe("buildSpruceMessageRecord", () => {

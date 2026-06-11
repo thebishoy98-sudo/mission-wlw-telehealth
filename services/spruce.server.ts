@@ -11,6 +11,7 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   order_sent_to_pharmacy: "Your prescription was approved and sent to the pharmacy. We will text you when it ships.",
   order_processing: "Your pharmacy order is processing.",
   order_shipped: "Your medication is on the way! Track your FedEx package: https://www.fedex.com/fedextrack/?trknbr={{trackingNumber}} — Reply with any questions.",
+  order_out_for_delivery: "Your medication is out for delivery today. Track your FedEx package: https://www.fedex.com/fedextrack/?trknbr={{trackingNumber}} — Reply with any questions.",
   order_delivered: "Your order has been delivered. How are you feeling? Reply any time — we're here to help.",
   identity_review_received: "Your payment and identity verification were received. Your provider will review everything before pharmacy dispatch.",
   identity_upload_reminder: "Your payment was received. We still need identity verification before pharmacy dispatch. Upload your ID and 10-second identity video here: {{uploadUrl}}",

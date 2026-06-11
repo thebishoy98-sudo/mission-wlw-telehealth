@@ -121,6 +121,14 @@ services:
       - key: LIFEFILE_WEBHOOK_SECRET
         sync: false
 
+      # FedEx direct tracking status polling.
+      - key: FEDEX_CLIENT_ID
+        sync: false
+      - key: FEDEX_CLIENT_SECRET
+        sync: false
+      - key: FEDEX_API_BASE_URL
+        value: https://apis.fedex.com
+
       # PracticeQ, Spruce, identity, and AI integrations.
       - key: USE_REAL_PRACTICEQ
         value: true
@@ -200,6 +208,27 @@ services:
       node -e "
         require('https').get(
           process.env.APP_BASE_URL + '/api/cron/pharmacy-tracking-sync',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-fedex-tracking
+    runtime: node
+    schedule: "*/30 * * * *"  # every 30 minutes
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/fedex-tracking-sync',
           { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
           (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
         ).on('error', () => { process.exitCode = 1; });

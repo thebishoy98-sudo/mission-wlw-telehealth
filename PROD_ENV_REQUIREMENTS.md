@@ -108,6 +108,9 @@ PracticeQ Developer API page observed on May 26, 2026:
 | `PHARMACY_TRACKING_SCRIPT_URL` | Google Apps Script endpoint pharmacy is using for tracking | `services/pharmacy-tracking-script.ts` | Missing | Store from the pharmacy-provided webhook details. Do not hardcode. |
 | `PHARMACY_TRACKING_SCRIPT_USERNAME` | Basic auth username for script endpoint | `services/pharmacy-tracking-script.ts` | Missing | Store as secret. Rotate because it was shared in screenshot/chat. |
 | `PHARMACY_TRACKING_SCRIPT_PASSWORD` | Basic auth password for script endpoint | `services/pharmacy-tracking-script.ts` | Missing | Store as secret. Rotate because it was shared in screenshot/chat. |
+| `FEDEX_CLIENT_ID` | Direct FedEx tracking status polling | `services/fedex-tracking.ts`, `app/api/cron/fedex-tracking-sync/route.ts` | Missing | Required to text out-for-delivery and delivered status without AppSheet delivery data. |
+| `FEDEX_CLIENT_SECRET` | Direct FedEx tracking status polling | `services/fedex-tracking.ts`, `app/api/cron/fedex-tracking-sync/route.ts` | Missing | Store as secret from FedEx Developer Portal. |
+| `FEDEX_API_BASE_URL` | FedEx API host override | `services/fedex-tracking.ts` | Missing; defaults to `https://apis.fedex.com` | Optional unless using FedEx sandbox. |
 
 Webhook URL:
 - Basic Auth pharmacy tracking endpoint:
@@ -117,6 +120,8 @@ Webhook URL:
   `https://<production-domain>/api/webhooks/lifefile/order/{orderId}/status`
 - Google Apps Script sync bridge:
   `GET/POST https://<production-domain>/api/cron/pharmacy-tracking-sync`
+- Direct FedEx tracking sync:
+  `GET/POST https://<production-domain>/api/cron/fedex-tracking-sync`
 
 The provided Life File OpenAPI PDF does not document inbound webhooks or a polling/read endpoint for order status. It only documents `POST /order`, `PUT /order/{orderId}/status`, and `PUT /order/{orderId}/shipping`. Status callbacks require separate Life File/1stChoiceRx confirmation.
 
