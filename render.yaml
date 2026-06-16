@@ -190,7 +190,7 @@ services:
     name: mission-wlw-cron-identity-reminders
     runtime: node
     schedule: "0 13 * * *"   # daily at 1pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -211,7 +211,7 @@ services:
     name: mission-wlw-cron-pharmacy-tracking
     runtime: node
     schedule: "*/15 * * * *"  # every 15 minutes
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: node scripts/run-pharmacy-tracking-cron.mjs
     envVars:
       - key: NODE_VERSION
@@ -225,7 +225,7 @@ services:
     name: mission-wlw-cron-refill-reminders
     runtime: node
     schedule: "0 14 * * *"   # daily at 2pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -246,7 +246,7 @@ services:
     name: mission-wlw-cron-delivery-checkins
     runtime: node
     schedule: "0 15 * * *"   # daily at 3pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -267,7 +267,7 @@ services:
     name: mission-wlw-cron-winback
     runtime: node
     schedule: "0 16 * * *"   # daily at 4pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -288,7 +288,7 @@ services:
     name: mission-wlw-cron-intake-abandonment
     runtime: node
     schedule: "0 * * * *"   # hourly
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -309,7 +309,7 @@ services:
     name: mission-wlw-cron-weekly-checkins
     runtime: node
     schedule: "30 14 * * *"  # daily at 2:30pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -330,7 +330,7 @@ services:
     name: mission-wlw-cron-dose-escalation
     runtime: node
     schedule: "0 17 * * *"   # daily at 5pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -351,7 +351,7 @@ services:
     name: mission-wlw-cron-retatrutide-blast
     runtime: node
     schedule: "0 18 * * *"   # daily at 6pm UTC (idempotent — each patient receives it at most once)
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
@@ -372,7 +372,7 @@ services:
     name: mission-wlw-cron-subscription-billing
     runtime: node
     schedule: "0 19 * * *"   # daily at 7pm UTC
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
