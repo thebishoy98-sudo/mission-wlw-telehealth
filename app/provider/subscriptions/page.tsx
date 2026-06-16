@@ -41,6 +41,10 @@ function SubscriptionsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [acking, setAcking] = useState("");
+  const [managing, setManaging] = useState("");
+  const [enrollPhone, setEnrollPhone] = useState("");
+  const [enrollMsg, setEnrollMsg] = useState("");
+  const [enrolling, setEnrolling] = useState(false);
 
   const reload = async () => {
     setLoading(true);
@@ -60,6 +64,54 @@ function SubscriptionsContent() {
   useEffect(() => {
     void reload();
   }, []);
+
+  const manage = async (action: "cancel" | "pause" | "resume", subscriptionId: string) => {
+    if (action === "cancel" && !window.confirm("Cancel this subscription? Future auto-refills will stop.")) return;
+    setManaging(subscriptionId + action);
+    setError("");
+    try {
+      const res = await fetch("/api/provider/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, subscriptionId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `${action} failed`);
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setManaging("");
+    }
+  };
+
+  const enroll = async () => {
+    if (!enrollPhone.trim()) return;
+    setEnrolling(true);
+    setEnrollMsg("");
+    setError("");
+    try {
+      const res = await fetch("/api/provider/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "enroll", phone: enrollPhone.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Enroll failed");
+      setEnrollMsg(
+        data.alreadyActive
+          ? "That patient is already actively subscribed."
+          : data.mode === "activated"
+            ? "Subscription activated (card on file)."
+            : "No card on file — texted the patient a pay + save-card enrollment link."
+      );
+      setEnrollPhone("");
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEnrolling(false);
+    }
+  };
 
   const acknowledge = async (orderId: string) => {
     setAcking(orderId);
@@ -104,6 +156,27 @@ function SubscriptionsContent() {
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
 
+        <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4">
+          <h2 className="text-sm font-semibold text-gray-900">Manually enroll a patient</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            Enter the patient&apos;s phone. If they have a card on file we activate the subscription now;
+            otherwise we text them a pay + save-card enrollment link.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="tel"
+              value={enrollPhone}
+              onChange={(e) => setEnrollPhone(e.target.value)}
+              placeholder="(732) 555-0123"
+              className="w-56 rounded-xl border border-gray-200 px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-forest-700"
+            />
+            <Button onClick={() => void enroll()} disabled={enrolling || !enrollPhone.trim()}>
+              {enrolling ? "Working…" : "Enroll patient"}
+            </Button>
+            {enrollMsg && <span className="text-sm text-forest-800">{enrollMsg}</span>}
+          </div>
+        </div>
+
         {loading ? (
           <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-500">
             Loading subscriptions…
@@ -143,6 +216,38 @@ function SubscriptionsContent() {
                       <p>Next billing: <span className="font-medium text-gray-800">{sub.nextRunAt ? formatDateTime(sub.nextRunAt) : "—"}</span></p>
                       <p>Supply through: {sub.coversThrough ? formatDateTime(sub.coversThrough) : "—"}</p>
                       <p>Last charged: {sub.lastChargedAt ? formatDateTime(sub.lastChargedAt) : "—"}</p>
+                      <div className="mt-2 flex flex-wrap justify-end gap-2">
+                        {sub.status === "active" && (
+                          <button
+                            type="button"
+                            onClick={() => void manage("pause", sub.id)}
+                            disabled={managing === sub.id + "pause"}
+                            className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            {managing === sub.id + "pause" ? "…" : "Pause"}
+                          </button>
+                        )}
+                        {sub.status === "paused" && (
+                          <button
+                            type="button"
+                            onClick={() => void manage("resume", sub.id)}
+                            disabled={managing === sub.id + "resume"}
+                            className="rounded-lg border border-forest-300 px-2.5 py-1 text-xs font-semibold text-forest-800 hover:bg-forest-50 disabled:opacity-50"
+                          >
+                            {managing === sub.id + "resume" ? "…" : "Resume"}
+                          </button>
+                        )}
+                        {sub.status !== "cancelled" && (
+                          <button
+                            type="button"
+                            onClick={() => void manage("cancel", sub.id)}
+                            disabled={managing === sub.id + "cancel"}
+                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {managing === sub.id + "cancel" ? "…" : "Cancel"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -187,7 +292,7 @@ function SubscriptionsContent() {
 
 export default function ProviderSubscriptionsPage() {
   return (
-    <ProtectedRoute requiredRole="provider">
+    <ProtectedRoute allowedRoles={["provider", "admin"]}>
       <SubscriptionsContent />
     </ProtectedRoute>
   );

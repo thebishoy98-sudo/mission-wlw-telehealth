@@ -6,21 +6,28 @@ import { useEffect } from "react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole: UserRole;
+  requiredRole?: UserRole;
+  /** Allow any of these roles. Takes precedence over requiredRole. */
+  allowedRoles?: UserRole[];
 }
 
-export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredRole, allowedRoles }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
+  const roles = allowedRoles ?? (requiredRole ? [requiredRole] : []);
+  const permitted = !!user && roles.includes(user.role);
+  // Where to send an unauthenticated user to sign in (first listed role).
+  const loginRole = roles[0] ?? "patient";
+
   useEffect(() => {
     if (isLoading) return;
-    if (!user || user.role !== requiredRole) {
-      router.replace(`/login/${requiredRole}`);
+    if (!permitted) {
+      router.replace(`/login/${loginRole}`);
     }
-  }, [user, isLoading, requiredRole, router]);
+  }, [isLoading, permitted, loginRole, router]);
 
-  if (isLoading || !user || user.role !== requiredRole) {
+  if (isLoading || !permitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="w-8 h-8 border-2 border-forest-800 border-t-transparent rounded-full animate-spin" />
