@@ -6,7 +6,7 @@ import * as spruceServer from "@/services/spruce.server";
 import { sendAdminNotification } from "@/services/admin-notifications";
 import { resolvePatient } from "@/lib/patient-resolver";
 import { generateId } from "@/lib/utils";
-import { normalizeLifeFileWebhookPayload } from "@/lib/lifefile-webhook";
+import { normalizeLifeFileWebhookPayload, isStatusRegression } from "@/lib/lifefile-webhook";
 import { forwardTrackingToScript } from "@/services/pharmacy-tracking-script";
 
 function verifyLifeFileSignature(body: string, signature: string, secret: string): boolean {
@@ -90,6 +90,10 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
 
   switch (event) {
     case "order.received": {
+      if (isStatusRegression(pharmacyOrder.status, "received")) {
+        log("Ignored out-of-order received event (already past received)");
+        return NextResponse.json({ received: true, ignored: "status_regression" });
+      }
       db.pharmacyOrderDb.update(pharmacyOrder.id, { status: "received" });
       db.orderDb.update(orderId, { pharmacyStatus: "received" });
       await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, { status: "received" }).catch(() => {});
@@ -99,6 +103,10 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
     }
 
     case "order.processing": {
+      if (isStatusRegression(pharmacyOrder.status, "processing")) {
+        log("Ignored out-of-order processing event (already past processing)");
+        return NextResponse.json({ received: true, ignored: "status_regression" });
+      }
       db.pharmacyOrderDb.update(pharmacyOrder.id, { status: "processing" });
       db.orderDb.update(orderId, { pharmacyStatus: "processing" });
       await dbServer.pharmacyOrderDb.update(pharmacyOrder.id, { status: "processing" }).catch(() => {});
@@ -112,6 +120,14 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
     }
 
     case "order.shipped": {
+      // Ignore stale/out-of-order "shipped" events for orders already further
+      // along (e.g. delivered via FedEx tracking sync). Prevents the status
+      // from regressing and a duplicate "order_shipped" SMS from being sent.
+      if (isStatusRegression(pharmacyOrder.status, "shipped")) {
+        log("Ignored out-of-order shipped event (already past shipped)");
+        return NextResponse.json({ received: true, ignored: "status_regression" });
+      }
+
       const existingTrackingNumber = String(pharmacyOrder.trackingNumber ?? "").trim();
       const incomingTrackingNumber = String(trackingNumber ?? "").trim();
       const isDuplicateShippedUpdate =

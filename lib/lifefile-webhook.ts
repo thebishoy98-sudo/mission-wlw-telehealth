@@ -16,6 +16,27 @@ function firstString(...values: unknown[]) {
   return "";
 }
 
+// Pharmacy status progression. A webhook must never move an order backward
+// (e.g. a late/out-of-order "shipped" event arriving after FedEx tracking has
+// already marked the order "delivered"). "error" is intentionally omitted — it
+// is a terminal side-state, not part of the forward progression.
+const PHARMACY_STATUS_RANK: Record<string, number> = {
+  draft: 0,
+  submitted: 1,
+  received: 2,
+  processing: 3,
+  fulfilled: 4,
+  shipped: 5,
+  delivered: 6,
+};
+
+export function isStatusRegression(current: string | null | undefined, incoming: string): boolean {
+  const currentRank = PHARMACY_STATUS_RANK[current ?? ""];
+  const incomingRank = PHARMACY_STATUS_RANK[incoming];
+  if (currentRank === undefined || incomingRank === undefined) return false;
+  return incomingRank < currentRank;
+}
+
 export function mapLifeFileStatusToEvent(status: string) {
   const normalized = status.trim().toLowerCase().replace(/[\s_-]+/g, "");
 
