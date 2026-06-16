@@ -16,7 +16,7 @@ import type {
   Patient, Order, Payment, Product, Question, QuestionnaireAnswer,
   ConsentRecord, Upload, ProviderReview, PharmacyOrder, PracticeQPacket,
   QuickBooksRecord, SpruceMessage, MessageTemplate, IntegrationLog,
-  PracticeQAutomationJob,
+  PracticeQAutomationJob, Subscription,
 } from "@/types";
 
 // ── Products ──────────────────────────────────────────────────────────────────
@@ -206,6 +206,10 @@ export const patientDb = {
         email      = COALESCE(${data.email ?? null}, email),
         address    = COALESCE(${data.address ? JSON.stringify(data.address) : null}::jsonb, address),
         shipping_address = COALESCE(${data.shippingAddress ? JSON.stringify(data.shippingAddress) : null}::jsonb, shipping_address),
+        qb_card_id = COALESCE(${data.qbCardId ?? null}, qb_card_id),
+        card_last4 = COALESCE(${data.cardLast4 ?? null}, card_last4),
+        card_brand = COALESCE(${data.cardBrand ?? null}, card_brand),
+        recurring_consent_at = COALESCE(${data.recurringConsentAt ?? null}, recurring_consent_at),
         updated_at = ${now}
       WHERE id = ${id}
     `;
@@ -254,16 +258,19 @@ export const orderDb = {
     if (!isDbAvailable()) return o;
     // Ensure ref_code column exists on the live table (migration guard)
     await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS subscription_id TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_refill BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
         identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
-        identity_upload_token, ref_code, created_at, updated_at)
+        identity_upload_token, ref_code, subscription_id, is_refill, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus}, ${o.practiceqClientId ?? null},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
         ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
-        ${o.identityUploadToken ?? null}, ${o.refCode ?? null}, ${o.createdAt}, ${o.updatedAt})
+        ${o.identityUploadToken ?? null}, ${o.refCode ?? null}, ${o.subscriptionId ?? null}, ${o.isRefill ?? false},
+        ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
   },
@@ -289,6 +296,10 @@ export const orderDb = {
         identity_reviewed_by = COALESCE(${data.identityReviewedBy ?? null}, identity_reviewed_by),
         identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
         identity_upload_token = COALESCE(${data.identityUploadToken ?? null}, identity_upload_token),
+        subscription_id    = COALESCE(${data.subscriptionId ?? null}, subscription_id),
+        is_refill          = COALESCE(${data.isRefill ?? null}, is_refill),
+        provider_acknowledged_at = COALESCE(${data.providerAcknowledgedAt ?? null}, provider_acknowledged_at),
+        provider_acknowledged_by = COALESCE(${data.providerAcknowledgedBy ?? null}, provider_acknowledged_by),
         updated_at         = ${now}
       WHERE id = ${id}
     `;
@@ -681,6 +692,89 @@ export const pharmacyOrderDb = {
   },
 };
 
+// ── Subscriptions (recurring auto-refill) ───────────────────────────────────────
+
+export const subscriptionDb = {
+  async create(s: Subscription): Promise<Subscription> {
+    if (!isDbAvailable()) return s;
+    await sql`
+      INSERT INTO subscriptions (id, patient_id, product_id, dose_id, status, interval_days,
+        lead_days, covers_through, next_run_at, last_order_id, last_charged_at, source_order_id,
+        qb_customer_id, created_at, updated_at)
+      VALUES (${s.id}, ${s.patientId}, ${s.productId}, ${s.doseId}, ${s.status},
+        ${s.intervalDays}, ${s.leadDays}, ${s.coversThrough ?? null}, ${s.nextRunAt ?? null},
+        ${s.lastOrderId ?? null}, ${s.lastChargedAt ?? null}, ${s.sourceOrderId ?? null},
+        ${s.qbCustomerId ?? null}, ${s.createdAt}, ${s.updatedAt})
+      ON CONFLICT (id) DO NOTHING
+    `;
+    return s;
+  },
+
+  async getById(id: string): Promise<Subscription | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM subscriptions WHERE id = ${id} LIMIT 1`;
+    return rows[0] ? rowToSubscription(rows[0]) : null;
+  },
+
+  async getByPatient(patientId: string): Promise<Subscription[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM subscriptions WHERE patient_id = ${patientId} ORDER BY created_at DESC
+    `;
+    return rows.map(rowToSubscription);
+  },
+
+  async getActiveByPatientProduct(patientId: string, productId: string): Promise<Subscription | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`
+      SELECT * FROM subscriptions
+      WHERE patient_id = ${patientId} AND product_id = ${productId} AND status = 'active'
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    return rows[0] ? rowToSubscription(rows[0]) : null;
+  },
+
+  /** Active subscriptions whose billing window is due (next_run_at <= now). */
+  async listDue(nowIso: string, limit = 100): Promise<Subscription[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`
+      SELECT * FROM subscriptions
+      WHERE status = 'active' AND next_run_at IS NOT NULL AND next_run_at <= ${nowIso}
+      ORDER BY next_run_at ASC
+      LIMIT ${limit}
+    `;
+    return rows.map(rowToSubscription);
+  },
+
+  async getAll(): Promise<Subscription[]> {
+    if (!isDbAvailable()) return [];
+    const { rows } = await sql`SELECT * FROM subscriptions ORDER BY created_at DESC`;
+    return rows.map(rowToSubscription);
+  },
+
+  async update(id: string, data: Partial<Subscription>): Promise<Subscription | null> {
+    if (!isDbAvailable()) return null;
+    const now = new Date().toISOString();
+    await sql`
+      UPDATE subscriptions SET
+        status          = COALESCE(${data.status ?? null}, status),
+        dose_id         = COALESCE(${data.doseId ?? null}, dose_id),
+        interval_days   = COALESCE(${data.intervalDays ?? null}, interval_days),
+        lead_days       = COALESCE(${data.leadDays ?? null}, lead_days),
+        covers_through  = COALESCE(${data.coversThrough ?? null}, covers_through),
+        next_run_at     = COALESCE(${data.nextRunAt ?? null}, next_run_at),
+        last_order_id   = COALESCE(${data.lastOrderId ?? null}, last_order_id),
+        last_charged_at = COALESCE(${data.lastChargedAt ?? null}, last_charged_at),
+        qb_customer_id  = COALESCE(${data.qbCustomerId ?? null}, qb_customer_id),
+        cancelled_at    = COALESCE(${data.cancelledAt ?? null}, cancelled_at),
+        cancel_reason   = COALESCE(${data.cancelReason ?? null}, cancel_reason),
+        updated_at      = ${now}
+      WHERE id = ${id}
+    `;
+    return this.getById(id);
+  },
+};
+
 // ── Integration Logs ──────────────────────────────────────────────────────────
 
 export const integrationLogDb = {
@@ -1014,6 +1108,10 @@ function rowToPatient(r: any): Patient {
     dateOfBirth: r.date_of_birth, gender: r.gender, phone: r.phone, email: r.email,
     address: r.address, shippingAddress: r.shipping_address,
     emergencyContact: r.emergency_contact ?? undefined,
+    qbCardId: r.qb_card_id ?? undefined,
+    cardLast4: r.card_last4 ?? undefined,
+    cardBrand: r.card_brand ?? undefined,
+    recurringConsentAt: r.recurring_consent_at ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
@@ -1034,6 +1132,10 @@ function rowToOrder(r: any): Order {
     identityUploadToken: r.identity_upload_token ?? undefined,
     practiceqClientId: r.practiceq_client_id === undefined || r.practiceq_client_id === null ? undefined : String(r.practiceq_client_id),
     refCode: r.ref_code ?? undefined,
+    subscriptionId: r.subscription_id ?? undefined,
+    isRefill: r.is_refill ?? undefined,
+    providerAcknowledgedAt: r.provider_acknowledged_at ?? undefined,
+    providerAcknowledgedBy: r.provider_acknowledged_by ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
@@ -1090,6 +1192,18 @@ function rowToReview(r: any): ProviderReview {
     chartViewedBy: r.chart_viewed_by ?? undefined,
     identityAiResult: r.identity_ai_result ?? undefined,
     identityReviewRequired: r.identity_review_required ?? undefined,
+  };
+}
+
+function rowToSubscription(r: any): Subscription {
+  return {
+    id: r.id, patientId: r.patient_id, productId: r.product_id, doseId: r.dose_id,
+    status: r.status, intervalDays: Number(r.interval_days), leadDays: Number(r.lead_days),
+    coversThrough: r.covers_through ?? undefined, nextRunAt: r.next_run_at ?? undefined,
+    lastOrderId: r.last_order_id ?? undefined, lastChargedAt: r.last_charged_at ?? undefined,
+    sourceOrderId: r.source_order_id ?? undefined, qbCustomerId: r.qb_customer_id ?? undefined,
+    cancelledAt: r.cancelled_at ?? undefined, cancelReason: r.cancel_reason ?? undefined,
+    createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 

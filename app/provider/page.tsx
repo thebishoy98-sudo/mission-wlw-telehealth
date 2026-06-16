@@ -123,7 +123,15 @@ function ProviderDashboardContent() {
     <div className="min-h-screen bg-gray-50">
       <Navbar variant="provider" />
       <div className="container-max pt-12 pb-8 sm:pt-16 sm:pb-12">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-8">Provider Dashboard</h1>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">Provider Dashboard</h1>
+          <Link
+            href="/provider/subscriptions"
+            className="inline-flex items-center gap-1.5 rounded-xl border-2 border-forest-800 px-4 py-2 text-sm font-semibold text-forest-800 hover:bg-forest-50"
+          >
+            Auto-Refill Subscriptions →
+          </Link>
+        </div>
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}

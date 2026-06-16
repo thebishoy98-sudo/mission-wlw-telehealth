@@ -81,6 +81,14 @@ services:
       - key: NEXT_PUBLIC_QB_PAYMENTS_APP_KEY
         sync: false
 
+      # Subscription auto-refill (recurring 8-week billing).
+      - key: SUBSCRIPTION_AUTOCHARGE_ENABLED
+        value: true
+      - key: SUBSCRIPTION_INTERVAL_DAYS
+        value: 56
+      - key: SUBSCRIPTION_LEAD_DAYS
+        value: 7
+
       # Pharmacy dispatch is routed to LifeFile production.
       - key: PHARMACY_PROVIDER
         value: lifefile
@@ -348,6 +356,27 @@ services:
       node -e "
         require('https').get(
           process.env.APP_BASE_URL + '/api/cron/retatrutide-blast',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
+    name: mission-wlw-cron-subscription-billing
+    runtime: node
+    schedule: "0 19 * * *"   # daily at 7pm UTC
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/subscription-billing',
           { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
           (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
         ).on('error', () => { process.exitCode = 1; });

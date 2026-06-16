@@ -1,0 +1,211 @@
+/**
+ * Cron: Subscription Billing (recurring 8-week auto-refill)
+ *
+ * Runs daily. For each active subscription whose billing window is due
+ * (next_run_at <= now, i.e. ~7 days before the supply runs out):
+ *   - Card on file + consent + autocharge enabled → charge the stored card,
+ *     create + dispatch the refill order, advance the cycle, text the patient.
+ *   - Otherwise → create (or reuse) an unpaid refill order and text a
+ *     "pay + save your card" link; the pay page enrolls/advances on payment.
+ *   - If a stored-card charge fails → fall back to the pay link (dunning).
+ *
+ * Auto-charge can be disabled with SUBSCRIPTION_AUTOCHARGE_ENABLED=false.
+ * Protected via CRON_SECRET.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import * as dbServer from "@/lib/db.server";
+import * as spruceServer from "@/services/spruce.server";
+import * as qbPayments from "@/services/quickbooks-payments";
+import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
+import { advanceCycle, isAutochargeEnabled } from "@/lib/subscription";
+import { getChargeAmount } from "@/lib/payment-amount";
+import { createPaymentLinkToken, buildPaymentLinkUrl } from "@/lib/payment-link";
+import { getPublicBaseUrl } from "@/lib/public-url";
+import { formatCurrency, generateId } from "@/lib/utils";
+import type { Order } from "@/types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DUNNING_RETRY_DAYS = 3;
+
+function logSubscriptionEvent(
+  action: string,
+  subscriptionId: string,
+  orderId: string | undefined,
+  patientId: string,
+  details: Record<string, unknown>,
+  status: "success" | "error" = "success",
+  error?: string
+) {
+  return dbServer.integrationLogDb
+    .create({
+      id: generateId(),
+      timestamp: new Date().toISOString(),
+      integrationName: "quickbooks",
+      action,
+      orderId,
+      patientId,
+      status,
+      details: { source: "subscription", subscriptionId, ...details },
+      error,
+    })
+    .catch(() => {});
+}
+
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
+  }
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.POSTGRES_URL) {
+    return NextResponse.json({ skipped: "No POSTGRES_URL configured", results: [] });
+  }
+
+  const now = new Date().toISOString();
+  const autocharge = isAutochargeEnabled();
+  const baseUrl = getPublicBaseUrl(req);
+  const due = await dbServer.subscriptionDb.listDue(now, 100);
+  const results: Record<string, unknown>[] = [];
+
+  for (const sub of due) {
+    try {
+      const [patient, product] = await Promise.all([
+        dbServer.patientDb.getById(sub.patientId),
+        dbServer.productDb.getById(sub.productId),
+      ]);
+      if (!patient || !product) {
+        await logSubscriptionEvent("Subscription skipped (missing patient/product)", sub.id, undefined, sub.patientId, {}, "error");
+        results.push({ subscriptionId: sub.id, action: "skipped_missing_refs" });
+        continue;
+      }
+
+      const dose = product.doses?.find((d) => d.id === sub.doseId);
+      const amount = getChargeAmount(dose?.price ?? product.startingPrice);
+      if (amount === null) {
+        await logSubscriptionEvent("Subscription skipped (no price)", sub.id, undefined, patient.id, { doseId: sub.doseId }, "error");
+        results.push({ subscriptionId: sub.id, action: "skipped_no_price" });
+        continue;
+      }
+
+      const patientOrders = await dbServer.orderDb.getByPatient(patient.id).catch(() => []);
+      const lastOrder = patientOrders[0] ?? null;
+      const hasCardOnFile = Boolean(patient.qbCardId && patient.recurringConsentAt);
+
+      // ── Auto-charge path ─────────────────────────────────────────────────────
+      if (hasCardOnFile && autocharge) {
+        const order = await createRefillOrder(sub, patient, lastOrder);
+        try {
+          const chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
+            customerId: sub.qbCustomerId ?? "",
+            cardId: patient.qbCardId!,
+            cardLast4: patient.cardLast4,
+            cardBrand: patient.cardBrand,
+          });
+          const fulfillment = await fulfillChargedRefillOrder({
+            order,
+            patient,
+            product,
+            amount,
+            chargeResult,
+            subscription: sub,
+          });
+          const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
+          await dbServer.subscriptionDb.update(sub.id, {
+            ...cycle,
+            lastOrderId: order.id,
+            lastChargedAt: now,
+          });
+          await spruceServer
+            .sendMessage(patient, "subscription_charged", {
+              orderId: order.id,
+              patientName: patient.firstName,
+              amount: formatCurrency(amount),
+              cardLast4: patient.cardLast4 ?? "",
+            })
+            .catch(() => {});
+          results.push({
+            subscriptionId: sub.id,
+            action: "auto_charged",
+            orderId: order.id,
+            dispatched: fulfillment.dispatched,
+            warnings: fulfillment.warnings.length ? fulfillment.warnings : undefined,
+          });
+        } catch (chargeErr) {
+          // Charge failed (declined / API issue) → revert order to unpaid, send
+          // a pay link, and retry soon. Never lose the cycle.
+          await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
+          const { token } = createPaymentLinkToken(order.id);
+          const payUrl = buildPaymentLinkUrl(baseUrl, token);
+          await spruceServer
+            .sendMessage(patient, "subscription_payment_failed", {
+              orderId: order.id,
+              patientName: patient.firstName,
+              payUrl,
+            })
+            .catch(() => {});
+          await dbServer.subscriptionDb.update(sub.id, {
+            nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
+            lastOrderId: order.id,
+          });
+          await logSubscriptionEvent(
+            "Subscription auto-charge failed (sent pay link)",
+            sub.id,
+            order.id,
+            patient.id,
+            { amount },
+            "error",
+            (chargeErr as Error).message
+          );
+          results.push({ subscriptionId: sub.id, action: "charge_failed_sent_link", orderId: order.id });
+        }
+        continue;
+      }
+
+      // ── Pay-link path (no card on file, or autocharge disabled) ──────────────
+      // Reuse the cycle's existing unpaid refill order if present, else create one.
+      let order: Order | null = null;
+      if (sub.lastOrderId) {
+        const existing = await dbServer.orderDb.getById(sub.lastOrderId).catch(() => null);
+        if (existing && existing.isRefill && existing.paymentStatus !== "completed") {
+          order = existing;
+        }
+      }
+      if (!order) order = await createRefillOrder(sub, patient, lastOrder);
+
+      const { token } = createPaymentLinkToken(order.id);
+      const payUrl = buildPaymentLinkUrl(baseUrl, token);
+      await spruceServer
+        .sendMessage(patient, "subscription_pay_link", {
+          orderId: order.id,
+          patientName: patient.firstName,
+          amount: formatCurrency(amount),
+          payUrl,
+        })
+        .catch(() => {});
+      // Re-prompt in a few days; the pay page advances the cycle on payment.
+      await dbServer.subscriptionDb.update(sub.id, {
+        nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
+        lastOrderId: order.id,
+      });
+      results.push({ subscriptionId: sub.id, action: "pay_link_sent", orderId: order.id });
+    } catch (err) {
+      await logSubscriptionEvent(
+        "Subscription billing error",
+        sub.id,
+        undefined,
+        sub.patientId,
+        {},
+        "error",
+        (err as Error).message
+      );
+      results.push({ subscriptionId: sub.id, action: "error", error: (err as Error).message });
+    }
+  }
+
+  return NextResponse.json({ processed: results.length, autocharge, results, runAt: now });
+}
+
+export const POST = GET;

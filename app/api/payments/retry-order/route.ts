@@ -26,6 +26,7 @@ import {
   wakePracticeQRemoteWorker,
 } from "@/services/practiceq-automation-orchestration";
 import { assessPaymentRetryEligibility, verifyPaymentLinkToken } from "@/lib/payment-link";
+import { storeCardAndChargeStored, recordEnrollment } from "@/lib/subscription-enroll";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { shouldBypassQuickBooksPayment } from "@/lib/payment-bypass";
 import {
@@ -150,7 +151,15 @@ export async function POST(req: NextRequest) {
 
     // Charge QuickBooks once (or simulate in bypass/test mode).
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
+    // Opt-in recurring enrollment: save the card on file + auto-bill every cycle.
+    const wantsEnroll =
+      body.enrollSubscription === true &&
+      body.recurringConsent === true &&
+      !bypassQuickBooksPayment &&
+      !!body.cardToken &&
+      !!process.env.QB_CLIENT_ID;
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
+    let enrollmentCardInfo: { qbCustomerId: string; qbCardId: string; cardLast4: string; cardBrand: string } | null = null;
     if (bypassQuickBooksPayment) {
       chargeResult = {
         chargeId: `test_bypass_${generateId()}`,
@@ -158,6 +167,39 @@ export async function POST(req: NextRequest) {
         cardLast4: String(body.cardLast4 ?? "0000"),
         cardBrand: String(body.cardBrand ?? "test"),
       };
+    } else if (wantsEnroll) {
+      // Store-then-charge: keep a reusable card-on-file from one tokenization.
+      try {
+        const stored = await storeCardAndChargeStored({
+          order,
+          patient,
+          amount,
+          cardToken: String(body.cardToken),
+          cardLast4: body.cardLast4,
+          cardBrand: body.cardBrand,
+        });
+        chargeResult = stored.chargeResult;
+        enrollmentCardInfo = {
+          qbCustomerId: stored.qbCustomerId,
+          qbCardId: stored.qbCardId,
+          cardLast4: stored.cardLast4,
+          cardBrand: stored.cardBrand,
+        };
+      } catch (err: any) {
+        await revertToUnpaid();
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "quickbooks",
+          action: "Subscription enroll charge failed",
+          orderId,
+          patientId: patient.id,
+          status: "error",
+          details: { amount, source: "payment_link_enroll" },
+          error: err.message ?? "Payment failed",
+        }).catch(() => {});
+        return NextResponse.json({ error: err.message ?? "Payment failed" }, { status: 402 });
+      }
     } else {
       try {
         chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
@@ -373,11 +415,33 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
+    // Enroll (or advance) the subscription now that the card is saved on file.
+    let subscriptionId: string | undefined;
+    if (enrollmentCardInfo) {
+      try {
+        const subscription = await recordEnrollment({
+          order: updatedOrder,
+          patient,
+          product: productForIntegrations,
+          qbCustomerId: enrollmentCardInfo.qbCustomerId,
+          qbCardId: enrollmentCardInfo.qbCardId,
+          cardLast4: enrollmentCardInfo.cardLast4,
+          cardBrand: enrollmentCardInfo.cardBrand,
+          nowIso: now,
+        });
+        subscriptionId = subscription.id;
+      } catch (e) {
+        errors.push(`Subscription enroll: ${(e as Error).message}`);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       orderId,
       chargeId: chargeResult.chargeId,
       chargedAmount: amount,
+      subscriptionId,
+      enrolled: !!subscriptionId,
       identityStatus,
       orderStatus: canDispatchPharmacy && !errors.some((error) => error.startsWith("Pharmacy:"))
         ? "sent_to_pharmacy"

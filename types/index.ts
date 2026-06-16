@@ -14,6 +14,12 @@ export interface Patient {
     relationship: string;
     phone: string;
   };
+  /** Intuit QB Payments reusable stored-card id (card-on-file). No PAN stored. */
+  qbCardId?: string;
+  cardLast4?: string;
+  cardBrand?: string;
+  /** When the patient authorized recurring auto-billing (subscription). */
+  recurringConsentAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +133,39 @@ export interface Order {
   /** PracticeQ/IntakeQ client ID — used to look up patient PHI from PracticeQ API */
   practiceqClientId?: string;
   refCode?: string;
+  /** Subscription auto-refill linkage. */
+  subscriptionId?: string;
+  isRefill?: boolean;
+  /** Non-blocking provider acknowledgment of an auto-refill (does NOT gate dispatch). */
+  providerAcknowledgedAt?: string;
+  providerAcknowledgedBy?: string;
+}
+
+export type SubscriptionStatus = "active" | "paused" | "cancelled";
+
+export interface Subscription {
+  id: string;
+  patientId: string;
+  productId: string;
+  doseId: string;
+  status: SubscriptionStatus;
+  /** Nominal supply length / billing cadence in days (8 weeks = 56). */
+  intervalDays: number;
+  /** How many days before the supply runs out the billing cron fires. */
+  leadDays: number;
+  /** When the current supply runs out. */
+  coversThrough?: string;
+  /** When the billing cron should next fire (= coversThrough - leadDays). */
+  nextRunAt?: string;
+  lastOrderId?: string;
+  lastChargedAt?: string;
+  /** The order that originally enrolled this subscription. */
+  sourceOrderId?: string;
+  qbCustomerId?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Intake and Medical Information

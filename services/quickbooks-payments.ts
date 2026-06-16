@@ -210,6 +210,141 @@ export async function chargeCard(
 }
 
 /**
+ * Store a card on file against a QuickBooks customer for reuse in recurring
+ * charges (subscriptions). Takes a single-use token from qbpayments.js and
+ * exchanges it for a durable card id via Intuit's createFromToken endpoint.
+ * No raw PAN is ever handled or stored — only Intuit's reusable card id.
+ *
+ * Returns the reusable card id plus masked metadata for display.
+ */
+export async function storeCardOnFile(
+  customerId: string,
+  token: string,
+  meta: { cardLast4?: string; cardBrand?: string } = {}
+): Promise<{ cardId: string; cardLast4: string; cardBrand: string }> {
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) {
+    return {
+      cardId: `qbcard_mock_${generateId()}`,
+      cardLast4: meta.cardLast4 ?? "0000",
+      cardBrand: meta.cardBrand ?? "unknown",
+    };
+  }
+
+  if (!customerId) throw new Error("A QuickBooks customer id is required to store a card on file.");
+  if (!token) throw new Error("A card token is required to store a card on file.");
+
+  const accessToken = await getQBAccessToken();
+  const res = await fetch(`${PAYMENTS_BASE_URL}/customers/${encodeURIComponent(customerId)}/cards/createFromToken`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+      "Request-Id": generateId(),
+    },
+    body: JSON.stringify({ value: token }),
+  });
+
+  const rawBody = await res.text();
+  let card: { id?: string; number?: string; cardType?: string; errors?: Array<{ message: string }> };
+  try {
+    card = JSON.parse(rawBody);
+  } catch {
+    const xmlDetail = rawBody.match(/<(?:message|errorMessage|detail)[^>]*>([^<]+)</i)?.[1] ?? rawBody.slice(0, 200);
+    throw new Error(`QuickBooks store-card error (HTTP ${res.status}): ${xmlDetail}`);
+  }
+  if (!res.ok || card.errors?.length || !card.id) {
+    const errMsg = card.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`;
+    throw new Error(`QuickBooks store-card failed: ${errMsg}`);
+  }
+
+  return {
+    cardId: card.id,
+    cardLast4: card.number?.slice(-4) ?? meta.cardLast4 ?? "0000",
+    cardBrand: card.cardType ?? meta.cardBrand ?? "unknown",
+  };
+}
+
+/**
+ * Charge a previously stored card-on-file (no customer interaction). Used by
+ * the subscription billing cron for recurring auto-refills. Flagged as a
+ * recurring/card-on-file transaction for correct interchange handling.
+ */
+export async function chargeStoredCard(
+  orderId: string,
+  patientId: string,
+  amountDollars: number,
+  details: { customerId: string; cardId: string; cardLast4?: string; cardBrand?: string }
+): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
+  const amountFormatted = amountDollars.toFixed(2);
+
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) {
+    const mockChargeId = `qbp_mock_recurring_${generateId()}`;
+    logPaymentEvent("QB Payments mock recurring charge", orderId, patientId, {
+      chargeId: mockChargeId, amount: amountDollars, mode: "mock",
+    });
+    return {
+      chargeId: mockChargeId,
+      status: "CAPTURED",
+      cardLast4: details.cardLast4 ?? "0000",
+      cardBrand: details.cardBrand ?? "unknown",
+    };
+  }
+
+  if (!details.cardId) throw new Error("A stored card id is required for a recurring charge.");
+
+  const accessToken = await getQBAccessToken();
+  const requestId = generateId();
+  const payload = {
+    amount: amountFormatted,
+    currency: "USD" as const,
+    capture: true,
+    card: { id: details.cardId },
+    context: { mobile: false, isEcommerce: true, recurring: true },
+    ...(details.customerId ? { customerIdRef: details.customerId } : {}),
+  };
+
+  const res = await fetch(`${PAYMENTS_BASE_URL}/charges`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+      "Request-Id": requestId,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const rawBody = await res.text();
+  let charge: QBChargeResponse;
+  try {
+    charge = JSON.parse(rawBody) as QBChargeResponse;
+  } catch {
+    const xmlDetail = rawBody.match(/<(?:message|errorMessage|detail)[^>]*>([^<]+)</i)?.[1] ?? rawBody.slice(0, 200);
+    throw new Error(`QuickBooks Payments recurring error (HTTP ${res.status}): ${xmlDetail}`);
+  }
+
+  if (!res.ok || charge.errors?.length) {
+    const errMsg = charge.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`;
+    logPaymentEvent("QB Payments recurring charge failed", orderId, patientId, { error: errMsg, requestId }, "error");
+    throw new Error(`QuickBooks Payments recurring charge failed: ${errMsg}`);
+  }
+  if (charge.status === "DECLINED") {
+    logPaymentEvent("QB Payments recurring card declined", orderId, patientId, { chargeId: charge.id, requestId }, "error");
+    throw new Error("The card on file was declined.");
+  }
+
+  logPaymentEvent("QB Payments recurring charge captured", orderId, patientId, {
+    chargeId: charge.id, amount: amountDollars, cardType: charge.card?.cardType ?? details.cardBrand ?? "unknown",
+  });
+
+  return {
+    chargeId: charge.id,
+    status: charge.status,
+    cardLast4: charge.card?.number?.slice(-4) ?? details.cardLast4 ?? "0000",
+    cardBrand: charge.card?.cardType ?? details.cardBrand ?? "unknown",
+  };
+}
+
+/**
  * Void (cancel) an uncaptured charge.
  */
 export async function voidCharge(chargeId: string): Promise<void> {

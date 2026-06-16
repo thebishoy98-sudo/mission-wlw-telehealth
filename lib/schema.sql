@@ -24,12 +24,21 @@ CREATE TABLE IF NOT EXISTS patients (
   shipping_address        JSONB NOT NULL DEFAULT '{}',
   emergency_contact       JSONB,
   qb_customer_id          TEXT,
+  qb_card_id              TEXT,          -- Intuit QB Payments reusable stored-card id (card-on-file). No PAN stored.
+  card_last4              TEXT,
+  card_brand              TEXT,
+  recurring_consent_at    TIMESTAMPTZ,   -- when the patient authorized recurring auto-billing
   retention_delete_after  TIMESTAMPTZ,
   is_deleted              BOOLEAN NOT NULL DEFAULT false,
   deleted_at              TIMESTAMPTZ,
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS qb_card_id TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS card_last4 TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS card_brand TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS recurring_consent_at TIMESTAMPTZ;
 
 -- ── Products ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS products (
@@ -85,6 +94,41 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_by TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_upload_token TEXT;
+
+-- Subscription / auto-refill tracking on orders.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS subscription_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_refill BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS provider_acknowledged_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS provider_acknowledged_by TEXT;
+
+-- ── Subscriptions (recurring 8-week auto-refill) ────────────────────────────────
+-- One active subscription per patient+product. Billing fires `lead_days` before
+-- the current supply (`covers_through`) runs out, so the refill arrives in time.
+-- Cadence stays a true `interval_days` (8 weeks) because `covers_through` advances
+-- by interval_days each cycle (no drift, no supply gap). Card-on-file lives on the
+-- patient (qb_card_id); no PAN is ever stored — only Intuit's reusable token.
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                   TEXT PRIMARY KEY,
+  patient_id           TEXT NOT NULL REFERENCES patients(id),
+  product_id           TEXT NOT NULL REFERENCES products(id),
+  dose_id              TEXT NOT NULL,
+  status               TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','cancelled')),
+  interval_days        INTEGER NOT NULL DEFAULT 56,
+  lead_days            INTEGER NOT NULL DEFAULT 7,
+  covers_through       TIMESTAMPTZ,   -- when the current supply runs out
+  next_run_at          TIMESTAMPTZ,   -- when the billing cron should fire (= covers_through - lead_days)
+  last_order_id        TEXT,
+  last_charged_at      TIMESTAMPTZ,
+  source_order_id      TEXT,          -- the order that originally enrolled this subscription
+  qb_customer_id       TEXT,
+  cancelled_at         TIMESTAMPTZ,
+  cancel_reason        TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_due ON subscriptions(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_patient ON subscriptions(patient_id);
 
 -- ── PracticeQ-as-PHI-store migration ──────────────────────────────────────────
 -- Patient PHI lives in PracticeQ (HIPAA-compliant, BAA-signed).

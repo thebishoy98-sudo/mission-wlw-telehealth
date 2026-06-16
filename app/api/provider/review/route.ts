@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (action !== "mark_chart_viewed") {
+    if (action !== "mark_chart_viewed" && action !== "acknowledge_refill") {
       return NextResponse.json(
-        { error: "action must be mark_chart_viewed" },
+        { error: "action must be mark_chart_viewed or acknowledge_refill" },
         { status: 400 }
       );
     }
@@ -34,6 +34,23 @@ export async function POST(req: NextRequest) {
       db.orderDb.getById(orderId);
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Non-blocking acknowledgment of an auto-refill. Records that a provider
+    // saw the refill; it does NOT gate or change dispatch.
+    if (action === "acknowledge_refill") {
+      const now = new Date().toISOString();
+      const ackUpdate = { providerAcknowledgedAt: now, providerAcknowledgedBy: reviewedBy };
+      db.orderDb.update(orderId, ackUpdate);
+      await dbServer.orderDb.update(orderId, ackUpdate).catch(() => {});
+      const ackLog = {
+        id: generateId(), timestamp: now, integrationName: "system" as const,
+        action: "Provider acknowledged auto-refill", orderId, patientId: order.patientId,
+        status: "success" as const, details: { reviewedBy },
+      };
+      db.integrationLogDb.create(ackLog);
+      await dbServer.integrationLogDb.create(ackLog).catch(() => {});
+      return NextResponse.json({ success: true, action, orderId, acknowledgedAt: now, acknowledgedBy: reviewedBy });
     }
 
     const review =

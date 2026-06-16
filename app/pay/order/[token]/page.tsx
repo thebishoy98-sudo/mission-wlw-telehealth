@@ -10,7 +10,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils";
-import { Lock, CreditCard, ShieldCheck, BadgeCheck, CheckCircle2 } from "lucide-react";
+import { RECURRING_CONSENT_TEXT } from "@/lib/subscription";
+import { Lock, CreditCard, ShieldCheck, BadgeCheck, CheckCircle2, RefreshCw } from "lucide-react";
 
 const quickBooksPaymentsEnabled = process.env.NEXT_PUBLIC_QB_PAYMENTS_ENABLED === "true";
 const quickBooksTokenBaseUrl =
@@ -55,6 +56,8 @@ export default function PayExistingOrder() {
   const [processing, setProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paid, setPaid] = useState(false);
+  const [enrolled, setEnrolled] = useState(false);
+  const [enroll, setEnroll] = useState(true);
 
   useEffect(() => {
     if (!token) return;
@@ -99,12 +102,15 @@ export default function PayExistingOrder() {
           cardToken: cardToken || undefined,
           cardName: summary.cardholderName,
           cardLast4: cardDigits.slice(-4),
+          enrollSubscription: enroll && !!cardToken,
+          recurringConsent: enroll && !!cardToken,
         }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(result.error ?? "Payment failed. Please check your card details.");
       }
+      setEnrolled(!!result.enrolled);
       setPaid(true);
     } catch (error) {
       setPaymentError((error as Error).message);
@@ -137,6 +143,12 @@ export default function PayExistingOrder() {
               Thank you{summary?.patientFirstName ? `, ${summary.patientFirstName}` : ""}! Your order is now
               processing. We&apos;ll text you with updates and next steps.
             </p>
+            {enrolled && (
+              <p className="mt-3 rounded-xl bg-forest-50 px-4 py-3 text-xs text-forest-800">
+                You&apos;re set up for automatic refills every 8 weeks. We&apos;ll text you about a week before each
+                order so there&apos;s never a gap — reply STOP anytime to cancel.
+              </p>
+            )}
           </div>
         ) : summary && !summary.eligible ? (
           <div className="rounded-2xl border border-green-200 bg-white p-8 text-center shadow-sm">
@@ -231,6 +243,21 @@ export default function PayExistingOrder() {
                 )}
               </div>
             </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-forest-100 bg-forest-50/50 p-4">
+              <input
+                type="checkbox"
+                checked={enroll}
+                onChange={(e) => setEnroll(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-forest-700 focus:ring-forest-700"
+              />
+              <span className="text-xs leading-relaxed text-gray-600">
+                <span className="mb-0.5 flex items-center gap-1.5 font-semibold text-forest-800">
+                  <RefreshCw className="h-3.5 w-3.5" /> Save my card &amp; keep my treatment on track
+                </span>
+                {RECURRING_CONSENT_TEXT}
+              </span>
+            </label>
 
             <Button fullWidth type="submit" disabled={processing || !cardReady || summary.amount === null}>
               {processing

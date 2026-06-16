@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { generateId } from "@/lib/utils";
+import { isOptOutMessage } from "@/lib/subscription";
 import crypto from "crypto";
 
 function verifySpruceSignature(body: string, signature: string, secret: string): boolean {
@@ -88,6 +89,30 @@ export async function POST(req: NextRequest) {
         };
         db.integrationLogDb.create(entry);
         dbServer.integrationLogDb.create(entry).catch(() => {});
+      }
+
+      // Opt-out: STOP/CANCEL cancels the patient's active subscriptions.
+      if (replyText && isOptOutMessage(replyText)) {
+        const patientId =
+          message?.patientId ??
+          (await dbServer.patientDb.getByPhone(patientPhone ?? "").catch(() => null))?.id;
+        if (patientId) {
+          const subscriptions = await dbServer.subscriptionDb.getByPatient(patientId).catch(() => []);
+          const now = new Date().toISOString();
+          for (const subscription of subscriptions) {
+            if (subscription.status === "active") {
+              await dbServer.subscriptionDb
+                .update(subscription.id, { status: "cancelled", cancelledAt: now, cancelReason: "patient SMS opt-out" })
+                .catch(() => {});
+            }
+          }
+          await dbServer.integrationLogDb.create({
+            id: generateId(), timestamp: now,
+            integrationName: "spruce", action: "Subscription cancelled via SMS opt-out",
+            patientId, status: "success",
+            details: { phone: patientPhone, replyText: replyText.slice(0, 200) },
+          }).catch(() => {});
+        }
       }
       break;
     }
