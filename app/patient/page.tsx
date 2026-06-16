@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatDateTime, formatCurrency, getFedExTrackingUrl } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, Copy, Check } from "lucide-react";
+import { Package, Clock, CheckCircle2, Copy, Check, RefreshCw } from "lucide-react";
 
 type PatientPharmacyOrder = Pick<Types.PharmacyOrder, "orderId" | "status" | "trackingNumber" | "shippedAt">;
 
@@ -241,11 +241,106 @@ function PatientPortalContent() {
           </div>
         )}
 
+        {/* Subscription self-service */}
+        <SubscriptionSection />
+
         {/* Referral section */}
         {user?.patientId && (
           <ReferralSection patientId={user.patientId} />
         )}
 
+      </div>
+    </div>
+  );
+}
+
+type PatientSubscription = {
+  id: string;
+  status: string;
+  productName: string;
+  doseLabel: string;
+  intervalWeeks: number;
+  nextRunAt: string | null;
+  coversThrough: string | null;
+};
+
+function SubscriptionSection() {
+  const [subs, setSubs] = useState<PatientSubscription[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [cancelling, setCancelling] = useState("");
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      const res = await fetch("/api/patient/subscription", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setSubs(data.subscriptions ?? []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoaded(true);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const cancel = async (id: string) => {
+    if (!window.confirm("Cancel your auto-refill subscription? You can re-enroll anytime by placing a new order.")) return;
+    setCancelling(id);
+    setError("");
+    try {
+      const res = await fetch("/api/patient/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", subscriptionId: id }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not cancel");
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCancelling("");
+    }
+  };
+
+  // Only render the section once we know there's something to show.
+  if (!loaded || subs.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-gray-900">
+        <RefreshCw className="h-4 w-4 text-forest-700" /> Auto-Refill Subscription
+      </h2>
+      {error && <p className="mb-2 text-sm text-red-500">{error}</p>}
+      <div className="space-y-3">
+        {subs.map((sub) => (
+          <Card key={sub.id}>
+            <CardContent className="p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{sub.productName}</p>
+                  {sub.doseLabel && <p className="text-sm text-gray-500">{sub.doseLabel}</p>}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Ships automatically every {sub.intervalWeeks} weeks.
+                    {sub.nextRunAt ? ` Next order: ${formatDateTime(sub.nextRunAt)}.` : ""}
+                  </p>
+                  {sub.status === "paused" && (
+                    <Badge className="mt-1 bg-yellow-100 text-yellow-800">Paused</Badge>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void cancel(sub.id)}
+                  disabled={cancelling === sub.id}
+                >
+                  {cancelling === sub.id ? "Cancelling…" : "Cancel subscription"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );
