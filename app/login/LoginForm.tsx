@@ -41,6 +41,7 @@ export function LoginForm({ role }: { role: UserRole }) {
   const [password, setPassword] = useState("");
   const [patientOtpRequested, setPatientOtpRequested] = useState(false);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
@@ -48,6 +49,7 @@ export function LoginForm({ role }: { role: UserRole }) {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
+    setNotFound(false);
     setLoading(true);
 
     if (role === "patient" && !patientOtpRequested) {
@@ -59,6 +61,12 @@ export function LoginForm({ role }: { role: UserRole }) {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(payload.error || "Could not send a code.");
+        setLoading(false);
+        return;
+      }
+      if (payload.found === false) {
+        // No patient/order on file for this number — guide them to intake.
+        setNotFound(true);
         setLoading(false);
         return;
       }
@@ -148,6 +156,16 @@ export function LoginForm({ role }: { role: UserRole }) {
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
+              </div>
+            )}
+
+            {notFound && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                We couldn&apos;t find a prior order for this number. If you used a different phone, try that one — or{" "}
+                <Link href="/start/info" className="font-semibold underline hover:text-amber-900">
+                  start your intake
+                </Link>{" "}
+                to place your first order.
               </div>
             )}
 

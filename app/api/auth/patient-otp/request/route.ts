@@ -41,10 +41,12 @@ export async function POST(req: Request) {
 
   const patient = await dbServer.patientDb.getByPhone(phoneNumber).catch(() => null);
   if (!patient) {
-    // Don't reveal whether the number is a patient (anti-enumeration), but log
-    // it so support can tell "no code arrived" apart from "number not on file".
+    // Product decision: tell the user no prior order exists for this number
+    // (rather than silently pretending a code was sent) so they aren't left
+    // waiting and can be routed to start an intake. Trades a little
+    // anti-enumeration privacy for a much clearer sign-in experience.
     await logOtp("Login code requested for unknown phone", undefined, "pending", { phone: phoneNumber });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, found: false });
   }
 
   const code = String(crypto.randomInt(100000, 1000000));
