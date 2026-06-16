@@ -58,17 +58,22 @@ export async function GET(req: NextRequest) {
           pat.first_name,
           pat.last_name,
           pat.email,
-          pay.amount,
-          pay.status AS pay_status
+          (SELECT pay.amount FROM payments pay WHERE pay.order_id = o.id
+             ORDER BY (pay.status = 'completed') DESC, pay.created_at DESC LIMIT 1) AS amount,
+          (SELECT pay.status FROM payments pay WHERE pay.order_id = o.id
+             ORDER BY (pay.status = 'completed') DESC, pay.created_at DESC LIMIT 1) AS pay_status
         FROM orders o
         LEFT JOIN patients pat ON pat.id = o.patient_id
-        LEFT JOIN payments pay ON pay.order_id = o.id
         WHERE o.ref_code = ${code}
         ORDER BY o.created_at DESC
       `;
       return NextResponse.json({ orders: rows });
     }
 
+    // Compute each metric with an independent subquery. Joining clicks (partial_intakes),
+    // orders, AND payments in one query fans out into a cartesian product, which
+    // inflates SUM(revenue) by the number of clicks/orders (COUNT survives only
+    // because of DISTINCT). Subqueries keep each metric correct.
     const { rows } = await sql`
       SELECT
         a.id,
@@ -76,14 +81,16 @@ export async function GET(req: NextRequest) {
         a.name,
         a.created_at,
         a.created_by,
-        COUNT(DISTINCT pi.id) FILTER (WHERE pi.ref_code = a.code) AS clicks,
-        COUNT(DISTINCT o.id) FILTER (WHERE o.ref_code = a.code AND o.status NOT IN ('draft','cancelled')) AS conversions,
-        COALESCE(SUM(pay.amount) FILTER (WHERE o.ref_code = a.code AND pay.status = 'completed'), 0) AS revenue
+        (SELECT COUNT(*) FROM partial_intakes pi WHERE pi.ref_code = a.code) AS clicks,
+        (SELECT COUNT(*) FROM orders o
+           WHERE o.ref_code = a.code AND o.status NOT IN ('draft','cancelled')) AS conversions,
+        (SELECT COALESCE(SUM(pay.amount), 0)
+           FROM payments pay
+           JOIN orders o ON o.id = pay.order_id
+           WHERE o.ref_code = a.code
+             AND pay.status = 'completed'
+             AND o.status NOT IN ('draft','cancelled')) AS revenue
       FROM affiliates a
-      LEFT JOIN partial_intakes pi ON pi.ref_code = a.code
-      LEFT JOIN orders o ON o.ref_code = a.code
-      LEFT JOIN payments pay ON pay.order_id = o.id
-      GROUP BY a.id, a.code, a.name, a.created_at, a.created_by
       ORDER BY a.created_at DESC
     `;
 
