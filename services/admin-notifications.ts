@@ -86,17 +86,23 @@ export async function sendAdminNotification(
     const idempotencyKey = `admin_${event}_${data.orderId ?? "no_order"}_${phone.replace(/\D/g, "")}`;
     try {
       const response = await spruceServer.sendTextToPhone(phone, text, idempotencyKey);
+      const duplicate = (response as { duplicate?: boolean })?.duplicate;
+      const skipped = (response as { skipped?: boolean })?.skipped;
       await log({
         id: generateId(),
         timestamp: new Date().toISOString(),
         integrationName: "spruce",
-        action: response?.skipped ? "Admin notification queued" : "Admin notification sent",
+        action: duplicate
+          ? "Admin notification already sent (duplicate)"
+          : skipped
+            ? "Admin notification queued"
+            : "Admin notification sent",
         orderId: data.orderId,
         patientId: data.patientId,
-        status: response?.skipped ? "pending" : "success",
+        status: skipped ? "pending" : "success",
         details: { event, phone },
       });
-      return { phone, status: response?.skipped ? "pending" : "sent" };
+      return { phone, status: duplicate ? "duplicate" : skipped ? "pending" : "sent" };
     } catch (error) {
       await log({
         id: generateId(),

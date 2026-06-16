@@ -182,6 +182,13 @@ export async function applyLifeFileWebhookPayload(payload: any, queryOrderId = "
     }
 
     case "order.delivered": {
+      // Idempotency: the tracking cron re-posts the current status every 15 min.
+      // Without this guard an already-delivered order would re-send the
+      // delivered + reorder SMS on every run.
+      if (pharmacyOrder.status === "delivered") {
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+
       const now = new Date().toISOString();
       db.pharmacyOrderDb.update(pharmacyOrder.id, { status: "delivered", deliveredAt: now });
       db.orderDb.update(orderId, { pharmacyStatus: "delivered", status: "delivered" });

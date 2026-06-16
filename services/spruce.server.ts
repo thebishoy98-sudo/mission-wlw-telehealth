@@ -128,6 +128,12 @@ async function sendViaSpruceApi(phoneNumber: string, messageText: string, idempo
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
+    // A duplicate idempotency key means Spruce already accepted this exact
+    // message — it's a benign no-op, not a failure. (Common when the pharmacy
+    // tracking cron re-posts the same status every 15 min.)
+    if (response.status === 422 && text.includes("duplicate_request")) {
+      return { duplicate: true };
+    }
     throw new Error(`Spruce message failed: ${response.status} ${text}`);
   }
 
