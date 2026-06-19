@@ -19,6 +19,8 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import { generateId } from "@/lib/utils";
 import { isOptOutMessage } from "@/lib/subscription";
+import { classifySpruceReply, type SpruceAiReplyResult } from "@/services/spruce-ai-replies";
+import { sendTextToPhone } from "@/services/spruce.server";
 import crypto from "crypto";
 
 function verifySpruceSignature(body: string, signature: string, secret: string): boolean {
@@ -26,6 +28,47 @@ function verifySpruceSignature(body: string, signature: string, secret: string):
   const expectedBuffer = Buffer.from(expected);
   const signatureBuffer = Buffer.from(signature);
   return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
+async function resolveReplyContext(message: any, patientPhone?: string) {
+  const patient =
+    (message?.patientId ? await dbServer.patientDb.getById(message.patientId).catch(() => null) : null) ??
+    (patientPhone ? await dbServer.patientDb.getByPhone(patientPhone).catch(() => null) : null);
+  const orders = patient ? await dbServer.orderDb.getByPatient(patient.id).catch(() => []) : [];
+  const order = message?.orderId
+    ? orders.find((item) => item.id === message.orderId) ?? null
+    : orders[0] ?? null;
+
+  return { patient, order };
+}
+
+async function logSpruceAiDecision(params: {
+  action: string;
+  patientId?: string;
+  orderId?: string;
+  phone?: string;
+  replyText?: string;
+  aiReply: SpruceAiReplyResult;
+  error?: string;
+}) {
+  await dbServer.integrationLogDb.create({
+    id: generateId(),
+    timestamp: new Date().toISOString(),
+    integrationName: "spruce",
+    action: params.action,
+    patientId: params.patientId,
+    orderId: params.orderId,
+    status: params.error ? "error" : "success",
+    details: {
+      phone: params.phone,
+      inboundText: params.replyText?.slice(0, 200),
+      decision: params.aiReply.decision,
+      confidence: params.aiReply.confidence,
+      reason: params.aiReply.reason,
+      sentReply: params.aiReply.shouldSend,
+    },
+    error: params.error,
+  }).catch(() => {});
 }
 
 export async function POST(req: NextRequest) {
@@ -112,6 +155,57 @@ export async function POST(req: NextRequest) {
             patientId, status: "success",
             details: { phone: patientPhone, replyText: replyText.slice(0, 200) },
           }).catch(() => {});
+        }
+        break;
+      }
+
+      if (replyText) {
+        const { patient, order } = await resolveReplyContext(message, patientPhone);
+        const aiReply = await classifySpruceReply({
+          replyText,
+          patientName: [patient?.firstName, patient?.lastName].filter(Boolean).join(" ").trim(),
+          orderStatus: order?.status,
+          pharmacyStatus: order?.pharmacyStatus,
+          lastOutboundMessage: message?.messageText,
+        });
+        const patientId = patient?.id ?? message?.patientId;
+        const orderId = order?.id ?? message?.orderId;
+
+        if (aiReply.shouldSend && patientPhone) {
+          try {
+            await sendTextToPhone(
+              patientPhone,
+              aiReply.replyText,
+              `spruce_ai_reply_${messageId ?? patientPhone}_${Date.now()}`
+            );
+            await logSpruceAiDecision({
+              action: aiReply.decision === "auto_reply" ? "Spruce AI auto-reply sent" : "Spruce AI reply escalated",
+              patientId,
+              orderId,
+              phone: patientPhone,
+              replyText,
+              aiReply,
+            });
+          } catch (error) {
+            await logSpruceAiDecision({
+              action: "Spruce AI reply send failed",
+              patientId,
+              orderId,
+              phone: patientPhone,
+              replyText,
+              aiReply,
+              error: (error as Error).message,
+            });
+          }
+        } else {
+          await logSpruceAiDecision({
+            action: aiReply.decision === "auto_reply" ? "Spruce AI auto-reply suppressed" : "Spruce AI reply escalated",
+            patientId,
+            orderId,
+            phone: patientPhone,
+            replyText,
+            aiReply,
+          });
         }
       }
       break;

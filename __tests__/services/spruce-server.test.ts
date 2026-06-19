@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { buildSpruceMessageRecord, normalizeSprucePhoneNumber, renderSpruceTemplate } from "@/services/spruce.server";
+import { buildSpruceContactPayload, buildSpruceMessageRecord, normalizeSprucePhoneNumber, renderSpruceTemplate } from "@/services/spruce.server";
 import fs from "fs";
 import path from "path";
 import type { Patient } from "@/types";
@@ -82,6 +82,20 @@ describe("buildSpruceMessageRecord", () => {
     expect(normalizeSprucePhoneNumber("+1 (732) 822-8376")).toBe("+17328228376");
     expect(normalizeSprucePhoneNumber("73228228376")).toBe("+17322822837");
     expect(normalizeSprucePhoneNumber("12345")).toBeNull();
+  });
+});
+
+describe("buildSpruceContactPayload", () => {
+  it("builds a patient contact payload with name and normalized phone for Spruce", () => {
+    expect(buildSpruceContactPayload(patient)).toMatchObject({
+      category: "patient",
+      givenName: "Allen",
+      familyName: "S",
+      dateOfBirth: "1998-04-14",
+      gender: "male",
+      phoneNumbers: [{ value: "+17328228376" }],
+      emailAddresses: [{ value: "alentest@gmail.com" }],
+    });
   });
 });
 

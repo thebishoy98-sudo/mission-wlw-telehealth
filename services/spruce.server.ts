@@ -55,6 +55,95 @@ export function renderSpruceTemplate(templateKey: string, variables: Record<stri
   );
 }
 
+function cleanText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function contactSyncSettingKey(patientId: string) {
+  return `spruce_contact_sync:${patientId}`;
+}
+
+function stableJson(value: unknown) {
+  return JSON.stringify(value);
+}
+
+export function buildSpruceContactPayload(patient: Patient) {
+  const phoneNumber = normalizeSprucePhoneNumber(patient.phone ?? "");
+  const email = cleanText(patient.email);
+  const payload: Record<string, unknown> = {
+    category: "patient",
+    givenName: cleanText(patient.firstName),
+    familyName: cleanText(patient.lastName),
+    dateOfBirth: cleanText(patient.dateOfBirth),
+    gender: ["male", "female", "other"].includes(cleanText(patient.gender) ?? "") ? cleanText(patient.gender) : undefined,
+    phoneNumbers: phoneNumber ? [{ value: phoneNumber }] : undefined,
+    emailAddresses: email ? [{ value: email }] : undefined,
+  };
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+async function requestSpruceContact(
+  token: string,
+  method: "POST" | "PATCH",
+  path: string,
+  payload: Record<string, unknown>,
+  idempotencyKey: string
+) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "s-idempotency-key": idempotencyKey.slice(0, 255),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Spruce contact sync failed: ${response.status} ${text}`);
+  }
+
+  return response.json().catch(() => ({}));
+}
+
+function extractSpruceContactId(payload: any): string | undefined {
+  return cleanText(payload?.id) ?? cleanText(payload?.contact?.id) ?? cleanText(payload?.data?.id);
+}
+
+async function syncSprucePatientContact(patient: Patient, token: string) {
+  if (process.env.SPRUCE_SYNC_CONTACTS === "false") return;
+
+  const payload = buildSpruceContactPayload(patient);
+  const hasContactIdentity = payload.givenName || payload.familyName || payload.phoneNumbers || payload.emailAddresses;
+  if (!hasContactIdentity) return;
+
+  const payloadHash = stableJson(payload);
+  const settingKey = contactSyncSettingKey(patient.id);
+  const existing = await dbServer.appSettingDb
+    .get<{ contactId?: string; payloadHash?: string }>(settingKey)
+    .catch(() => null);
+
+  if (existing?.payloadHash === payloadHash) return;
+
+  let contactId = existing?.contactId;
+  if (contactId) {
+    try {
+      await requestSpruceContact(token, "PATCH", `/contacts/${contactId}`, payload, `spruce_contact_update_${patient.id}_${payloadHash}`);
+      await dbServer.appSettingDb.set(settingKey, { contactId, payloadHash });
+      return;
+    } catch (error) {
+      if (!String((error as Error).message).includes("404")) throw error;
+      contactId = undefined;
+    }
+  }
+
+  const created = await requestSpruceContact(token, "POST", "/contacts", payload, `spruce_contact_create_${patient.id}`);
+  contactId = extractSpruceContactId(created);
+  await dbServer.appSettingDb.set(settingKey, { contactId, payloadHash });
+}
+
 export function buildSpruceMessageRecord(
   patient: Patient,
   templateKey: string,
@@ -153,6 +242,21 @@ export async function sendMessage(
   await dbServer.spruceMessageDb.create(pending);
 
   try {
+    if (process.env.USE_REAL_SPRUCE === "true") {
+      await syncSprucePatientContact(patient, getSpruceAuthToken()).catch((error) =>
+        dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: new Date().toISOString(),
+          integrationName: "spruce",
+          action: "Spruce contact sync failed",
+          patientId: patient.id,
+          orderId: variables.orderId || undefined,
+          status: "error",
+          details: { templateKey, phone: pending.phoneNumber },
+          error: (error as Error).message,
+        })
+      );
+    }
     const response = await sendViaSpruceApi(pending.phoneNumber, pending.messageText, `spruce_${pending.id}`);
     const sent = {
       ...pending,
