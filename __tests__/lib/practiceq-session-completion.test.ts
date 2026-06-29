@@ -2,8 +2,8 @@ import type { Order, Patient, Product } from "@/types";
 import { completePracticeQSession } from "@/lib/practiceq-session-completion";
 import * as dbServer from "@/lib/db.server";
 import * as pharmacy from "@/services/pharmacy";
-import * as spruceServer from "@/services/spruce.server";
 import * as practiceq from "@/services/practiceq";
+import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
 
 jest.mock("@/lib/db.server", () => ({
   practiceqAutomationJobDb: { update: jest.fn() },
@@ -24,8 +24,8 @@ jest.mock("@/services/pharmacy", () => ({
   getPharmacyProvider: jest.fn(() => "appsheet"),
 }));
 
-jest.mock("@/services/spruce.server", () => ({
-  sendMessage: jest.fn(),
+jest.mock("@/services/order-notifications", () => ({
+  sendOrderSentToPharmacyMessage: jest.fn(),
 }));
 
 jest.mock("@/services/practiceq", () => ({
@@ -134,7 +134,7 @@ describe("completePracticeQSession", () => {
       },
     });
     (dbServer.practiceqPacketDb.update as jest.Mock).mockResolvedValue(null);
-    (spruceServer.sendMessage as jest.Mock).mockResolvedValue({ id: "sms_1" });
+    (sendOrderSentToPharmacyMessage as jest.Mock).mockResolvedValue({ id: "sms_1" });
     (practiceq.getIntakeSummaryFeed as jest.Mock).mockResolvedValue({
       available: true,
       completed: [],
@@ -279,7 +279,7 @@ describe("completePracticeQSession", () => {
       status: "success",
       details: expect.objectContaining({ lifeFileOrderId: "124172582" }),
     }));
-    expect(spruceServer.sendMessage).toHaveBeenCalledWith(patient, "order_sent_to_pharmacy", { orderId: order.id });
+    expect(sendOrderSentToPharmacyMessage).toHaveBeenCalledWith(patient, order.id);
   });
 
   it("waits for admin identity review before pharmacy dispatch", async () => {
@@ -292,6 +292,6 @@ describe("completePracticeQSession", () => {
 
     await expect(completePracticeQSession("job_1")).resolves.toEqual({ status: "waiting_for_identity" });
     expect(pharmacy.createPharmacyOrder).not.toHaveBeenCalled();
-    expect(spruceServer.sendMessage).not.toHaveBeenCalled();
+    expect(sendOrderSentToPharmacyMessage).not.toHaveBeenCalled();
   });
 });
