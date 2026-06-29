@@ -3,6 +3,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import type { Patient } from "@/types";
 import { requireAdmin } from "@/lib/server-auth";
+import { isPaidAdminOrder } from "@/lib/admin-order-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ function getPagination(req: NextRequest) {
   const requestedPageSize = Number(req.nextUrl.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE;
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, requestedPageSize));
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
-  return { page, pageSize, q };
+  const paidOnly = req.nextUrl.searchParams.get("paidOnly") === "true";
+  return { page, pageSize, q, paidOnly };
 }
 
 function matchesSearch(order: dbServeredOrder, patient: dbServeredPatient | null, q: string) {
@@ -98,18 +100,19 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const { page, pageSize, q } = getPagination(req);
+    const { page, pageSize, q, paidOnly } = getPagination(req);
     const orders = await dbServer.orderDb.getAll().catch(() => db.orderDb.getAll());
     const products = await dbServer.productDb.getAll().catch(() => db.productDb.getAll());
     const sortedAllOrders = [...orders].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    const searchPatientMap = q ? await loadDashboardPatientMap(sortedAllOrders) : new Map<string, Patient>();
+    const visibleOrders = paidOnly ? sortedAllOrders.filter(isPaidAdminOrder) : sortedAllOrders;
+    const searchPatientMap = q ? await loadDashboardPatientMap(visibleOrders) : new Map<string, Patient>();
     const filteredOrders = q
-      ? sortedAllOrders.filter((order) =>
+      ? visibleOrders.filter((order) =>
           matchesSearch(order, searchPatientMap.get(order.patientId) ?? null, q)
         )
-      : sortedAllOrders;
+      : visibleOrders;
     const sortedOrders = filteredOrders;
     const total = sortedOrders.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));

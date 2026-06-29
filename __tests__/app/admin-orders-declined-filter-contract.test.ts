@@ -1,15 +1,15 @@
 import fs from "fs";
 import path from "path";
 
-describe("admin declined order filter contract", () => {
+describe("admin paid order filter contract", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/admin/orders/page.tsx"), "utf8");
 
-  it("hides payment-declined orders by default and can include them on demand", () => {
-    expect(source).toContain("showDeclinedOrders, setShowDeclinedOrders");
-    expect(source).toContain("visibleOrders");
-    expect(source).toContain('order.paymentStatus !== "failed"');
-    expect(source).toContain("Show payment declined");
-    expect(source).toContain("checked={showDeclinedOrders}");
+  it("shows only completed payments", () => {
+    expect(source).toContain('import { isPaidAdminOrder } from "@/lib/admin-order-visibility"');
+    expect(source).toContain('params.set("paidOnly", "true")');
+    expect(source).toContain("const visibleOrders = orders.filter(isPaidAdminOrder)");
     expect(source).toContain("visibleOrders.map");
+    expect(source).not.toContain("showDeclinedOrders");
+    expect(source).not.toContain("Show payment declined");
   });
 });

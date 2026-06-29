@@ -25,4 +25,12 @@ describe("admin dashboard loading contract", () => {
     expect(routeSource).not.toContain("orders.map(resolveAdminPatient)");
     expect(routeSource).toContain("loadDashboardPatientMap(pagedOrders)");
   });
+
+  it("filters unpaid orders before search and pagination only when requested by Order Management", () => {
+    expect(routeSource).toContain('import { isPaidAdminOrder } from "@/lib/admin-order-visibility"');
+    expect(routeSource).toContain('req.nextUrl.searchParams.get("paidOnly") === "true"');
+    expect(routeSource).toContain("const visibleOrders = paidOnly ? sortedAllOrders.filter(isPaidAdminOrder) : sortedAllOrders");
+    expect(routeSource).toContain("loadDashboardPatientMap(visibleOrders)");
+    expect(routeSource).toContain("visibleOrders.filter((order)");
+  });
 });
