@@ -99,10 +99,18 @@ export async function POST(req: NextRequest) {
     case "intake.approved": {
       db.practiceqDb.update(packet.id, { status: "completed" });
       await dbServer.practiceqPacketDb.update(packet.id, { status: "completed", lastSyncAt: new Date().toISOString() }).catch(() => null);
+      const existingPharmacyOrder =
+        (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
+        db.pharmacyOrderDb.getByOrder(orderId);
+      const preservePharmacyState = Boolean(
+        (existingPharmacyOrder && existingPharmacyOrder.status !== "error") ||
+        (orderForResolver && !["draft", "error"].includes(orderForResolver.pharmacyStatus))
+      );
       const approvalUpdate = {
-        status: "approved" as const,
+        ...(preservePharmacyState
+          ? {}
+          : { status: "approved" as const, pharmacyStatus: "draft" as const }),
         practiceQStatus: "completed" as const,
-        pharmacyStatus: "draft" as const,
         identityStatus: "manual_approved" as const,
         identityReason: "Chart approved in PracticeQ/provider portal.",
         identityReviewedAt: new Date().toISOString(),

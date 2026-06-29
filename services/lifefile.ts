@@ -142,15 +142,17 @@ function parseWeeklyDoseMg(dose: Types.DoseOption): number {
   return match ? Number(match[1]) : 0;
 }
 
-function calculateTirzepatideVialQuantity(dose: Types.DoseOption): number {
-  if (typeof dose.quantity === "number" && dose.quantity > 0) return dose.quantity;
+function parsePackageMg(dose: Types.DoseOption): number {
+  const match = `${dose.label} ${dose.strength}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
+  if (match) return Number(match[1]);
   const weeklyMg = parseWeeklyDoseMg(dose);
-  if (!weeklyMg || Number.isNaN(weeklyMg)) return 1;
+  const durationWeeks = dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4;
+  return weeklyMg * durationWeeks;
+}
 
-  const monthlyMg = weeklyMg * 4;
-  const mgPerMl = 20;
-  const vialMl = 2;
-  return Math.max(1, Math.ceil(monthlyMg / (mgPerMl * vialMl)));
+function tirzepatideVialMl(dose: Types.DoseOption): number {
+  const packageMg = parsePackageMg(dose);
+  return packageMg > 0 ? packageMg / 20 : 1;
 }
 
 function buildPharmacyRxs(
@@ -164,14 +166,15 @@ function buildPharmacyRxs(
     const weeklyDoseText = weeklyMg ? `${weeklyMg}mg` : dose.strength;
     const directions = dose.prescriptionLabel || `Inject ${weeklyDoseText} subcutaneously once weekly as directed by prescriber`;
     const daysSupply = (dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4) * 7;
+    const vialMl = tirzepatideVialMl(dose);
     return [
       {
         rxType: "new",
         drugName: "TIRZEPATIDE/PYRIDOXINE",
-        drugStrength: "20MG/25MG/ML (2 ML)",
+        drugStrength: `20MG/25MG/ML (${vialMl} ML)`,
         drugForm: "INJECTABLE",
         ...(lfProductId ? { lfProductID: lfProductId } : {}),
-        quantity: String(calculateTirzepatideVialQuantity(dose)),
+        quantity: "1",
         quantityUnits: "each",
         directions,
         refills: 0,

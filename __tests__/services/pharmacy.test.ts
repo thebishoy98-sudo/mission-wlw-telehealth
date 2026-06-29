@@ -2,6 +2,17 @@ import type { Order } from "@/types";
 import * as appsheet from "@/services/appsheet";
 import * as lifefile from "@/services/lifefile";
 import * as pharmacy from "@/services/pharmacy";
+import * as dbServer from "@/lib/db.server";
+
+jest.mock("@/lib/db.server", () => ({
+  orderDb: {
+    claimPharmacyDispatch: jest.fn().mockResolvedValue(true),
+    releasePharmacyDispatch: jest.fn().mockResolvedValue(undefined),
+  },
+  pharmacyOrderDb: {
+    getByOrder: jest.fn().mockResolvedValue(null),
+  },
+}));
 
 jest.mock("@/services/appsheet", () => ({
   createPharmacyOrder: jest.fn(),
@@ -31,6 +42,9 @@ describe("pharmacy provider router", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     process.env = { ...originalEnv };
+    (dbServer.orderDb.claimPharmacyDispatch as jest.Mock).mockResolvedValue(true);
+    (dbServer.orderDb.releasePharmacyDispatch as jest.Mock).mockResolvedValue(undefined);
+    (dbServer.pharmacyOrderDb.getByOrder as jest.Mock).mockResolvedValue(null);
     (appsheet.createPharmacyOrder as jest.Mock).mockResolvedValue({ id: "as_1" });
     (lifefile.createPharmacyOrder as jest.Mock).mockResolvedValue({ id: "lf_1" });
   });

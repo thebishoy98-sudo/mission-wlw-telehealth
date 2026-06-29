@@ -49,7 +49,7 @@ describe("lifefile.createPharmacyOrder", () => {
       expect.arrayContaining([
         expect.objectContaining({
           drugName: "TIRZEPATIDE/PYRIDOXINE",
-          drugStrength: "20MG/25MG/ML (2 ML)",
+          drugStrength: "20MG/25MG/ML (1 ML)",
           quantity: 1,
           directions: "Inject 12.5 units (2.5mg) SbQ weekly.",
           daysSupply: 56,
@@ -68,19 +68,24 @@ describe("lifefile.createPharmacyOrder", () => {
     );
   });
 
-  it("uses explicit tirzepatide label directions for higher 8-week doses", async () => {
+  it.each([
+    ["tirzepatide_20mg_8_week", "20MG/25MG/ML (1 ML)", "Inject 12.5 units (2.5mg) SbQ weekly."],
+    ["tirzepatide_40mg_8_week", "20MG/25MG/ML (2 ML)", "Inject 25.0 units (5mg) SbQ weekly."],
+    ["tirzepatide_60mg_8_week", "20MG/25MG/ML (3 ML)", "Inject 37.5 units (7.5mg) SbQ weekly."],
+  ])("sends one correctly sized vial for %s", async (doseId, expectedStrength, expectedDirections) => {
     const order = db.orderDb.create({
       ...db.orderDb.getById("o1")!,
-      id: "o_high",
-      doseId: "tirzepatide_60mg_8_week",
+      id: `o_${doseId}`,
+      doseId,
     });
 
     const pharmacyOrder = await lifefile.createPharmacyOrder(order, { product: { ...tirzepatideProduct, id: "prod_1" } });
     expect(pharmacyOrder.payload.order.rxs[0]).toEqual(
       expect.objectContaining({
         drugName: "TIRZEPATIDE/PYRIDOXINE",
+        drugStrength: expectedStrength,
         quantity: 1,
-        directions: "Inject 37.5 units (7.5mg) SbQ weekly.",
+        directions: expectedDirections,
         daysSupply: 56,
       })
     );

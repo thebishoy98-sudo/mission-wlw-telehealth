@@ -100,6 +100,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS subscription_id TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_refill BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS provider_acknowledged_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS provider_acknowledged_by TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS pharmacy_dispatch_claimed_at TIMESTAMPTZ;
 
 -- ── Subscriptions (recurring 8-week auto-refill) ────────────────────────────────
 -- One active subscription per patient+product. Billing fires `lead_days` before

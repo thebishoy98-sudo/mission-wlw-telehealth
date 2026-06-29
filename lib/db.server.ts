@@ -254,6 +254,48 @@ export const orderDb = {
     return rows.map(rowToOrder);
   },
 
+  async claimPharmacyDispatch(orderId: string): Promise<boolean> {
+    if (!isDbAvailable()) return true;
+    const result = await sql`
+      UPDATE orders
+      SET pharmacy_status = 'processing',
+          pharmacy_dispatch_claimed_at = NOW(),
+          updated_at = NOW()
+      WHERE id = ${orderId}
+        AND payment_status = 'completed'
+        AND pharmacy_status IN ('draft', 'error')
+        AND (
+          pharmacy_dispatch_claimed_at IS NULL
+          OR pharmacy_dispatch_claimed_at < NOW() - INTERVAL '15 minutes'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pharmacy_orders
+          WHERE order_id = ${orderId}
+            AND status <> 'error'
+        )
+      RETURNING id
+    `;
+    return (result.rowCount ?? 0) === 1;
+  },
+
+  async releasePharmacyDispatch(orderId: string): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE orders
+      SET pharmacy_status = 'error',
+          pharmacy_dispatch_claimed_at = NULL,
+          updated_at = NOW()
+      WHERE id = ${orderId}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pharmacy_orders
+          WHERE order_id = ${orderId}
+            AND status <> 'error'
+        )
+    `;
+  },
+
   async create(o: Order): Promise<Order> {
     if (!isDbAvailable()) return o;
     // Ensure ref_code column exists on the live table (migration guard)

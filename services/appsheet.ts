@@ -110,20 +110,12 @@ function isTirzepatide(product: Types.Product): boolean {
   return product.slug.toLowerCase().includes("tirzepatide") || product.name.toLowerCase().includes("tirzepatide");
 }
 
-function addVialLine(
-  lines: AppSheetOrderLine[],
-  item: Pick<AppSheetOrderLine, "itemId" | "itemName" | "drugName" | "drugStrength" | "drugForm">,
-  quantity: number,
-  directions: string,
-  daysSupply: number
-) {
-  if (quantity <= 0) return;
-  const existing = lines.find((line) => line.itemId === item.itemId && line.directions === directions);
-  if (existing) {
-    existing.quantity += quantity;
-    return;
-  }
-  lines.push({ ...item, rxType: "new", quantity, directions, daysSupply });
+function parsePackageMg(dose: Types.DoseOption): number {
+  const match = `${dose.label} ${dose.strength}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
+  if (match) return Number(match[1]);
+  const weeklyMg = parseWeeklyDoseMg(dose);
+  const durationWeeks = dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4;
+  return weeklyMg * durationWeeks;
 }
 
 function buildMedicationLines(product: Types.Product, dose: Types.DoseOption): AppSheetOrderLine[] {
@@ -144,22 +136,20 @@ function buildMedicationLines(product: Types.Product, dose: Types.DoseOption): A
     }];
   }
 
-  const weeklyMg = parseWeeklyDoseMg(dose);
-  const durationWeeks = dose.durationWeeks && dose.durationWeeks > 0 ? dose.durationWeeks : 4;
-  const totalMl = weeklyMg > 0 ? (weeklyMg * durationWeeks) / 20 : 2;
-  const lines: AppSheetOrderLine[] = [];
-  let remainingHalfMlUnits = Math.max(1, Math.ceil(totalMl * 2));
-
-  const twoMlQty = Math.floor(remainingHalfMlUnits / 4);
-  addVialLine(lines, APPSHEET_ITEMS.tirzepatideTwoMl, twoMlQty, directions, daysSupply);
-  remainingHalfMlUnits -= twoMlQty * 4;
-
-  const oneMlQty = Math.floor(remainingHalfMlUnits / 2);
-  addVialLine(lines, APPSHEET_ITEMS.tirzepatideOneMl, oneMlQty, directions, daysSupply);
-  remainingHalfMlUnits -= oneMlQty * 2;
-
-  addVialLine(lines, APPSHEET_ITEMS.tirzepatideHalfMl, remainingHalfMlUnits, directions, daysSupply);
-  return lines.length ? lines : [{ ...APPSHEET_ITEMS.tirzepatideOpenMl, rxType: "new", quantity: 1, directions, daysSupply }];
+  const packageMg = parsePackageMg(dose);
+  const vialMl = packageMg > 0 ? packageMg / 20 : 1;
+  const exactItem =
+    vialMl === 1
+      ? APPSHEET_ITEMS.tirzepatideOneMl
+      : vialMl === 2
+        ? APPSHEET_ITEMS.tirzepatideTwoMl
+        : null;
+  const item = exactItem ?? {
+    ...APPSHEET_ITEMS.tirzepatideOpenMl,
+    itemName: `TIRZEPATIDE/PYRIDOXINE 20MG/25MG/ML (${vialMl} ML)`,
+    drugStrength: `20MG/25MG/ML (${vialMl} ML)`,
+  };
+  return [{ ...item, rxType: "new", quantity: 1, directions, daysSupply }];
 }
 
 export function buildAppSheetOrderLines(product: Types.Product, dose: Types.DoseOption): AppSheetOrderLine[] {

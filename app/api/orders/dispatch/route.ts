@@ -89,6 +89,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    const existingPharmacyOrder =
+      (await dbServer.pharmacyOrderDb.getByOrder(orderId).catch(() => null)) ??
+      db.pharmacyOrderDb.getByOrder(orderId);
+    if (existingPharmacyOrder && existingPharmacyOrder.status !== "error") {
+      return NextResponse.json(
+        {
+          error: "Order has already been dispatched to the pharmacy",
+          lifeFileOrderId: existingPharmacyOrder.lifeFileOrderId,
+          pharmacyStatus: existingPharmacyOrder.status,
+        },
+        { status: 409 }
+      );
+    }
+
     const gate = getIdentityGate(order);
     if (!gate.canDispatch) {
       return NextResponse.json(

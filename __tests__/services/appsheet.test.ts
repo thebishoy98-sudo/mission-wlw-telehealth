@@ -87,26 +87,22 @@ describe("appsheet pharmacy integration", () => {
     });
   });
 
-  it("splits Tirzepatide 60mg orders across 2 mL and 1 mL AppSheet vial items", async () => {
+  it("maps Tirzepatide 60mg to one 3 mL AppSheet vial item", async () => {
     const order = seed("tirzepatide_60mg_8_week");
     const appsheet = await import("@/services/appsheet");
 
     const pharmacyOrder = await appsheet.createPharmacyOrder(order);
 
-    expect(pharmacyOrder.payload.order.rxs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          drugName: "TIRZEPATIDE/PYRIDOXINE 20MG/25MG/ML (2 ML)",
-          drugStrength: "8279096",
-          quantity: 1,
-        }),
-        expect.objectContaining({
-          drugName: "TIRZEPATIDE/PYRIDOXINE 20MG/25MG/ML (1 ML)",
-          drugStrength: "8279095",
-          quantity: 1,
-        }),
-      ])
+    const medicationRxs = pharmacyOrder.payload.order.rxs.filter((rx) =>
+      rx.drugName.startsWith("TIRZEPATIDE/PYRIDOXINE")
     );
+    expect(medicationRxs).toEqual([
+      expect.objectContaining({
+        drugName: "TIRZEPATIDE/PYRIDOXINE 20MG/25MG/ML (3 ML)",
+        drugStrength: "8229561",
+        quantity: 1,
+      }),
+    ]);
   });
 
   it("builds the AppSheet Add action only when real AppSheet mode is explicitly enabled", async () => {
