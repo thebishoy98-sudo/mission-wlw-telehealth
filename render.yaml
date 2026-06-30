@@ -170,6 +170,14 @@ services:
         sync: false
       - key: SPRUCE_WEBHOOK_SECRET
         sync: false
+      - key: SPRUCE_AI_REPLIES
+        value: true
+      - key: SPRUCE_AI_AUTO_REPLY
+        value: true
+      - key: SPRUCE_AI_ESCALATION_ACK
+        value: true
+      - key: SPRUCE_AI_MODEL
+        value: claude-haiku-4-5-20251001
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: IDENTITY_STORAGE_PROVIDER

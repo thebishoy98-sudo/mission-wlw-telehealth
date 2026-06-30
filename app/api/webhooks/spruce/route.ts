@@ -1,31 +1,131 @@
-/**
- * Spruce SMS Webhook Handler
- *
- * Spruce posts delivery status updates for outbound messages.
- *
- * Events:
- *   message.delivered  - SMS confirmed delivered
- *   message.failed     - SMS delivery failed
- *   message.reply      - Patient replied to an SMS
- *
- * Setup:
- *   Add webhook URL in Spruce Settings → Integrations:
- *   https://<your-domain>/api/webhooks/spruce
- *   Set SPRUCE_WEBHOOK_SECRET env var.
- */
-
-import { NextRequest, NextResponse } from "next/server";
-import * as db from "@/lib/db";
+import { after, NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
-import { generateId } from "@/lib/utils";
 import { isOptOutMessage } from "@/lib/subscription";
-import crypto from "crypto";
+import {
+  parseSpruceWebhookEvent,
+  verifySpruceWebhookSignature,
+  type ParsedSpruceWebhook,
+} from "@/lib/spruce-webhook";
+import { generateId } from "@/lib/utils";
+import { classifySpruceReply } from "@/services/spruce-ai-replies";
+import { sendTextToPhone } from "@/services/spruce.server";
 
-function verifySpruceSignature(body: string, signature: string, secret: string): boolean {
-  const expected = `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`;
-  const expectedBuffer = Buffer.from(expected);
-  const signatureBuffer = Buffer.from(signature);
-  return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+type InboundMessage = Extract<ParsedSpruceWebhook, { kind: "inbound_message" }>;
+
+async function logInbound(
+  event: InboundMessage,
+  patientId?: string,
+  orderId?: string
+) {
+  await dbServer.integrationLogDb.create({
+    id: generateId(),
+    timestamp: new Date().toISOString(),
+    integrationName: "spruce",
+    action: "Patient SMS reply received",
+    patientId,
+    orderId,
+    status: "success",
+    details: {
+      messageId: event.messageId,
+      conversationId: event.conversationId,
+      phone: event.patientPhone,
+      replyText: event.replyText.slice(0, 200),
+    },
+  });
+}
+
+async function processInboundMessage(event: InboundMessage) {
+  try {
+    const patient = event.patientPhone
+      ? await dbServer.patientDb.getByPhone(event.patientPhone)
+      : null;
+    const orders = patient ? await dbServer.orderDb.getByPatient(patient.id) : [];
+    const latestOrder = orders[0];
+
+    await logInbound(event, patient?.id, latestOrder?.id);
+
+    if (isOptOutMessage(event.replyText)) {
+      if (patient) {
+        const subscriptions = await dbServer.subscriptionDb.getByPatient(patient.id);
+        const now = new Date().toISOString();
+        for (const subscription of subscriptions) {
+          if (subscription.status === "active") {
+            await dbServer.subscriptionDb.update(subscription.id, {
+              status: "cancelled",
+              cancelledAt: now,
+              cancelReason: "patient SMS opt-out",
+            });
+          }
+        }
+        await dbServer.integrationLogDb.create({
+          id: generateId(),
+          timestamp: now,
+          integrationName: "spruce",
+          action: "Subscription cancelled via SMS opt-out",
+          patientId: patient.id,
+          orderId: latestOrder?.id,
+          status: "success",
+          details: { messageId: event.messageId, phone: event.patientPhone },
+        });
+      }
+      return;
+    }
+
+    const result = await classifySpruceReply({
+      replyText: event.replyText,
+      patientName: patient ? `${patient.firstName} ${patient.lastName}`.trim() : undefined,
+      orderStatus: latestOrder?.status,
+      pharmacyStatus: latestOrder?.pharmacyStatus,
+    });
+
+    if (result.shouldSend && result.replyText && event.patientPhone) {
+      await sendTextToPhone(
+        event.patientPhone,
+        result.replyText,
+        `spruce_ai_reply_${event.messageId}`
+      );
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "spruce",
+        action:
+          result.decision === "clinical_escalation"
+            ? "Spruce clinical escalation acknowledgement sent"
+            : "Spruce AI auto-reply sent",
+        patientId: patient?.id,
+        orderId: latestOrder?.id,
+        status: "success",
+        details: {
+          messageId: event.messageId,
+          decision: result.decision,
+          confidence: result.confidence,
+          reason: result.reason,
+        },
+      });
+      return;
+    }
+
+    await dbServer.integrationLogDb.create({
+      id: generateId(),
+      timestamp: new Date().toISOString(),
+      integrationName: "spruce",
+      action: "Spruce inbound reply queued for staff review",
+      patientId: patient?.id,
+      orderId: latestOrder?.id,
+      status: "pending",
+      details: {
+        messageId: event.messageId,
+        decision: result.decision,
+        confidence: result.confidence,
+        reason: result.reason,
+      },
+    });
+  } catch (error) {
+    console.error("Spruce inbound processing failed", {
+      messageId: event.messageId,
+      error: (error as Error).message,
+    });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -33,90 +133,31 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-spruce-signature") ?? "";
   const secret = process.env.SPRUCE_WEBHOOK_SECRET ?? "";
 
-  if (!secret && process.env.VERCEL_ENV === "production") {
-    return NextResponse.json({ error: "SPRUCE_WEBHOOK_SECRET is not configured" }, { status: 500 });
+  if (!secret && process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "SPRUCE_WEBHOOK_SECRET is not configured" },
+      { status: 500 }
+    );
   }
-  if (secret && !signature) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 401 });
-  }
-  if (secret && !verifySpruceSignature(body, signature, secret)) {
+  if (secret && !verifySpruceWebhookSignature(body, signature, secret)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  let payload: any;
+  let payload: unknown;
   try {
     payload = JSON.parse(body);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { event, messageId, patientPhone, replyText, errorCode } = payload;
 
-  const messages = db.spruceDb.getAll();
-  const message = messages.find((m) => m.id === messageId);
-
-  switch (event) {
-    case "message.delivered": {
-      if (message) {
-        db.spruceDb.update(message.id, { status: "sent", sentAt: new Date().toISOString() });
-      }
-      break;
-    }
-
-    case "message.failed": {
-      if (message) {
-        db.spruceDb.update(message.id, { status: "failed" });
-        const entry = {
-          id: generateId(), timestamp: new Date().toISOString(),
-          integrationName: "spruce" as const, action: "SMS delivery failed",
-          patientId: message.patientId, orderId: message.orderId,
-          status: "error" as const, details: { messageId, errorCode },
-        };
-        db.integrationLogDb.create(entry);
-        dbServer.integrationLogDb.create(entry).catch(() => {});
-      }
-      break;
-    }
-
-    case "message.reply": {
-      // Log inbound patient reply for provider awareness
-      if (message) {
-        const entry = {
-          id: generateId(), timestamp: new Date().toISOString(),
-          integrationName: "spruce" as const, action: "Patient SMS reply received",
-          patientId: message.patientId, orderId: message.orderId,
-          status: "success" as const,
-          details: { phone: patientPhone, replyText: replyText?.slice(0, 200) },
-        };
-        db.integrationLogDb.create(entry);
-        dbServer.integrationLogDb.create(entry).catch(() => {});
-      }
-
-      // Opt-out: STOP/CANCEL cancels the patient's active subscriptions.
-      if (replyText && isOptOutMessage(replyText)) {
-        const patientId =
-          message?.patientId ??
-          (await dbServer.patientDb.getByPhone(patientPhone ?? "").catch(() => null))?.id;
-        if (patientId) {
-          const subscriptions = await dbServer.subscriptionDb.getByPatient(patientId).catch(() => []);
-          const now = new Date().toISOString();
-          for (const subscription of subscriptions) {
-            if (subscription.status === "active") {
-              await dbServer.subscriptionDb
-                .update(subscription.id, { status: "cancelled", cancelledAt: now, cancelReason: "patient SMS opt-out" })
-                .catch(() => {});
-            }
-          }
-          await dbServer.integrationLogDb.create({
-            id: generateId(), timestamp: now,
-            integrationName: "spruce", action: "Subscription cancelled via SMS opt-out",
-            patientId, status: "success",
-            details: { phone: patientPhone, replyText: replyText.slice(0, 200) },
-          }).catch(() => {});
-        }
-      }
-      break;
-    }
+  const parsed = parseSpruceWebhookEvent(payload);
+  if (parsed.kind !== "inbound_message") {
+    return NextResponse.json({ received: true, ignored: parsed.reason });
   }
+
+  after(async () => {
+    await processInboundMessage(parsed);
+  });
 
   return NextResponse.json({ received: true });
 }
