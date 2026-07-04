@@ -234,7 +234,10 @@ export async function storeCardOnFile(
   if (!token) throw new Error("A card token is required to store a card on file.");
 
   const accessToken = await getQBAccessToken();
-  const res = await fetch(`${PAYMENTS_BASE_URL}/customers/${encodeURIComponent(customerId)}/cards/createFromToken`, {
+  // Intuit quirk: charges/tokens live under /quickbooks/v4/payments, but card-on-file
+  // (customers/{id}/cards) lives under /quickbooks/v4 WITHOUT the /payments segment.
+  const cardsBaseUrl = PAYMENTS_BASE_URL.replace(/\/payments\/?$/, "");
+  const res = await fetch(`${cardsBaseUrl}/customers/${encodeURIComponent(customerId)}/cards/createFromToken`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
