@@ -17,6 +17,7 @@ import {
 } from "@/lib/reorder-review-approval";
 import { resumePracticeQAfterIdentityApproval } from "@/services/practiceq-automation-orchestration";
 import { getOrderDispatchGate } from "@/lib/order-gates";
+import { ensureSubscriptionForOrder } from "@/lib/subscription-enroll";
 import { requireAdmin } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
@@ -60,15 +61,21 @@ export async function POST(req: NextRequest) {
       db.patientDb.getById(order.patientId);
 
     let practiceQCompletion;
-    if (action === "approve" && getOrderDispatchGate(dispatchOrder).canDispatch) {
-      practiceQCompletion = await resumePracticeQAfterIdentityApproval({
-        order: dispatchOrder,
-        patient,
-        source: "identity_approval",
-      }).catch((error) => ({
-        status: "pharmacy_error" as const,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+    if (action === "approve") {
+      if (getOrderDispatchGate(dispatchOrder).canDispatch) {
+        practiceQCompletion = await resumePracticeQAfterIdentityApproval({
+          order: dispatchOrder,
+          patient,
+          source: "identity_approval",
+        }).catch((error) => ({
+          status: "pharmacy_error" as const,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+      // Approving an early reorder also (re)enrolls the patient into the program.
+      if (patient) {
+        await ensureSubscriptionForOrder({ order: dispatchOrder, patient }).catch(() => {});
+      }
     }
 
     return NextResponse.json({

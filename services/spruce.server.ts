@@ -21,6 +21,7 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   prior_med_received: "Thanks! We received your previous prescription. Our provider will review and approve it before your order is sent to the pharmacy.",
   prior_med_approved: "Good news — your previous prescription was approved. Your order is now being prepared for pharmacy dispatch.",
   reorder_reminder: "Hey {{patientName}} — your 8-week supply is running low. Don't lose your momentum! Reorder here: {{reorderUrl}}",
+  reorder_enroll_invite: "Hi {{patientName}}! You're about 7 weeks into your treatment — time for your next 8-week supply. Reorder here and you'll be set up for automatic refills so there's never a gap: {{reorderUrl}}",
   subscription_pay_link: "Hi {{patientName}}! Time for your next 8-week supply ({{amount}}). Pay & save your card so future refills are automatic — no gaps in treatment: {{payUrl}} (Reply STOP to opt out.)",
   subscription_charged: "Hi {{patientName}}! We've processed your next 8-week refill ({{amount}}) on your card ending {{cardLast4}}. It ships soon — we'll text you tracking. Reply STOP to cancel future automatic refills.",
   subscription_payment_failed: "Hi {{patientName}}, we couldn't process the card on file for your next refill. Pay here to avoid a gap in your treatment: {{payUrl}}",

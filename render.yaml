@@ -251,6 +251,27 @@ services:
         sync: false
 
   - type: cron
+    name: mission-wlw-cron-reorder-enroll-reminders
+    runtime: node
+    schedule: "15 14 * * *"   # daily at 2:15pm UTC
+    buildCommand: echo "cron has no build step (uses Node built-ins only)"
+    startCommand: >
+      node -e "
+        require('https').get(
+          process.env.APP_BASE_URL + '/api/cron/reorder-enroll-reminders',
+          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
+          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
+        ).on('error', () => { process.exitCode = 1; });
+      "
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+  - type: cron
     name: mission-wlw-cron-delivery-checkins
     runtime: node
     schedule: "0 15 * * *"   # daily at 3pm UTC
