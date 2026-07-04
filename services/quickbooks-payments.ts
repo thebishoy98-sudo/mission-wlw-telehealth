@@ -276,7 +276,13 @@ export async function chargeStoredCard(
   orderId: string,
   patientId: string,
   amountDollars: number,
-  details: { customerId: string; cardId: string; cardLast4?: string; cardBrand?: string }
+  details: {
+    customerId: string;
+    cardId: string;
+    cardLast4?: string;
+    cardBrand?: string;
+    requestId?: string;
+  }
 ): Promise<{ chargeId: string; status: string; cardLast4: string; cardBrand: string }> {
   const amountFormatted = amountDollars.toFixed(2);
 
@@ -296,14 +302,13 @@ export async function chargeStoredCard(
   if (!details.cardId) throw new Error("A stored card id is required for a recurring charge.");
 
   const accessToken = await getQBAccessToken();
-  const requestId = generateId();
+  const requestId = details.requestId ?? generateId();
   const payload = {
     amount: amountFormatted,
     currency: "USD" as const,
     capture: true,
-    card: { id: details.cardId },
+    cardOnFile: details.cardId,
     context: { mobile: false, isEcommerce: true, recurring: true },
-    ...(details.customerId ? { customerIdRef: details.customerId } : {}),
   };
 
   const res = await fetch(`${PAYMENTS_BASE_URL}/charges`, {

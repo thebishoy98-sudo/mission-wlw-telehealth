@@ -79,4 +79,47 @@ describe("quickbooks-payments.chargeCard", () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.card.address.country).toBe("US");
   });
+
+  it("charges a saved card through the top-level cardOnFile field", async () => {
+    process.env = {
+      ...process.env,
+      USE_REAL_QUICKBOOKS: "true",
+    };
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      text: async () => JSON.stringify({
+        id: "charge_saved_1",
+        status: "CAPTURED",
+        amount: "299.00",
+        currency: "USD",
+        card: { number: "xxxxxxxxxxxx5151", cardType: "Visa" },
+        created: "2026-07-04T00:00:00Z",
+        updated: "2026-07-04T00:00:00Z",
+      }),
+    } as Response));
+    global.fetch = fetchMock as any;
+
+    const qbPayments = await import("@/services/quickbooks-payments");
+
+    await qbPayments.chargeStoredCard("order-1", "patient-1", 299, {
+      customerId: "customer-123",
+      cardId: "card-123",
+      cardLast4: "5151",
+      cardBrand: "Visa",
+      requestId: "subscription-order-1",
+    });
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect((request.headers as Record<string, string>)["Request-Id"]).toBe("subscription-order-1");
+    expect(body).toEqual({
+      amount: "299.00",
+      currency: "USD",
+      capture: true,
+      cardOnFile: "card-123",
+      context: { mobile: false, isEcommerce: true, recurring: true },
+    });
+    expect(body.card).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain("customer-123");
+  });
 });
