@@ -3,7 +3,7 @@ import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
 import * as pharmacy from "@/services/pharmacy";
 import { sendOrderSentToPharmacyMessage } from "@/services/order-notifications";
-import { getIdentityGate } from "@/lib/identity";
+import { getOrderDispatchGate } from "@/lib/order-gates";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
 import { preferCompletePatientForIntegrations, resolvePatient } from "@/lib/patient-resolver";
 import { hydratePatientFromPracticeQ } from "@/lib/provider-chart";
@@ -103,12 +103,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const gate = getIdentityGate(order);
+    const gate = getOrderDispatchGate(order);
     if (!gate.canDispatch) {
+      const message = !gate.identity.canDispatch
+        ? "Identity verification required before pharmacy dispatch"
+        : !gate.priorMed.canDispatch
+          ? "Prior GLP-1 proof must be approved before pharmacy dispatch"
+          : "Back-to-back reorder must be approved before pharmacy dispatch";
       return NextResponse.json(
         {
-          error: "Identity verification required before pharmacy dispatch",
+          error: message,
           identityStatus: order.identityStatus ?? "missing",
+          priorMedStatus: order.priorMedStatus ?? "not_required",
+          reorderReviewStatus: order.reorderReviewStatus ?? null,
+          blockedReason: gate.blockedReason,
         },
         { status: 409 }
       );

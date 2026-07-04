@@ -1,6 +1,6 @@
 import type { Order } from "@/types";
 import * as dbServer from "@/lib/db.server";
-import { getIdentityGate } from "@/lib/identity";
+import { getOrderDispatchGate } from "@/lib/order-gates";
 import { normalizeOrderForPharmacyDispatch } from "@/lib/pharmacy-dispatch";
 import { logPhiAccess, logPhiDisclosure } from "@/lib/phi-audit";
 import * as pharmacy from "@/services/pharmacy";
@@ -17,7 +17,7 @@ function answerHints(answers: Awaited<ReturnType<typeof dbServer.answerDb.getByO
 }
 
 function canTryPharmacyDispatch(order: Order): boolean {
-  return getIdentityGate(order).canDispatch && (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error");
+  return getOrderDispatchGate(order).canDispatch && (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error");
 }
 
 async function purgeMissionChartPhi(order: Order) {

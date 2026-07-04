@@ -74,6 +74,24 @@ export async function buildIdentityUploads({
   };
 }
 
+/**
+ * Store a patient's prior-GLP-1 prescription proof (a photo of their existing
+ * script) using the same secure storage backend as identity media.
+ */
+export async function buildPriorPrescriptionUpload(input: {
+  orderId: string;
+  imageData: string;
+}): Promise<Upload> {
+  const file = dataUrlToFileMetadata(input.imageData, "prior-prescription");
+  const upload = await storeIdentityMedia({
+    orderId: input.orderId,
+    type: "prior_prescription",
+    filename: file.filename,
+    dataUrl: input.imageData,
+  });
+  return { ...upload, uploadedAt: new Date().toISOString() };
+}
+
 export function assertIdentityStorageReady() {
   const provider = getStorageProvider();
   if (provider === "s3") {

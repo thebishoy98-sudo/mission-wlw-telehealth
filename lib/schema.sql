@@ -95,6 +95,19 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_reviewed_by TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_ai_result JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS identity_upload_token TEXT;
 
+-- Prior-GLP-1 proof gate (non-starting-dose orders).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_status TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_upload_token TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reviewed_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reviewed_by TEXT;
+
+-- Back-to-back reorder review gate (ordered too soon since last order).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_review_status TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_review_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_reviewed_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_reviewed_by TEXT;
+
 -- Subscription / auto-refill tracking on orders.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS subscription_id TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_refill BOOLEAN NOT NULL DEFAULT false;

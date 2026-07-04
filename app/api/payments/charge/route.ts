@@ -34,7 +34,17 @@ import {
 import { checkEligibility } from "@/lib/eligibility";
 import { seedQuestions } from "@/data/seed-data";
 import { buildIdentityUploadUrl, createIdentityUploadToken, getIdentityGate, statusFromAiResult } from "@/lib/identity";
+import {
+  buildPriorMedUploadUrl,
+  createPriorMedUploadToken,
+  getPriorMedGate,
+  patientHasEstablishedHistory,
+  requiresPriorMedProof,
+} from "@/lib/prior-med";
+import { evaluateOrderCadence, MIN_REORDER_INTERVAL_DAYS } from "@/lib/order-cadence";
+import { getReorderReviewGate } from "@/lib/reorder-review";
 import { generateId } from "@/lib/utils";
+import type { PriorMedStatus, ReorderReviewStatus } from "@/types";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { verifyIdentityUploads } from "@/services/identity-verification";
 import { getChargeAmount } from "@/lib/payment-amount";
@@ -521,24 +531,77 @@ export async function POST(req: NextRequest) {
     const hasSubmittedIdentity = !checkoutIdentityReused && submittedUploads.length > 0;
     const identityStatus = checkoutIdentityReused ? reusedIdentityStatus : hasSubmittedIdentity ? statusFromAiResult(identityAiResult) : "missing";
     const dispatchGate = getIdentityGate({ identityStatus });
+
+    // 7b. Prior-GLP-1 proof gate — a non-starting dose ordered by a new patient
+    // must be backed by proof they've taken GLP-1 before (their existing script),
+    // which an admin approves before dispatch. Established/refill patients are exempt.
+    const priorMedProofRequired = requiresPriorMedProof({
+      product: productForIntegrations,
+      doseId: persistedDose?.id ?? order.doseId,
+      isRefill: !!order.isRefill,
+      hasEstablishedHistory: patientHasEstablishedHistory(patientOrdersForIdentity, orderId),
+    });
+    const priorMedStatus: PriorMedStatus =
+      order.priorMedStatus && order.priorMedStatus !== "not_required"
+        ? order.priorMedStatus
+        : priorMedProofRequired
+          ? "pending_upload"
+          : "not_required";
+    const priorMedGate = getPriorMedGate({ priorMedStatus });
+    const priorMedUploadToken = priorMedGate.canDispatch
+      ? undefined
+      : (order.priorMedUploadToken ?? createPriorMedUploadToken(orderId));
+    const priorMedUploadUrl = priorMedUploadToken
+      ? buildPriorMedUploadUrl(getPublicBaseUrl(req), priorMedUploadToken)
+      : "";
+
+    // 7c. Back-to-back reorder review — if the patient is ordering again too soon
+    // after their last paid order, flag it for admin review (approve/reject)
+    // rather than blocking. Subscription auto-refills are exempt.
+    const cadence = order.isRefill || order.subscriptionId
+      ? { tooSoon: false, daysSinceLast: null as number | null }
+      : evaluateOrderCadence(patientOrdersForIdentity, { excludeOrderId: orderId });
+    const reorderReviewStatus: ReorderReviewStatus | undefined =
+      order.reorderReviewStatus === "approved"
+        ? "approved"
+        : cadence.tooSoon
+          ? "flagged"
+          : order.reorderReviewStatus;
+    const reorderTooSoonDays = Math.max(0, Math.floor(cadence.daysSinceLast ?? 0));
+    const reorderReviewReason = cadence.tooSoon
+      ? `Reordered ${reorderTooSoonDays} day${reorderTooSoonDays === 1 ? "" : "s"} after last order (minimum ${MIN_REORDER_INTERVAL_DAYS}).`
+      : undefined;
+    const reorderGate = getReorderReviewGate({ reorderReviewStatus });
+
+    // Combined clinical dispatch gate: identity AND prior-med AND reorder review.
+    const combinedCanDispatch =
+      dispatchGate.canDispatch && priorMedGate.canDispatch && reorderGate.canDispatch;
+
     const pharmacyProvider = pharmacy.getPharmacyProvider();
     const realPharmacyEnabled = isRealPharmacyEnabled(pharmacyProvider);
     const canDispatchPharmacy = canDispatchPharmacyAfterPayment({
-      identityCanDispatch: dispatchGate.canDispatch,
+      identityCanDispatch: combinedCanDispatch,
       paymentBypassed: bypassQuickBooksPayment,
       realPharmacyEnabled,
     });
-    const pharmacyDispatchHeldForPayment = dispatchGate.canDispatch && !canDispatchPharmacy;
+    const pharmacyDispatchHeldForPayment = combinedCanDispatch && !canDispatchPharmacy;
 
     // 8. Update order status
     const orderUpdates = {
-      status: dispatchGate.canDispatch ? "approved" as const : "pending_review" as const,
+      status: combinedCanDispatch ? "approved" as const : "pending_review" as const,
       paymentStatus: "completed" as const,
       pharmacyStatus: "draft" as const,
       identityStatus,
       identityReason: identityAiResult.summary,
       identityAiResult,
       identityUploadToken,
+      priorMedStatus,
+      priorMedReason: priorMedProofRequired
+        ? "Higher-than-starting dose ordered — prior GLP-1 prescription proof required."
+        : undefined,
+      priorMedUploadToken,
+      reorderReviewStatus,
+      reorderReviewReason,
       submittedAt: new Date().toISOString(),
     };
     db.orderDb.update(orderId, orderUpdates);
@@ -552,6 +615,14 @@ export async function POST(req: NextRequest) {
       patientId: patient.id,
       patientName,
     }).catch(() => {});
+    if (reorderReviewStatus === "flagged") {
+      sendAdminNotification("reorder_review_needed", {
+        orderId,
+        patientId: patient.id,
+        patientName,
+        reason: reorderReviewReason,
+      }).catch(() => {});
+    }
     if (!dispatchGate.canDispatch && !checkoutIdentityReused) {
       sendAdminNotification("identity_review_needed", {
         orderId,
@@ -761,19 +832,25 @@ export async function POST(req: NextRequest) {
       await dbServer.orderDb.update(orderId, { pharmacyStatus: "draft" }).catch(() => {});
     }
 
-    // 11. Spruce SMS — "payment received, order processing"
+    // 11. Spruce SMS — payment received / identity reminder / prior-med reminder.
+    // Identity takes priority; once identity clears, a prior-med reminder is sent
+    // (or admin resend) if the prior-GLP-1 proof gate is still blocking dispatch.
     try {
-      await spruceServer.sendMessage(
-        patient,
-        checkoutIdentityReused
-          ? "payment_received"
-          : dispatchGate.canDispatch
-          ? "payment_received"
-          : hasSubmittedIdentity
-            ? "identity_review_received"
-            : "identity_upload_reminder",
-        { orderId, uploadUrl: identityUploadUrl }
-      );
+      let smsTemplate: string;
+      let smsVariables: Record<string, string>;
+      if (!dispatchGate.canDispatch) {
+        smsTemplate = hasSubmittedIdentity ? "identity_review_received" : "identity_upload_reminder";
+        smsVariables = { orderId, uploadUrl: identityUploadUrl };
+      } else if (!priorMedGate.canDispatch) {
+        smsTemplate = "prior_med_upload_reminder";
+        smsVariables = { orderId, uploadUrl: priorMedUploadUrl };
+      } else {
+        // Fully clear, or only the back-to-back reorder review is holding dispatch
+        // (an internal admin step — no patient action is required).
+        smsTemplate = "payment_received";
+        smsVariables = { orderId };
+      }
+      await spruceServer.sendMessage(patient, smsTemplate, smsVariables);
       logPhiDisclosure(patient.id, orderId, "spruce", auditCtx.actor);
     } catch (e) {
       errors.push(`Spruce SMS: ${(e as Error).message}`);
@@ -784,14 +861,18 @@ export async function POST(req: NextRequest) {
       id: generateId(),
       orderId,
       patientId: patient.id,
-      status: dispatchGate.canDispatch ? "approved" as const : "needs_more_info" as const,
-      reviewedAt: dispatchGate.canDispatch ? new Date().toISOString() : undefined,
-      reviewedBy: dispatchGate.canDispatch ? "system-auto" : undefined,
+      status: combinedCanDispatch ? "approved" as const : "needs_more_info" as const,
+      reviewedAt: combinedCanDispatch ? new Date().toISOString() : undefined,
+      reviewedBy: combinedCanDispatch ? "system-auto" : undefined,
       notes: pharmacyDispatchHeldForPayment
         ? "Auto-approved clinically, but pharmacy dispatch is held because payment is bypassed while real pharmacy is enabled."
-        : dispatchGate.canDispatch
+        : combinedCanDispatch
         ? "Auto-approved: patient passed eligibility and identity screening"
-        : `Payment collected. Pharmacy dispatch blocked until identity is approved. Upload link: ${identityUploadUrl}`,
+        : !dispatchGate.canDispatch
+        ? `Payment collected. Pharmacy dispatch blocked until identity is approved. Upload link: ${identityUploadUrl}`
+        : !priorMedGate.canDispatch
+        ? `Payment collected. Pharmacy dispatch blocked until prior GLP-1 prescription proof is approved. Upload link: ${priorMedUploadUrl}`
+        : `Payment collected. Back-to-back reorder flagged for admin review — ${reorderReviewReason ?? "ordered too soon since last order."}`,
       identityAiResult,
       identityReviewRequired: !dispatchGate.canDispatch,
     };
@@ -854,6 +935,9 @@ export async function POST(req: NextRequest) {
           ? "error"
           : "draft",
       identityUploadUrl: dispatchGate.canDispatch ? undefined : identityUploadUrl,
+      priorMedStatus,
+      priorMedUploadUrl: priorMedGate.canDispatch ? undefined : priorMedUploadUrl,
+      reorderReviewStatus,
       practiceQAutomationStatus,
       warnings: errors.length ? errors : undefined,
     });
