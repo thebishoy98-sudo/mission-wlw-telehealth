@@ -76,6 +76,7 @@ import {
 import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/identity-storage";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { Payment } from "@/types";
+import { consumePromoCode, validatePromoCode } from "@/lib/promo-code.server";
 
 class PaymentPersistenceError extends Error {
   status: number;
@@ -122,36 +123,18 @@ export async function POST(req: NextRequest) {
         ? orderData.reorderSourceOrderId
         : "";
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
-    const DISCOUNT_CODES: Record<string, { type: "flat" | "percent"; amount: number; singleUse: boolean }> = {
-      SUMMER50: { type: "flat", amount: 50, singleUse: true },
-    };
     let baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
     let appliedDiscountAmount = 0;
     let validatedDiscountCode = "";
+    let validatedPromoId = "";
 
     if (incomingDiscountCode && baseChargeAmount !== null) {
-      const promo = DISCOUNT_CODES[incomingDiscountCode];
-      if (!promo) {
-        return NextResponse.json({ error: "Invalid discount code." }, { status: 400 });
-      }
-      // Check single-use: query integration_logs for prior use by this patient's phone
-      if (promo.singleUse && patientData?.phone && process.env.POSTGRES_URL) {
-        const { rows } = await sql`
-          SELECT 1 FROM integration_logs
-          WHERE action = 'discount_applied'
-            AND details->>'code' = ${incomingDiscountCode}
-            AND details->>'phone' = ${String(patientData.phone)}
-          LIMIT 1
-        `.catch(() => ({ rows: [] as any[] }));
-        if (rows.length > 0) {
-          return NextResponse.json({ error: "This discount code has already been used." }, { status: 400 });
-        }
-      }
-      appliedDiscountAmount = promo.type === "flat"
-        ? promo.amount
-        : Math.floor((baseChargeAmount ?? 0) * promo.amount / 100);
+      const promo = await validatePromoCode(incomingDiscountCode, baseChargeAmount);
+      if (!promo.valid) return NextResponse.json({ error: promo.error }, { status: 400 });
+      appliedDiscountAmount = promo.discountAmount;
       baseChargeAmount = Math.max(bypassQuickBooksPayment ? 0.01 : 0.50, (baseChargeAmount ?? 0) - appliedDiscountAmount);
-      validatedDiscountCode = incomingDiscountCode;
+      validatedDiscountCode = promo.code;
+      validatedPromoId = promo.id;
     }
 
     const chargeAmount = baseChargeAmount;
@@ -529,6 +512,7 @@ export async function POST(req: NextRequest) {
       requireResult: true,
       afterPayment: true,
     });
+    if (validatedPromoId) await consumePromoCode(validatedPromoId);
 
     // 7. Verify identity when patient submitted usable media. Returning patients with
     // a prior successful order reuse identity server-side so checkout cannot fall

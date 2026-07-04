@@ -14,11 +14,6 @@ import { formatCurrency } from "@/lib/utils";
 import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
 import { Lock, CreditCard, Tag, ShieldCheck, BadgeCheck } from "lucide-react";
 
-// Client-side code lookup — server re-validates before charging
-const PROMO_CODES: Record<string, { type: "flat" | "percent"; amount: number }> = {
-  SUMMER50: { type: "flat", amount: 50 },
-};
-
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function detectCardBrand(number: string): string {
@@ -170,18 +165,22 @@ export default function Payment() {
     }).catch(() => {});
   }, [intakeState]);
 
-  const handleApplyCode = () => {
+  const handleApplyCode = async () => {
     setDiscountError("");
     const code = discountInput.trim().toUpperCase();
     if (!code) return;
-    const promo = PROMO_CODES[code];
-    if (!promo) {
-      setDiscountError("Invalid discount code.");
+    const response = await fetch("/api/promo-codes/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, baseAmount: baseTotal }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.valid) {
+      setDiscountError(result.error ?? "Invalid discount code.");
       return;
     }
-    const disc = promo.type === "flat" ? promo.amount : Math.floor(baseTotal * promo.amount / 100);
     setAppliedCode(code);
-    setDiscountAmount(disc);
+    setDiscountAmount(Number(result.discountAmount));
     setDiscountInput("");
   };
 
@@ -337,7 +336,7 @@ export default function Payment() {
         cardName: `${intakeState.firstName} ${intakeState.lastName}`,
         cardLast4,
         cardBrand: paymentsDisabled ? "bypass" : detectCardBrand(cardNumber),
-        amount: total,
+        amount: baseTotal,
         identityUploads: {
           licenseImageData: intakeState.licenseImageData,
           selfieFrameData: intakeState.selfieFrameData,
