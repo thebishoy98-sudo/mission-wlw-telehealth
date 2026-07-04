@@ -9,6 +9,7 @@ const DEFAULT_EVENTS: Record<AdminNotificationEvent, boolean> = {
   identity_review_needed: true,
   reorder_review_needed: true,
   subscription_charge_alert: true,
+  subscription_review_needed: true,
   order_received: true,
   pharmacy_shipped: true,
 };
@@ -69,6 +70,10 @@ function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, 
   if (event === "subscription_charge_alert") {
     const detail = data.reason ? ` ${data.reason}` : "";
     return `Mission WLW: Subscription charge processed${patient}.${detail}`;
+  }
+  if (event === "subscription_review_needed") {
+    const detail = data.reason ? ` ${data.reason}` : "";
+    return `Mission WLW: Refill due for dose review${patient}.${detail} Review & send in admin → Subscriptions.`;
   }
   if (event === "pharmacy_shipped") {
     const tracking = data.trackingNumber ? ` Tracking: ${data.trackingNumber}.` : "";

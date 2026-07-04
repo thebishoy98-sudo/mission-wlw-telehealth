@@ -55,6 +55,66 @@ export async function storeCardAndChargeStored(params: {
 }
 
 /**
+ * Ensure an active subscription exists for this order WITHOUT a saved card
+ * (auto-enroll every buyer). If a saved card later exists, refills auto-charge;
+ * otherwise the refill review sends a pay-link. Idempotent per (patient, product).
+ */
+export async function ensureSubscriptionForOrder(params: {
+  order: Order;
+  patient: Patient;
+  nowIso?: string;
+}): Promise<Subscription> {
+  const { order, patient } = params;
+  const now = params.nowIso ?? new Date().toISOString();
+
+  let subscription: Subscription | null = null;
+  if (order.subscriptionId) {
+    subscription = await dbServer.subscriptionDb.getById(order.subscriptionId).catch(() => null);
+  }
+  if (!subscription) {
+    subscription = await dbServer.subscriptionDb
+      .getActiveByPatientProduct(patient.id, order.productId)
+      .catch(() => null);
+  }
+
+  if (subscription) {
+    const cycle = advanceCycle(undefined, now, subscription.intervalDays, subscription.leadDays);
+    const updated = await dbServer.subscriptionDb.update(subscription.id, {
+      status: "active",
+      doseId: order.doseId,
+      ...cycle,
+      lastOrderId: order.id,
+      lastChargedAt: now,
+    });
+    if (!order.subscriptionId) {
+      await dbServer.orderDb.update(order.id, { subscriptionId: subscription.id }).catch(() => {});
+    }
+    return updated ?? subscription;
+  }
+
+  const cycle = computeInitialCycle(now, DEFAULT_INTERVAL_DAYS, DEFAULT_LEAD_DAYS);
+  const newSub: Subscription = {
+    id: `sub_${Date.now()}${generateId().slice(0, 4)}`,
+    patientId: patient.id,
+    productId: order.productId,
+    doseId: order.doseId,
+    status: "active",
+    intervalDays: DEFAULT_INTERVAL_DAYS,
+    leadDays: DEFAULT_LEAD_DAYS,
+    coversThrough: cycle.coversThrough,
+    nextRunAt: cycle.nextRunAt,
+    lastOrderId: order.id,
+    lastChargedAt: now,
+    sourceOrderId: order.id,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await dbServer.subscriptionDb.create(newSub);
+  await dbServer.orderDb.update(order.id, { subscriptionId: newSub.id }).catch(() => {});
+  return newSub;
+}
+
+/**
  * Persist card-on-file + recurring consent on the patient and create or advance
  * the subscription. Idempotent per (patient, product): an existing active
  * subscription (or the one this order belongs to) is advanced to a fresh cycle.

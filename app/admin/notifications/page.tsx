@@ -12,6 +12,7 @@ const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
   identity_review_needed: "Identity review is needed",
   reorder_review_needed: "Back-to-back reorder needs review",
   subscription_charge_alert: "Subscription charge processed (e.g. over-shipment)",
+  subscription_review_needed: "Refill due for dose review (7-week mark)",
   order_received: "New order is received",
   pharmacy_shipped: "Pharmacy ships an order",
 };
@@ -22,6 +23,7 @@ const defaultSettings: AdminNotificationSettings = {
     identity_review_needed: true,
     reorder_review_needed: true,
     subscription_charge_alert: true,
+    subscription_review_needed: true,
     order_received: true,
     pharmacy_shipped: true,
   },

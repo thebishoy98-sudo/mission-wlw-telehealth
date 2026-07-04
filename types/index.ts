@@ -499,6 +499,7 @@ export type AdminNotificationEvent =
   | "identity_review_needed"
   | "reorder_review_needed"
   | "subscription_charge_alert"
+  | "subscription_review_needed"
   | "order_received"
   | "pharmacy_shipped";
 

@@ -60,6 +60,7 @@ import {
 } from "@/lib/payment-dispatch-safety";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
+import { storeCardAndChargeStored, recordEnrollment, ensureSubscriptionForOrder } from "@/lib/subscription-enroll";
 import {
   buildTreatmentConsentText,
   CONSENT_VERSION,
@@ -406,6 +407,8 @@ export async function POST(req: NextRequest) {
 
     // 5. Charge via QuickBooks Payments, or bypass it while end-to-end intake automation is being tested.
     let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
+    // When we save a reusable card, keep its metadata to enroll the recurring plan.
+    let enrollmentCardInfo: { qbCustomerId: string; qbCardId: string; cardLast4: string; cardBrand: string } | null = null;
     if (bypassQuickBooksPayment) {
       chargeResult = {
         chargeId: `test_bypass_${generateId()}`,
@@ -423,6 +426,31 @@ export async function POST(req: NextRequest) {
         status: "success",
         details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
       }).catch(() => {});
+    } else if (token && process.env.QB_CLIENT_ID) {
+      // Store a reusable card on file from this tokenization, then charge it —
+      // this enrolls the patient in the recurring 8-week program (auto-refill).
+      try {
+        const stored = await storeCardAndChargeStored({
+          order,
+          patient,
+          amount: chargeAmount,
+          cardToken: token,
+          cardLast4,
+          cardBrand,
+        });
+        chargeResult = stored.chargeResult;
+        enrollmentCardInfo = {
+          qbCustomerId: stored.qbCustomerId,
+          qbCardId: stored.qbCardId,
+          cardLast4: stored.cardLast4,
+          cardBrand: stored.cardBrand,
+        };
+      } catch (err: any) {
+        return NextResponse.json(
+          { error: err.message ?? "Payment failed" },
+          { status: 402 }
+        );
+      }
     } else {
       try {
         chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
@@ -878,6 +906,29 @@ export async function POST(req: NextRequest) {
     };
     db.providerReviewDb.create(reviewRecord);
     await dbServer.providerReviewDb.create(reviewRecord).catch(() => {});
+
+    // 12b. Auto-enroll every buyer into the recurring 8-week program. When we saved
+    // a reusable card, refills can auto-charge; otherwise the refill review sends a
+    // pay-link. Either way the refill is HELD for a dose review at the 7-week mark.
+    if (!bypassQuickBooksPayment && !order.isRefill) {
+      try {
+        if (enrollmentCardInfo) {
+          await recordEnrollment({
+            order: updatedOrder,
+            patient,
+            product: productForIntegrations,
+            qbCustomerId: enrollmentCardInfo.qbCustomerId,
+            qbCardId: enrollmentCardInfo.qbCardId,
+            cardLast4: enrollmentCardInfo.cardLast4,
+            cardBrand: enrollmentCardInfo.cardBrand,
+          });
+        } else {
+          await ensureSubscriptionForOrder({ order: updatedOrder, patient });
+        }
+      } catch (e) {
+        errors.push(`Subscription enroll: ${(e as Error).message}`);
+      }
+    }
 
     // 13. Trigger AI eligibility pre-screen in background (non-blocking)
     if (process.env.ANTHROPIC_API_KEY) {

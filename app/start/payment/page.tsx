@@ -8,6 +8,7 @@ import * as db from "@/lib/db";
 import * as Types from "@/types";
 import { getIntakeState, saveIntakeState } from "@/lib/intake-store";
 import { buildTreatmentConsentText, CONSENT_VERSION } from "@/lib/consent";
+import { RECURRING_CONSENT_TEXT } from "@/lib/subscription";
 import { dataUrlToFileMetadata } from "@/lib/data-url";
 import { formatCurrency } from "@/lib/utils";
 import { normalizeQuickBooksPaymentsCountry } from "@/lib/quickbooks-country";
@@ -626,6 +627,12 @@ export default function Payment() {
             <span className="font-semibold text-gray-800 text-sm">{processingStep}</span>
           </div>
           <p className="text-xs text-gray-400">Setting up your order — please don&apos;t close this page</p>
+        </div>
+      )}
+
+      {!paymentsDisabled && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs leading-5 text-gray-600">
+          <strong className="text-gray-800">Auto-refill enrollment:</strong> {RECURRING_CONSENT_TEXT}
         </div>
       )}
 

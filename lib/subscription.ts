@@ -66,9 +66,10 @@ export function advanceCycle(
 
 /** Recurring-billing authorization shown on the pay page and recorded at enrollment. */
 export const RECURRING_CONSENT_TEXT =
-  "I authorize Mission WLW to securely save my payment method and automatically charge it " +
-  "for my recurring treatment every 8 weeks, until I cancel. I understand I'll get a text " +
-  "about 7 days before each charge and can reply STOP or contact support to pause or cancel anytime.";
+  "By paying, I authorize Mission WLW to securely save my payment method and enroll me in the " +
+  "recurring 8-week treatment program. About a week before each 8-week refill, the care team " +
+  "reviews my treatment (and may adjust my dose) and then charges my saved card and ships my " +
+  "refill. I can cancel anytime from my patient portal or by contacting support.";
 
 /** Inbound SMS bodies that signal an opt-out. */
 export function isOptOutMessage(body: string): boolean {

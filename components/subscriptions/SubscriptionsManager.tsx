@@ -18,17 +18,22 @@ type RefillOrder = {
   acknowledgedBy: string | null;
 };
 
+type DoseOption = { id: string; label: string };
+
 type SubscriptionRow = {
   id: string;
   status: string;
   patientId: string;
   patientName: string;
   productName: string;
+  doseId: string;
   doseLabel: string;
+  doses: DoseOption[];
   intervalDays: number;
   coversThrough: string | null;
   nextRunAt: string | null;
   lastChargedAt: string | null;
+  dueForReview: boolean;
   hasCardOnFile: boolean;
   cardLast4: string | null;
   orders: RefillOrder[];
@@ -60,6 +65,9 @@ export function SubscriptionsManager({
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [adjustSaving, setAdjustSaving] = useState(false);
+  // 7-week dose-review state, keyed to the subscription being sent.
+  const [reviewDose, setReviewDose] = useState<Record<string, string>>({});
+  const [reviewSaving, setReviewSaving] = useState("");
 
   const reload = async () => {
     setLoading(true);
@@ -170,6 +178,32 @@ export function SubscriptionsManager({
     }
   };
 
+  const sendRefill = async (sub: SubscriptionRow) => {
+    const doseId = reviewDose[sub.id] ?? sub.doseId;
+    const doseChanged = doseId !== sub.doseId;
+    if (!window.confirm(
+      doseChanged
+        ? "Approve this refill at the NEW dose and send it now? The card on file will be charged (or a pay-link sent)."
+        : "Approve and send this refill now? The card on file will be charged (or a pay-link sent)."
+    )) return;
+    setReviewSaving(sub.id);
+    setError("");
+    try {
+      const res = await fetch("/api/provider/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send_refill", subscriptionId: sub.id, doseId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewSaving("");
+    }
+  };
+
   const acknowledge = async (orderId: string) => {
     setAcking(orderId);
     try {
@@ -255,6 +289,36 @@ export function SubscriptionsManager({
           {[...active, ...inactive].map((sub) => (
             <Card key={sub.id}>
               <CardContent className="p-5">
+                {sub.dueForReview && (
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-sm font-semibold text-amber-900">⏰ Due for dose review (7-week mark)</p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Confirm or raise the dose, then send. This charges the card on file (or texts a
+                      pay-link if none). Nothing shipped until you send it.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      <label className="text-xs font-medium text-gray-700">
+                        Dose for this refill
+                        <select
+                          value={reviewDose[sub.id] ?? sub.doseId}
+                          onChange={(e) => setReviewDose((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                          className="mt-1 block rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest-700"
+                        >
+                          {sub.doses.length ? (
+                            sub.doses.map((d) => (
+                              <option key={d.id} value={d.id}>{d.label}</option>
+                            ))
+                          ) : (
+                            <option value={sub.doseId}>{sub.doseLabel}</option>
+                          )}
+                        </select>
+                      </label>
+                      <Button onClick={() => void sendRefill(sub)} disabled={reviewSaving === sub.id}>
+                        {reviewSaving === sub.id ? "Sending…" : "Approve & send refill"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">

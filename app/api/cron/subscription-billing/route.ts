@@ -21,8 +21,6 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
 import { advanceCycle, isAutochargeEnabled } from "@/lib/subscription";
 import { getChargeAmount } from "@/lib/payment-amount";
-import { createPaymentLinkToken, buildPaymentLinkUrl } from "@/lib/payment-link";
-import { getPublicBaseUrl } from "@/lib/public-url";
 import { formatCurrency, generateId } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -67,7 +65,6 @@ export async function GET(req: NextRequest) {
 
   const now = new Date().toISOString();
   const autocharge = isAutochargeEnabled();
-  const baseUrl = getPublicBaseUrl(req);
   const due = await dbServer.subscriptionDb.listDue(now, 100);
   const results: Record<string, unknown>[] = [];
 
@@ -98,8 +95,11 @@ export async function GET(req: NextRequest) {
       const lastOrder = patientOrders[0] ?? null;
       const hasCardOnFile = Boolean(patient.qbCardId && patient.recurringConsentAt);
 
-      // ── Auto-charge path ─────────────────────────────────────────────────────
-      if (hasCardOnFile && autocharge) {
+      const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+
+      // ── One-off admin-scheduled charge-only adjustment (over-shipment) ────────
+      // Explicitly authorized by an admin: charge the card on file, do NOT ship.
+      if (suppressDispatch && hasCardOnFile && autocharge) {
         const order = await createRefillOrder(sub, patient, lastOrder);
         try {
           const chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
@@ -108,116 +108,68 @@ export async function GET(req: NextRequest) {
             cardLast4: patient.cardLast4,
             cardBrand: patient.cardBrand,
           });
-          const fulfillment = await fulfillChargedRefillOrder({
-            order,
-            patient,
-            product,
-            amount,
-            chargeResult,
-            subscription: sub,
-            suppressDispatch,
+          await fulfillChargedRefillOrder({
+            order, patient, product, amount, chargeResult, subscription: sub, suppressDispatch: true,
           });
           const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
-          await dbServer.subscriptionDb.update(sub.id, {
-            ...cycle,
-            lastOrderId: order.id,
-            lastChargedAt: now,
-          });
-          // A one-off adjustment applies once — clear it so future runs are normal.
-          if (suppressDispatch) await dbServer.subscriptionDb.clearNextChargeAdjustment(sub.id);
-
-          const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
-          if (suppressDispatch) {
-            await spruceServer
-              .sendMessage(patient, "subscription_charged_no_ship", {
-                orderId: order.id,
-                patientName: patient.firstName,
-                amount: formatCurrency(amount),
-                cardLast4: patient.cardLast4 ?? "",
-                note: sub.nextChargeNote ?? "",
-              })
-              .catch(() => {});
-            await sendAdminNotification("subscription_charge_alert", {
-              orderId: order.id,
-              patientId: patient.id,
-              patientName,
-              reason: `Charged ${formatCurrency(amount)} to card on file, no new shipment (over-shipment correction).${sub.nextChargeNote ? ` Note: ${sub.nextChargeNote}` : ""}`,
-            }).catch(() => {});
-          } else {
-            await spruceServer
-              .sendMessage(patient, "subscription_charged", {
-                orderId: order.id,
-                patientName: patient.firstName,
-                amount: formatCurrency(amount),
-                cardLast4: patient.cardLast4 ?? "",
-              })
-              .catch(() => {});
-          }
-          results.push({
-            subscriptionId: sub.id,
-            action: suppressDispatch ? "auto_charged_no_dispatch" : "auto_charged",
-            orderId: order.id,
-            dispatched: fulfillment.dispatched,
-            warnings: fulfillment.warnings.length ? fulfillment.warnings : undefined,
-          });
-        } catch (chargeErr) {
-          // Charge failed (declined / API issue) → revert order to unpaid, send
-          // a pay link, and retry soon. Never lose the cycle.
-          await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
-          const { token } = createPaymentLinkToken(order.id);
-          const payUrl = buildPaymentLinkUrl(baseUrl, token);
+          await dbServer.subscriptionDb.update(sub.id, { ...cycle, lastOrderId: order.id, lastChargedAt: now });
+          await dbServer.subscriptionDb.clearNextChargeAdjustment(sub.id);
           await spruceServer
-            .sendMessage(patient, "subscription_payment_failed", {
+            .sendMessage(patient, "subscription_charged_no_ship", {
               orderId: order.id,
               patientName: patient.firstName,
-              payUrl,
+              amount: formatCurrency(amount),
+              cardLast4: patient.cardLast4 ?? "",
+              note: sub.nextChargeNote ?? "",
             })
             .catch(() => {});
-          await dbServer.subscriptionDb.update(sub.id, {
-            nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
-            lastOrderId: order.id,
-          });
+          await sendAdminNotification("subscription_charge_alert", {
+            orderId: order.id,
+            patientId: patient.id,
+            patientName,
+            reason: `Charged ${formatCurrency(amount)} to card on file, no new shipment (over-shipment correction).${sub.nextChargeNote ? ` Note: ${sub.nextChargeNote}` : ""}`,
+          }).catch(() => {});
+          results.push({ subscriptionId: sub.id, action: "auto_charged_no_dispatch", orderId: order.id });
+        } catch (chargeErr) {
+          await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
           await logSubscriptionEvent(
-            "Subscription auto-charge failed (sent pay link)",
-            sub.id,
-            order.id,
-            patient.id,
-            { amount },
-            "error",
-            (chargeErr as Error).message
+            "Subscription charge-only failed", sub.id, order.id, patient.id, { amount }, "error", (chargeErr as Error).message
           );
-          results.push({ subscriptionId: sub.id, action: "charge_failed_sent_link", orderId: order.id });
+          results.push({ subscriptionId: sub.id, action: "charge_only_failed", orderId: order.id });
         }
         continue;
       }
 
-      // ── Pay-link path (no card on file, or autocharge disabled) ──────────────
-      // Reuse the cycle's existing unpaid refill order if present, else create one.
-      let order: Order | null = null;
+      // ── Normal refill → HOLD for dose review (no charge, no ship) ─────────────
+      // At the 7-week mark we create (or reuse) a held refill and alert staff to
+      // review the dose and send it. Nothing is charged/shipped until an admin
+      // approves it from the Subscriptions tab.
+      let reviewOrder: Order | null = null;
       if (sub.lastOrderId) {
         const existing = await dbServer.orderDb.getById(sub.lastOrderId).catch(() => null);
         if (existing && existing.isRefill && existing.paymentStatus !== "completed") {
-          order = existing;
+          reviewOrder = existing;
         }
       }
-      if (!order) order = await createRefillOrder(sub, patient, lastOrder);
+      const isNewReview = !reviewOrder;
+      if (!reviewOrder) reviewOrder = await createRefillOrder(sub, patient, lastOrder);
 
-      const { token } = createPaymentLinkToken(order.id);
-      const payUrl = buildPaymentLinkUrl(baseUrl, token);
-      await spruceServer
-        .sendMessage(patient, "subscription_pay_link", {
-          orderId: order.id,
-          patientName: patient.firstName,
-          amount: formatCurrency(amount),
-          payUrl,
-        })
-        .catch(() => {});
-      // Re-prompt in a few days; the pay page advances the cycle on payment.
+      await sendAdminNotification("subscription_review_needed", {
+        orderId: reviewOrder.id,
+        patientId: patient.id,
+        patientName,
+        reason: `${product.name}${dose ? ` ${dose.strength ?? dose.label}` : ""}${hasCardOnFile ? " — card on file" : " — no card (pay-link)"}.`,
+      }).catch(() => {});
+      // Nudge again in a few days until an admin reviews & sends it.
       await dbServer.subscriptionDb.update(sub.id, {
         nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
-        lastOrderId: order.id,
+        lastOrderId: reviewOrder.id,
       });
-      results.push({ subscriptionId: sub.id, action: "pay_link_sent", orderId: order.id });
+      await logSubscriptionEvent(
+        isNewReview ? "Refill created, held for dose review" : "Refill review re-nudged",
+        sub.id, reviewOrder.id, patient.id, { hasCardOnFile }
+      );
+      results.push({ subscriptionId: sub.id, action: isNewReview ? "review_created" : "review_nudged", orderId: reviewOrder.id });
     } catch (err) {
       await logSubscriptionEvent(
         "Subscription billing error",

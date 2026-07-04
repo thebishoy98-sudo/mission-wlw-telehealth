@@ -12,11 +12,12 @@ import { getStaffSessionFromRequest } from "@/lib/staff-session";
 import * as spruceServer from "@/services/spruce.server";
 import { createPaymentLinkToken, buildPaymentLinkUrl } from "@/lib/payment-link";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { computeInitialCycle, DEFAULT_INTERVAL_DAYS, DEFAULT_LEAD_DAYS } from "@/lib/subscription";
-import { createRefillOrder } from "@/lib/order-fulfillment";
+import { advanceCycle, computeInitialCycle, DEFAULT_INTERVAL_DAYS, DEFAULT_LEAD_DAYS } from "@/lib/subscription";
+import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
+import * as qbPayments from "@/services/quickbooks-payments";
 import { getChargeAmount } from "@/lib/payment-amount";
 import { generateId, formatCurrency } from "@/lib/utils";
-import type { Subscription } from "@/types";
+import type { Order, Subscription } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,82 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, subscription: updated });
+    }
+
+    if (action === "send_refill") {
+      const sub = await dbServer.subscriptionDb.getById(String(body.subscriptionId ?? "")).catch(() => null);
+      if (!sub) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+      const [patient, product] = await Promise.all([
+        dbServer.patientDb.getById(sub.patientId).catch(() => null),
+        dbServer.productDb.getById(sub.productId).catch(() => null),
+      ]);
+      if (!patient || !product) return NextResponse.json({ error: "Patient or product not found" }, { status: 404 });
+
+      const requestedDoseId = typeof body.doseId === "string" && body.doseId ? body.doseId : sub.doseId;
+      const dose = product.doses?.find((d) => d.id === requestedDoseId);
+      if (!dose) return NextResponse.json({ error: "Selected dose is not valid for this product." }, { status: 400 });
+      const amount = getChargeAmount(dose.price ?? product.startingPrice);
+      if (amount === null) return NextResponse.json({ error: "Could not determine the charge amount." }, { status: 422 });
+
+      // Reuse the held refill order for this cycle, or create one.
+      let order: Order | null = null;
+      if (sub.lastOrderId) {
+        const existing = await dbServer.orderDb.getById(sub.lastOrderId).catch(() => null);
+        if (existing && existing.isRefill && existing.paymentStatus !== "completed") order = existing;
+      }
+      if (!order) {
+        const orders = await dbServer.orderDb.getByPatient(patient.id).catch(() => []);
+        order = await createRefillOrder(sub, patient, orders[0] ?? null);
+      }
+      // Apply a dose change from the review.
+      if (order.doseId !== requestedDoseId) {
+        await dbServer.orderDb.update(order.id, { doseId: requestedDoseId }).catch(() => {});
+        order = { ...order, doseId: requestedDoseId };
+      }
+
+      const hasCardOnFile = Boolean(patient.qbCardId && patient.recurringConsentAt);
+      if (hasCardOnFile) {
+        let chargeResult;
+        try {
+          chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
+            customerId: sub.qbCustomerId ?? "",
+            cardId: patient.qbCardId!,
+            cardLast4: patient.cardLast4,
+            cardBrand: patient.cardBrand,
+          });
+        } catch (err) {
+          await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
+          const { token } = createPaymentLinkToken(order.id);
+          const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
+          await spruceServer.sendMessage(patient, "subscription_payment_failed", {
+            orderId: order.id, patientName: patient.firstName, payUrl,
+          }).catch(() => {});
+          await logAction("Refill charge failed on send — pay-link sent (admin)", sub.patientId, { subscriptionId: sub.id, error: (err as Error).message });
+          return NextResponse.json({ error: (err as Error).message ?? "Charge failed; pay-link sent instead." }, { status: 402 });
+        }
+        const fulfillment = await fulfillChargedRefillOrder({ order, patient, product, amount, chargeResult, subscription: sub });
+        const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
+        await dbServer.subscriptionDb.update(sub.id, { ...cycle, doseId: requestedDoseId, lastOrderId: order.id, lastChargedAt: now });
+        await spruceServer.sendMessage(patient, "subscription_charged", {
+          orderId: order.id, patientName: patient.firstName, amount: formatCurrency(amount), cardLast4: patient.cardLast4 ?? "",
+        }).catch(() => {});
+        await logAction("Refill reviewed & sent (admin)", sub.patientId, { subscriptionId: sub.id, orderId: order.id, doseId: requestedDoseId, amount, dispatched: fulfillment.dispatched });
+        return NextResponse.json({ success: true, mode: "charged", orderId: order.id, dispatched: fulfillment.dispatched, warnings: fulfillment.warnings });
+      }
+
+      // No saved card → text a pay-link; the pay page advances the cycle on payment.
+      await dbServer.subscriptionDb.update(sub.id, { doseId: requestedDoseId }).catch(() => {});
+      const { token } = createPaymentLinkToken(order.id);
+      const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
+      await spruceServer.sendMessage(patient, "subscription_pay_link", {
+        orderId: order.id, patientName: patient.firstName, amount: formatCurrency(amount), payUrl,
+      }).catch(() => {});
+      await dbServer.subscriptionDb.update(sub.id, {
+        lastOrderId: order.id,
+        nextRunAt: new Date(Date.parse(now) + DAY_MS * 3).toISOString(),
+      });
+      await logAction("Refill reviewed — pay-link sent (admin, no card on file)", sub.patientId, { subscriptionId: sub.id, orderId: order.id, doseId: requestedDoseId });
+      return NextResponse.json({ success: true, mode: "link_sent", orderId: order.id });
     }
 
     if (action === "schedule_charge_only") {
@@ -218,6 +295,7 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   try {
+    const nowIso = new Date().toISOString();
     const subscriptions = await dbServer.subscriptionDb.getAll().catch(() => []);
     const patientIds = Array.from(new Set(subscriptions.map((s) => s.patientId)));
     const productIds = Array.from(new Set(subscriptions.map((s) => s.productId)));
@@ -247,17 +325,25 @@ export async function GET(req: NextRequest) {
             acknowledgedAt: o.providerAcknowledgedAt ?? null,
             acknowledgedBy: o.providerAcknowledgedBy ?? null,
           }));
+        // Due for the 7-week dose review when active and the run time has passed.
+        const dueForReview = sub.status === "active" && !!sub.nextRunAt && sub.nextRunAt <= nowIso;
         return {
           id: sub.id,
           status: sub.status,
           patientId: sub.patientId,
           patientName: patient ? [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim() : sub.patientId,
           productName: product?.name ?? sub.productId,
+          doseId: sub.doseId,
           doseLabel: dose ? [dose.label, dose.strength].filter(Boolean).join(" — ") : sub.doseId,
+          doses: (product?.doses ?? []).map((d) => ({
+            id: d.id,
+            label: [d.label, d.strength].filter(Boolean).join(" — "),
+          })),
           intervalDays: sub.intervalDays,
           coversThrough: sub.coversThrough ?? null,
           nextRunAt: sub.nextRunAt ?? null,
           lastChargedAt: sub.lastChargedAt ?? null,
+          dueForReview,
           hasCardOnFile: Boolean(patient?.qbCardId && patient?.recurringConsentAt),
           cardLast4: patient?.cardLast4 ?? null,
           orders,
