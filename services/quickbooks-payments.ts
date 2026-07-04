@@ -72,6 +72,50 @@ interface QBChargeResponse {
   updated: string;
 }
 
+export type StoredCardReference = {
+  cardId: string;
+  cardLast4: string;
+  cardBrand: string;
+};
+
+const cardsBaseUrl = () => PAYMENTS_BASE_URL.replace(/\/payments\/?$/, "");
+
+export async function listCardsOnFile(customerId: string): Promise<StoredCardReference[]> {
+  if (serviceConfig.quickbooks.useMock || !process.env.QB_CLIENT_ID) return [];
+  if (!customerId) throw new Error("A QuickBooks customer id is required to list cards on file.");
+
+  const accessToken = await getQBAccessToken();
+  const res = await fetch(
+    `${cardsBaseUrl()}/customers/${encodeURIComponent(customerId)}/cards`,
+    {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+        "Request-Id": generateId(),
+      },
+    }
+  );
+  const rawBody = await res.text();
+  let cards: Array<{ id?: string; number?: string; cardType?: string; status?: string }>;
+  try {
+    const parsed = JSON.parse(rawBody);
+    cards = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.cards) ? parsed.cards : [];
+  } catch {
+    throw new Error(`QuickBooks list-cards error (HTTP ${res.status})`);
+  }
+  if (!res.ok) {
+    throw new Error(`QuickBooks list-cards failed (HTTP ${res.status})`);
+  }
+  return cards
+    .filter((card) => !!card.id && card.status !== "DELETED")
+    .map((card) => ({
+      cardId: card.id!,
+      cardLast4: card.number?.slice(-4) ?? "0000",
+      cardBrand: card.cardType ?? "unknown",
+    }));
+}
+
 
 /**
  * Charge a card using the QuickBooks Payments API.
@@ -236,8 +280,7 @@ export async function storeCardOnFile(
   const accessToken = await getQBAccessToken();
   // Intuit quirk: charges/tokens live under /quickbooks/v4/payments, but card-on-file
   // (customers/{id}/cards) lives under /quickbooks/v4 WITHOUT the /payments segment.
-  const cardsBaseUrl = PAYMENTS_BASE_URL.replace(/\/payments\/?$/, "");
-  const res = await fetch(`${cardsBaseUrl}/customers/${encodeURIComponent(customerId)}/cards/createFromToken`, {
+  const res = await fetch(`${cardsBaseUrl()}/customers/${encodeURIComponent(customerId)}/cards/createFromToken`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

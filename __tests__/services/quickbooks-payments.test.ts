@@ -122,4 +122,29 @@ describe("quickbooks-payments.chargeCard", () => {
     expect(body.card).toBeUndefined();
     expect(JSON.stringify(body)).not.toContain("customer-123");
   });
+
+  it("lists normalized cards already saved for a QuickBooks customer", async () => {
+    process.env = {
+      ...process.env,
+      USE_REAL_QUICKBOOKS: "true",
+    };
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      text: async () => JSON.stringify([
+        { id: "card-existing", number: "xxxxxxxxxxxx5151", cardType: "Visa" },
+      ]),
+    } as Response));
+    global.fetch = fetchMock as any;
+
+    const qbPayments = await import("@/services/quickbooks-payments");
+    const cards = await qbPayments.listCardsOnFile("customer-123");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/quickbooks\/v4\/customers\/customer-123\/cards$/),
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(cards).toEqual([
+      { cardId: "card-existing", cardLast4: "5151", cardBrand: "Visa" },
+    ]);
+  });
 });

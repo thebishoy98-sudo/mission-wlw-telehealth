@@ -14,6 +14,16 @@ import { computeInitialCycle, advanceCycle, DEFAULT_INTERVAL_DAYS, DEFAULT_LEAD_
 import { generateId } from "@/lib/utils";
 import type { Order, Patient, Product, Subscription } from "@/types";
 
+export class CardEnrollmentError extends Error {
+  tokenConsumed: boolean;
+
+  constructor(message: string, tokenConsumed: boolean) {
+    super(message);
+    this.name = "CardEnrollmentError";
+    this.tokenConsumed = tokenConsumed;
+  }
+}
+
 /**
  * Ensure a QB customer, store the card from a single-use token, then charge the
  * stored card. Using store-then-charge keeps a reusable card-on-file from one
@@ -34,18 +44,55 @@ export async function storeCardAndChargeStored(params: {
   cardBrand: string;
 }> {
   const { order, patient, amount, cardToken } = params;
-  const qbCustomerId = await quickbooks.createCustomerRecord(patient);
-  const stored = await qbPayments.storeCardOnFile(qbCustomerId, cardToken, {
-    cardLast4: params.cardLast4,
-    cardBrand: params.cardBrand,
-  });
-  const chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
-    customerId: qbCustomerId,
-    cardId: stored.cardId,
-    cardLast4: stored.cardLast4,
-    cardBrand: stored.cardBrand,
-    requestId: order.id,
-  });
+  let qbCustomerId: string;
+  try {
+    qbCustomerId = await quickbooks.createCustomerRecord(patient);
+  } catch (error) {
+    throw new CardEnrollmentError((error as Error).message, false);
+  }
+
+  let stored: qbPayments.StoredCardReference;
+  let tokenConsumed = false;
+  try {
+    const existingCards = await qbPayments.listCardsOnFile(qbCustomerId);
+    if (existingCards.length) {
+      stored = existingCards[0];
+    } else {
+      try {
+        stored = await qbPayments.storeCardOnFile(qbCustomerId, cardToken, {
+          cardLast4: params.cardLast4,
+          cardBrand: params.cardBrand,
+        });
+        tokenConsumed = true;
+      } catch (error) {
+        if (/already exists/i.test((error as Error).message)) {
+          const racedCards = await qbPayments.listCardsOnFile(qbCustomerId);
+          if (racedCards.length) {
+            stored = racedCards[0];
+          } else {
+            throw error;
+          }
+        } else {
+          throw error;
+        }
+      }
+    }
+  } catch (error) {
+    throw new CardEnrollmentError((error as Error).message, tokenConsumed);
+  }
+
+  let chargeResult;
+  try {
+    chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
+      customerId: qbCustomerId,
+      cardId: stored.cardId,
+      cardLast4: stored.cardLast4,
+      cardBrand: stored.cardBrand,
+      requestId: order.id,
+    });
+  } catch (error) {
+    throw new CardEnrollmentError((error as Error).message, tokenConsumed);
+  }
   return {
     chargeResult,
     qbCustomerId,

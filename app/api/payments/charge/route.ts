@@ -60,7 +60,12 @@ import {
 } from "@/lib/payment-dispatch-safety";
 import { normalizeProduct, tirzepatideProduct } from "@/data/products";
 import { resolveReusableCheckoutIdentity } from "@/lib/checkout-identity-reuse";
-import { storeCardAndChargeStored, recordEnrollment, ensureSubscriptionForOrder } from "@/lib/subscription-enroll";
+import {
+  CardEnrollmentError,
+  storeCardAndChargeStored,
+  recordEnrollment,
+  ensureSubscriptionForOrder,
+} from "@/lib/subscription-enroll";
 import {
   buildTreatmentConsentText,
   CONSENT_VERSION,
@@ -460,10 +465,24 @@ export async function POST(req: NextRequest) {
             details: { amount: chargeAmount },
             error: storeErr?.message ?? String(storeErr),
           }).catch(() => {});
-          return NextResponse.json(
-            { error: storeErr?.message ?? "Payment failed while saving the card." },
-            { status: 402 }
-          );
+          if (storeErr instanceof CardEnrollmentError && !storeErr.tokenConsumed) {
+            await dbServer.integrationLogDb.create({
+              id: generateId(),
+              timestamp: new Date().toISOString(),
+              integrationName: "quickbooks",
+              action: "Card-on-file setup failed — falling back to one-time charge",
+              orderId,
+              patientId: patient.id,
+              status: "error",
+              details: { amount: chargeAmount },
+              error: storeErr.message,
+            }).catch(() => {});
+          } else {
+            return NextResponse.json(
+              { error: storeErr?.message ?? "Payment failed while saving the card." },
+              { status: 402 }
+            );
+          }
         }
       }
 

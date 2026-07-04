@@ -72,7 +72,7 @@ describe("payment identity storage contract", () => {
 describe("payment card-on-file checkout contract", () => {
   const chargeRoute = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
 
-  it("saves and charges the card by default without reusing a consumed token after failure", () => {
+  it("falls back to a one-time charge only while the checkout token is unconsumed", () => {
     const savedCardGuard = "if (token && process.env.QB_CLIENT_ID)";
     const savedCardIndex = chargeRoute.indexOf(savedCardGuard);
     const oneTimeFallbackIndex = chargeRoute.indexOf("if (!enrollmentCardInfo)", savedCardIndex);
@@ -80,7 +80,11 @@ describe("payment card-on-file checkout contract", () => {
 
     expect(savedCardIndex).toBeGreaterThan(-1);
     expect(chargeRoute).not.toContain("QB_SAVE_CARD_AT_CHECKOUT");
+    expect(chargeRoute).toContain("CardEnrollmentError");
+    expect(savedCardBlock).toContain(
+      "storeErr instanceof CardEnrollmentError && !storeErr.tokenConsumed"
+    );
+    expect(savedCardBlock).toContain("falling back to one-time charge");
     expect(savedCardBlock).toContain("return NextResponse.json");
-    expect(savedCardBlock).not.toContain("falling back to one-time charge");
   });
 });
