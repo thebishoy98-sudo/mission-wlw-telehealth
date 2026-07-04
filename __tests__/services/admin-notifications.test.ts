@@ -35,6 +35,9 @@ describe("admin notifications", () => {
         identity_review_needed: true,
         order_received: true,
         pharmacy_shipped: true,
+        reorder_review_needed: true,
+        subscription_charge_alert: true,
+        subscription_review_needed: true,
       },
     });
   });
