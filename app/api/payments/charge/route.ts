@@ -427,11 +427,11 @@ export async function POST(req: NextRequest) {
         details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
       }).catch(() => {});
     } else {
-      // Preferred path: when we have a token, try to store a reusable card on file
-      // and charge it (enrolls the recurring plan with auto-charge). If saving the
-      // card fails for ANY reason, fall back to a normal one-time charge so the
-      // payment still succeeds — card-on-file is a nice-to-have, not a blocker.
-      if (token && process.env.QB_CLIENT_ID) {
+      // Card-on-file save-then-charge is opt-in. Intuit's createFromToken consumes
+      // the single-use token, so a failed stored-card charge cannot safely fall
+      // back to reusing that token. The default path charges the token once and
+      // enrolls without a saved card; refills then use the review + pay-link path.
+      if (token && process.env.QB_CLIENT_ID && process.env.QB_SAVE_CARD_AT_CHECKOUT === "true") {
         try {
           const stored = await storeCardAndChargeStored({
             order,

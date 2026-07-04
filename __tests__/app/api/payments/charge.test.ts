@@ -68,3 +68,21 @@ describe("payment identity storage contract", () => {
     expect(chargeRoute).toContain("Consent signature must match the patient name");
   });
 });
+
+describe("payment card-on-file checkout contract", () => {
+  const chargeRoute = fs.readFileSync(path.join(process.cwd(), "app/api/payments/charge/route.ts"), "utf8");
+
+  it("uses the one-time token charge by default and only saves a card when explicitly enabled", () => {
+    const optInGuard =
+      'token && process.env.QB_CLIENT_ID && process.env.QB_SAVE_CARD_AT_CHECKOUT === "true"';
+    const optInIndex = chargeRoute.indexOf(optInGuard);
+    const oneTimeChargeIndex = chargeRoute.indexOf(
+      "chargeResult = await qbPayments.chargeCard",
+      optInIndex
+    );
+
+    expect(optInIndex).toBeGreaterThan(-1);
+    expect(chargeRoute.indexOf("if (!enrollmentCardInfo)", optInIndex)).toBeLessThan(oneTimeChargeIndex);
+    expect(oneTimeChargeIndex).toBeGreaterThan(optInIndex);
+  });
+});
