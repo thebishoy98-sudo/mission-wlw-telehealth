@@ -427,11 +427,11 @@ export async function POST(req: NextRequest) {
         details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
       }).catch(() => {});
     } else {
-      // Card-on-file save-then-charge is opt-in. Intuit's createFromToken consumes
-      // the single-use token, so a failed stored-card charge cannot safely fall
-      // back to reusing that token. The default path charges the token once and
-      // enrolls without a saved card; refills then use the review + pay-link path.
-      if (token && process.env.QB_CLIENT_ID && process.env.QB_SAVE_CARD_AT_CHECKOUT === "true") {
+      // Save the tokenized card and charge that durable card by default so every
+      // first purchase can enroll in automatic refills. createFromToken consumes
+      // the token, so a failure here must return to the client for a fresh token;
+      // it is unsafe to retry the consumed token through the one-time path.
+      if (token && process.env.QB_CLIENT_ID) {
         try {
           const stored = await storeCardAndChargeStored({
             order,
@@ -453,13 +453,17 @@ export async function POST(req: NextRequest) {
             id: generateId(),
             timestamp: new Date().toISOString(),
             integrationName: "quickbooks",
-            action: "Card-on-file save failed — falling back to one-time charge",
+            action: "Card-on-file checkout charge failed",
             orderId,
             patientId: patient.id,
             status: "error",
             details: { amount: chargeAmount },
             error: storeErr?.message ?? String(storeErr),
           }).catch(() => {});
+          return NextResponse.json(
+            { error: storeErr?.message ?? "Payment failed while saving the card." },
+            { status: 402 }
+          );
         }
       }
 

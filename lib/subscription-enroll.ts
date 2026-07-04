@@ -44,6 +44,7 @@ export async function storeCardAndChargeStored(params: {
     cardId: stored.cardId,
     cardLast4: stored.cardLast4,
     cardBrand: stored.cardBrand,
+    requestId: order.id,
   });
   return {
     chargeResult,
