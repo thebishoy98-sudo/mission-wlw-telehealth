@@ -1,5 +1,6 @@
 import type { IdentityAiResult, IdentityStatus, Order, ProviderReview } from "@/types";
-import { getIdentityGate, getIdentityReviewUpdate } from "@/lib/identity";
+import { getIdentityReviewUpdate } from "@/lib/identity";
+import { getOrderDispatchGate } from "@/lib/order-gates";
 
 type ManualApprovalInput = {
   reviewedBy: string;
@@ -43,9 +44,9 @@ export function buildManualIdentityApprovalReviewUpdate(
   };
 }
 
-export function shouldRetryPracticeQCompletionAfterIdentityApproval(order: Pick<Order, "identityStatus" | "practiceQStatus" | "pharmacyStatus">) {
+export function shouldRetryPracticeQCompletionAfterIdentityApproval(order: Pick<Order, "identityStatus" | "priorMedStatus" | "reorderReviewStatus" | "practiceQStatus" | "pharmacyStatus">) {
   return (
-    getIdentityGate(order).canDispatch &&
+    getOrderDispatchGate(order).canDispatch &&
     (order.pharmacyStatus === "draft" || order.pharmacyStatus === "error")
   );
 }

@@ -7,6 +7,7 @@ const SETTINGS_KEY = "admin_notification_settings";
 
 const DEFAULT_EVENTS: Record<AdminNotificationEvent, boolean> = {
   identity_review_needed: true,
+  reorder_review_needed: true,
   order_received: true,
   pharmacy_shipped: true,
 };
@@ -59,6 +60,10 @@ function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, 
   const patient = data.patientName ? ` for ${data.patientName}` : "";
   if (event === "identity_review_needed") {
     return `Mission WLW: Identity review needed${patient}. ${order}.`;
+  }
+  if (event === "reorder_review_needed") {
+    const detail = data.reason ? ` ${data.reason}` : "";
+    return `Mission WLW: Back-to-back reorder needs review${patient}. ${order}.${detail} Approve or reject in admin.`;
   }
   if (event === "pharmacy_shipped") {
     const tracking = data.trackingNumber ? ` Tracking: ${data.trackingNumber}.` : "";

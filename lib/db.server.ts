@@ -232,6 +232,12 @@ export const orderDb = {
     return rows[0] ? rowToOrder(rows[0]) : null;
   },
 
+  async getByPriorMedUploadToken(token: string): Promise<Order | null> {
+    if (!isDbAvailable()) return null;
+    const { rows } = await sql`SELECT * FROM orders WHERE prior_med_upload_token = ${token} LIMIT 1`;
+    return rows[0] ? rowToOrder(rows[0]) : null;
+  },
+
   async getByPatient(patientId: string): Promise<Order[]> {
     if (!isDbAvailable()) return [];
     const { rows } = await sql`
@@ -260,16 +266,30 @@ export const orderDb = {
     await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT`.catch(() => {});
     await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS subscription_id TEXT`.catch(() => {});
     await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_refill BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_status TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reason TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_upload_token TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reviewed_at TIMESTAMPTZ`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS prior_med_reviewed_by TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_review_status TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_review_reason TEXT`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_reviewed_at TIMESTAMPTZ`.catch(() => {});
+    await sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reorder_reviewed_by TEXT`.catch(() => {});
     await sql`
       INSERT INTO orders (id, patient_id, product_id, dose_id, status, payment_status,
         pharmacy_status, practice_q_status, quickbooks_status, practiceq_client_id, identity_status,
         identity_reason, identity_reviewed_at, identity_reviewed_by, identity_ai_result,
-        identity_upload_token, ref_code, subscription_id, is_refill, created_at, updated_at)
+        identity_upload_token, prior_med_status, prior_med_reason, prior_med_upload_token,
+        prior_med_reviewed_at, prior_med_reviewed_by, reorder_review_status, reorder_review_reason,
+        reorder_reviewed_at, reorder_reviewed_by, ref_code, subscription_id, is_refill, created_at, updated_at)
       VALUES (${o.id}, ${o.patientId}, ${o.productId}, ${o.doseId}, ${o.status},
         ${o.paymentStatus}, ${o.pharmacyStatus}, ${o.practiceQStatus}, ${o.quickbooksStatus}, ${o.practiceqClientId ?? null},
         ${o.identityStatus ?? null}, ${o.identityReason ?? null}, ${o.identityReviewedAt ?? null},
         ${o.identityReviewedBy ?? null}, ${o.identityAiResult ? JSON.stringify(o.identityAiResult) : null}::jsonb,
-        ${o.identityUploadToken ?? null}, ${o.refCode ?? null}, ${o.subscriptionId ?? null}, ${o.isRefill ?? false},
+        ${o.identityUploadToken ?? null}, ${o.priorMedStatus ?? null}, ${o.priorMedReason ?? null},
+        ${o.priorMedUploadToken ?? null}, ${o.priorMedReviewedAt ?? null}, ${o.priorMedReviewedBy ?? null},
+        ${o.reorderReviewStatus ?? null}, ${o.reorderReviewReason ?? null}, ${o.reorderReviewedAt ?? null},
+        ${o.reorderReviewedBy ?? null}, ${o.refCode ?? null}, ${o.subscriptionId ?? null}, ${o.isRefill ?? false},
         ${o.createdAt}, ${o.updatedAt})
     `;
     return o;
@@ -296,6 +316,15 @@ export const orderDb = {
         identity_reviewed_by = COALESCE(${data.identityReviewedBy ?? null}, identity_reviewed_by),
         identity_ai_result = COALESCE(${data.identityAiResult ? JSON.stringify(data.identityAiResult) : null}::jsonb, identity_ai_result),
         identity_upload_token = COALESCE(${data.identityUploadToken ?? null}, identity_upload_token),
+        prior_med_status   = COALESCE(${data.priorMedStatus ?? null}, prior_med_status),
+        prior_med_reason   = COALESCE(${data.priorMedReason ?? null}, prior_med_reason),
+        prior_med_upload_token = COALESCE(${data.priorMedUploadToken ?? null}, prior_med_upload_token),
+        prior_med_reviewed_at = COALESCE(${data.priorMedReviewedAt ?? null}, prior_med_reviewed_at),
+        prior_med_reviewed_by = COALESCE(${data.priorMedReviewedBy ?? null}, prior_med_reviewed_by),
+        reorder_review_status = COALESCE(${data.reorderReviewStatus ?? null}, reorder_review_status),
+        reorder_review_reason = COALESCE(${data.reorderReviewReason ?? null}, reorder_review_reason),
+        reorder_reviewed_at = COALESCE(${data.reorderReviewedAt ?? null}, reorder_reviewed_at),
+        reorder_reviewed_by = COALESCE(${data.reorderReviewedBy ?? null}, reorder_reviewed_by),
         subscription_id    = COALESCE(${data.subscriptionId ?? null}, subscription_id),
         is_refill          = COALESCE(${data.isRefill ?? null}, is_refill),
         provider_acknowledged_at = COALESCE(${data.providerAcknowledgedAt ?? null}, provider_acknowledged_at),
@@ -1130,6 +1159,15 @@ function rowToOrder(r: any): Order {
     identityReviewedBy: r.identity_reviewed_by ?? undefined,
     identityAiResult: r.identity_ai_result ?? undefined,
     identityUploadToken: r.identity_upload_token ?? undefined,
+    priorMedStatus: r.prior_med_status ?? undefined,
+    priorMedReason: r.prior_med_reason ?? undefined,
+    priorMedUploadToken: r.prior_med_upload_token ?? undefined,
+    priorMedReviewedAt: r.prior_med_reviewed_at ?? undefined,
+    priorMedReviewedBy: r.prior_med_reviewed_by ?? undefined,
+    reorderReviewStatus: r.reorder_review_status ?? undefined,
+    reorderReviewReason: r.reorder_review_reason ?? undefined,
+    reorderReviewedAt: r.reorder_reviewed_at ?? undefined,
+    reorderReviewedBy: r.reorder_reviewed_by ?? undefined,
     practiceqClientId: r.practiceq_client_id === undefined || r.practiceq_client_id === null ? undefined : String(r.practiceq_client_id),
     refCode: r.ref_code ?? undefined,
     subscriptionId: r.subscription_id ?? undefined,

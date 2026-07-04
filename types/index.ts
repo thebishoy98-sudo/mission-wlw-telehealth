@@ -108,6 +108,33 @@ export interface IdentityAiResult {
   checkedAt?: string;
 }
 
+/**
+ * Prior-GLP-1 proof gate. When a patient orders a dose above the starting dose
+ * we require documentation that they have taken GLP-1 before (their existing
+ * script), which an admin must approve before pharmacy dispatch.
+ *   not_required  — starting dose, refill, or established patient (no gate)
+ *   pending_upload — proof required, patient has not uploaded yet
+ *   submitted     — patient uploaded proof, awaiting admin approval
+ *   approved      — admin approved the proof (dispatch may proceed)
+ *   rejected      — admin rejected the proof (dispatch stays blocked)
+ */
+export type PriorMedStatus =
+  | "not_required"
+  | "pending_upload"
+  | "submitted"
+  | "approved"
+  | "rejected";
+
+/**
+ * Back-to-back reorder review gate. When a patient orders again too soon after
+ * their last paid order, the order is flagged for admin review instead of being
+ * blocked. Dispatch is held until an admin approves (or rejects) it.
+ *   flagged  — ordered too soon, awaiting admin decision (dispatch held)
+ *   approved — admin allowed the early reorder (dispatch may proceed)
+ *   rejected — admin rejected the early reorder (dispatch stays blocked)
+ */
+export type ReorderReviewStatus = "flagged" | "approved" | "rejected";
+
 export interface Order {
   id: string;
   patientId: string;
@@ -130,6 +157,17 @@ export interface Order {
   identityReviewedBy?: string;
   identityAiResult?: IdentityAiResult;
   identityUploadToken?: string;
+  /** Prior-GLP-1 proof gate (non-starting-dose orders). */
+  priorMedStatus?: PriorMedStatus;
+  priorMedReason?: string;
+  priorMedUploadToken?: string;
+  priorMedReviewedAt?: string;
+  priorMedReviewedBy?: string;
+  /** Back-to-back reorder review gate (ordered too soon since last order). */
+  reorderReviewStatus?: ReorderReviewStatus;
+  reorderReviewReason?: string;
+  reorderReviewedAt?: string;
+  reorderReviewedBy?: string;
   /** PracticeQ/IntakeQ client ID — used to look up patient PHI from PracticeQ API */
   practiceqClientId?: string;
   refCode?: string;
@@ -212,7 +250,7 @@ export interface ConsentRecord {
 export interface Upload {
   id: string;
   orderId: string;
-  type: "driver_license" | "selfie_video";
+  type: "driver_license" | "selfie_video" | "prior_prescription";
   filename: string;
   fileSize: number;
   mimeType: string;
@@ -449,6 +487,7 @@ export interface DiscountCode {
 
 export type AdminNotificationEvent =
   | "identity_review_needed"
+  | "reorder_review_needed"
   | "order_received"
   | "pharmacy_shipped";
 

@@ -13,6 +13,9 @@ import * as Types from "@/types";
 import { getStatusLabel, getStatusColor, getOrderStatusLabel, formatCurrency, formatDateTime, getFedExTrackingUrl } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 import { getIdentityGate } from "@/lib/identity";
+import { getOrderDispatchGate } from "@/lib/order-gates";
+import { getPriorMedGate } from "@/lib/prior-med";
+import { isBackToBackOrder } from "@/lib/order-cadence";
 import { buildConsentCertificate } from "@/lib/consent";
 import { getDisplayOrderNumber, getDisplayPracticeQStatus, isPracticeQSkippedForOrder } from "@/lib/order-display";
 
@@ -210,8 +213,16 @@ export default function OrdersManagement() {
 
   const handleSendToPharmacy = async (order: Types.Order) => {
     try {
-      if (!getIdentityGate(order).canDispatch) {
-        setToast({ message: "Identity must be verified or manually approved before pharmacy dispatch.", type: "error" });
+      const gate = getOrderDispatchGate(order);
+      if (!gate.canDispatch) {
+        setToast({
+          message: !gate.identity.canDispatch
+            ? "Identity must be verified or manually approved before pharmacy dispatch."
+            : !gate.priorMed.canDispatch
+              ? "Prior GLP-1 prescription proof must be approved before pharmacy dispatch."
+              : "Back-to-back reorder must be approved before pharmacy dispatch.",
+          type: "error",
+        });
         return;
       }
       const patient = patients[order.patientId] ?? db.patientDb.getById(order.patientId);
@@ -335,10 +346,79 @@ export default function OrdersManagement() {
     }
   };
 
+  const handleApprovePriorMed = async (order: Types.Order, action: "approve" | "deny") => {
+    try {
+      const response = await fetch("/api/prior-med/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          action,
+          reviewedBy: "admin",
+          notes: action === "approve" ? "Prior GLP-1 proof approved by admin" : "Prior GLP-1 proof rejected by admin",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Prior-med review failed");
+      await loadOrders();
+      setToast({
+        message: action === "approve" ? "Prior GLP-1 proof approved." : "Prior GLP-1 proof rejected.",
+        type: "success",
+      });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
+  const handleResendPriorMed = async (order: Types.Order) => {
+    try {
+      const response = await fetch("/api/prior-med/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Prescription upload reminder failed");
+      setToast({ message: "Prescription upload request sent to patient.", type: "success" });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
+  const handleReorderReview = async (order: Types.Order, action: "approve" | "reject") => {
+    try {
+      const response = await fetch("/api/reorder-review/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          action,
+          reviewedBy: "admin",
+          notes: action === "approve" ? "Early reorder approved by admin" : "Early reorder rejected by admin",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? "Reorder review failed");
+      await loadOrders();
+      setToast({
+        message: action === "approve" ? "Early reorder approved." : "Early reorder rejected.",
+        type: "success",
+      });
+    } catch (error) {
+      setToast({ message: (error as Error).message, type: "error" });
+    }
+  };
+
   const selectedPayment = selectedOrder ? payments[selectedOrder.id] : null;
   const selectedPharmacyOrder = selectedOrder ? pharmacyOrders[selectedOrder.id] : null;
   const selectedTrackingNumber = selectedPharmacyOrder?.trackingNumber?.trim() ?? "";
   const selectedPatient = selectedOrder ? patients[selectedOrder.patientId] : undefined;
+  const priorPrescriptionUploads = selectedIdentity?.uploads?.filter((upload) => upload.type === "prior_prescription") ?? [];
+  const identityOnlyUploads = selectedIdentity?.uploads?.filter((upload) => upload.type !== "prior_prescription") ?? [];
+  const selectedPriorMedStatus = selectedOrder?.priorMedStatus ?? "not_required";
+  const selectedPriorMedGate = selectedOrder ? getPriorMedGate(selectedOrder) : null;
+  const priorMedApplies = selectedPriorMedStatus !== "not_required";
+  const selectedReorderStatus = selectedOrder?.reorderReviewStatus;
   const selectedPracticeQSkipped = selectedOrder ? isPracticeQSkippedForOrder(selectedOrder) : false;
   const selectedPracticeQAutomationError =
     selectedDiagnostics?.practiceqAutomation?.status === "completed"
@@ -430,6 +510,7 @@ export default function OrdersManagement() {
                           const patient = patients[order.patientId];
                           const payment = payments[order.id];
                           const pharmacyOrder = pharmacyOrders[order.id];
+                          const flaggedBackToBack = isBackToBackOrder(order, orders);
                           return (
                             <tr
                               key={order.id}
@@ -439,6 +520,13 @@ export default function OrdersManagement() {
                               <td className="px-4 py-4 text-sm">
                                 <p className="max-w-[11rem] truncate font-semibold text-gray-900">{patientDisplayName(patient, order)}</p>
                                 <p className="max-w-[11rem] truncate text-xs text-gray-500">{patientSecondaryLine(patient, order)}</p>
+                                {order.reorderReviewStatus === "flagged" ? (
+                                  <Badge className="mt-1 bg-amber-100 text-amber-800">⚠ Reorder: needs review</Badge>
+                                ) : order.reorderReviewStatus === "rejected" ? (
+                                  <Badge className="mt-1 bg-red-100 text-red-800">Reorder rejected</Badge>
+                                ) : flaggedBackToBack ? (
+                                  <Badge className="mt-1 bg-amber-100 text-amber-800">⚠ Back-to-back</Badge>
+                                ) : null}
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 {(() => {
@@ -746,9 +834,9 @@ export default function OrdersManagement() {
                       <p className="mb-4 text-sm text-gray-500">No AI identity analysis has been recorded yet.</p>
                     )}
 
-                    {selectedIdentity?.uploads?.length ? (
+                    {identityOnlyUploads.length ? (
                       <div className="grid grid-cols-1 gap-3">
-                        {selectedIdentity.uploads.map((upload) => (
+                        {identityOnlyUploads.map((upload) => (
                           <div key={upload.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-gray-900">
@@ -766,6 +854,111 @@ export default function OrdersManagement() {
                     )}
                   </CardContent>
                 </Card>
+
+                {priorMedApplies && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-bold text-gray-900 mb-4">Prior GLP-1 Proof</h3>
+                      <div className="mb-4 space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-700">Status:</span>
+                          <Badge className={selectedPriorMedGate?.canDispatch ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                            {selectedPriorMedStatus.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
+                        {selectedOrder.priorMedReason && <p className="text-gray-600">{selectedOrder.priorMedReason}</p>}
+                        {selectedOrder.priorMedReviewedAt && (
+                          <p className="text-xs text-gray-500">
+                            Reviewed {formatDateTime(selectedOrder.priorMedReviewedAt)}
+                            {selectedOrder.priorMedReviewedBy ? ` by ${selectedOrder.priorMedReviewedBy}` : ""}
+                          </p>
+                        )}
+                      </div>
+
+                      {priorPrescriptionUploads.length ? (
+                        <div className="mb-4 grid grid-cols-1 gap-3">
+                          {priorPrescriptionUploads.map((upload) => (
+                            <div key={upload.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                              <p className="mb-2 text-sm font-semibold text-gray-900">Uploaded prescription</p>
+                              <AdminIdentityUploadPreview upload={upload} />
+                              <p className="mt-2 truncate text-xs text-gray-500">{upload.filename}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mb-4 text-sm text-gray-500">The patient has not uploaded their previous prescription yet.</p>
+                      )}
+
+                      <div className="space-y-2">
+                        {selectedPriorMedStatus === "submitted" && (
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button fullWidth onClick={() => handleApprovePriorMed(selectedOrder, "approve")}>
+                              Approve Proof &amp; Continue
+                            </Button>
+                            <Button fullWidth variant="outline" onClick={() => handleApprovePriorMed(selectedOrder, "deny")}>
+                              Reject Proof
+                            </Button>
+                          </div>
+                        )}
+                        {(selectedPriorMedStatus === "pending_upload" || selectedPriorMedStatus === "rejected") && (
+                          <Button fullWidth variant="outline" onClick={() => handleResendPriorMed(selectedOrder)}>
+                            Resend Prescription Upload Request
+                          </Button>
+                        )}
+                        {selectedPriorMedStatus === "approved" && (
+                          <p className="text-sm text-green-700">Prior GLP-1 proof approved — dispatch may proceed.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {selectedReorderStatus && (
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-bold text-gray-900 mb-4">Back-to-Back Reorder</h3>
+                      <div className="mb-4 space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-700">Status:</span>
+                          <Badge
+                            className={
+                              selectedReorderStatus === "approved"
+                                ? "bg-green-100 text-green-800"
+                                : selectedReorderStatus === "rejected"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-amber-100 text-amber-800"
+                            }
+                          >
+                            {selectedReorderStatus === "flagged" ? "needs review" : selectedReorderStatus}
+                          </Badge>
+                        </div>
+                        {selectedOrder.reorderReviewReason && <p className="text-gray-600">{selectedOrder.reorderReviewReason}</p>}
+                        {selectedOrder.reorderReviewedAt && (
+                          <p className="text-xs text-gray-500">
+                            Reviewed {formatDateTime(selectedOrder.reorderReviewedAt)}
+                            {selectedOrder.reorderReviewedBy ? ` by ${selectedOrder.reorderReviewedBy}` : ""}
+                          </p>
+                        )}
+                      </div>
+                      {selectedReorderStatus === "flagged" && (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Button fullWidth onClick={() => handleReorderReview(selectedOrder, "approve")}>
+                            Approve Reorder &amp; Continue
+                          </Button>
+                          <Button fullWidth variant="outline" onClick={() => handleReorderReview(selectedOrder, "reject")}>
+                            Reject Reorder
+                          </Button>
+                        </div>
+                      )}
+                      {selectedReorderStatus === "approved" && (
+                        <p className="text-sm text-green-700">Early reorder approved — dispatch may proceed.</p>
+                      )}
+                      {selectedReorderStatus === "rejected" && (
+                        <p className="text-sm text-red-700">Early reorder rejected — dispatch remains blocked.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardContent className="p-6">
