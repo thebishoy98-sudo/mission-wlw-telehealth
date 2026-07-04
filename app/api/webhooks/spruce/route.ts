@@ -8,7 +8,7 @@ import {
 } from "@/lib/spruce-webhook";
 import { generateId } from "@/lib/utils";
 import { classifySpruceReply } from "@/services/spruce-ai-replies";
-import { sendTextToPhone, sendMessage as sendSpruceMessage } from "@/services/spruce.server";
+import { sendTextToPhone } from "@/services/spruce.server";
 
 type InboundMessage = Extract<ParsedSpruceWebhook, { kind: "inbound_message" }>;
 
@@ -45,35 +45,23 @@ async function processInboundMessage(event: InboundMessage) {
     await logInbound(event, patient?.id, latestOrder?.id);
 
     if (isOptOutMessage(event.replyText)) {
-      if (patient) {
-        const subscriptions = await dbServer.subscriptionDb.getByPatient(patient.id);
-        const now = new Date().toISOString();
-        let cancelledCount = 0;
-        for (const subscription of subscriptions) {
-          if (subscription.status === "active") {
-            await dbServer.subscriptionDb.update(subscription.id, {
-              status: "cancelled",
-              cancelledAt: now,
-              cancelReason: "patient SMS opt-out",
-            });
-            cancelledCount += 1;
-          }
-        }
-        await dbServer.integrationLogDb.create({
-          id: generateId(),
-          timestamp: now,
-          integrationName: "spruce",
-          action: "Subscription cancelled via SMS opt-out",
-          patientId: patient.id,
-          orderId: latestOrder?.id,
-          status: "success",
-          details: { messageId: event.messageId, phone: event.patientPhone, cancelledCount },
-        });
-        // Confirm the cancellation to the patient (only if we actually cancelled one).
-        if (cancelledCount > 0) {
-          await sendSpruceMessage(patient, "subscription_cancelled", {}).catch(() => {});
-        }
-      }
+      // Policy: subscriptions are cancelled ONLY via patient login or an admin —
+      // never automatically from a text. We log the opt-out/cancel keyword for
+      // staff follow-up and do not auto-reply or auto-cancel.
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "spruce",
+        action: "Patient texted a cancel/opt-out keyword (flagged for staff — no auto-cancel)",
+        patientId: patient?.id,
+        orderId: latestOrder?.id,
+        status: "pending",
+        details: {
+          messageId: event.messageId,
+          phone: event.patientPhone,
+          replyText: event.replyText.slice(0, 200),
+        },
+      });
       return;
     }
 
