@@ -21,6 +21,8 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
 import { advanceCycle, isAutochargeEnabled } from "@/lib/subscription";
 import { getChargeAmount } from "@/lib/payment-amount";
+import { createPaymentLinkToken, buildPaymentLinkUrl } from "@/lib/payment-link";
+import { getPublicBaseUrl } from "@/lib/public-url";
 import { formatCurrency, generateId } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -140,10 +142,9 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // ── Normal refill → HOLD for dose review (no charge, no ship) ─────────────
-      // At the 7-week mark we create (or reuse) a held refill and alert staff to
-      // review the dose and send it. Nothing is charged/shipped until an admin
-      // approves it from the Subscriptions tab.
+      // ── Normal refill → charge and fulfill automatically at week seven ───────
+      // Reuse a failed/unpaid refill on retry so both our order id and Intuit's
+      // Request-Id stay stable and cannot create a duplicate charge.
       let reviewOrder: Order | null = null;
       if (sub.lastOrderId) {
         const existing = await dbServer.orderDb.getById(sub.lastOrderId).catch(() => null);
@@ -154,22 +155,118 @@ export async function GET(req: NextRequest) {
       const isNewReview = !reviewOrder;
       if (!reviewOrder) reviewOrder = await createRefillOrder(sub, patient, lastOrder);
 
-      await sendAdminNotification("subscription_review_needed", {
+      if (hasCardOnFile && autocharge) {
+        try {
+          const chargeResult = await qbPayments.chargeStoredCard(reviewOrder.id, patient.id, amount, {
+            customerId: sub.qbCustomerId ?? "",
+            cardId: patient.qbCardId!,
+            cardLast4: patient.cardLast4,
+            cardBrand: patient.cardBrand,
+            requestId: reviewOrder.id,
+          });
+          const fulfillment = await fulfillChargedRefillOrder({
+            order: reviewOrder,
+            patient,
+            product,
+            amount,
+            chargeResult,
+            subscription: sub,
+          });
+          const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
+          await dbServer.subscriptionDb.update(sub.id, {
+            ...cycle,
+            lastOrderId: reviewOrder.id,
+            lastChargedAt: now,
+          });
+          await spruceServer.sendMessage(patient, "subscription_charged", {
+            orderId: reviewOrder.id,
+            patientName: patient.firstName,
+            amount: formatCurrency(amount),
+            cardLast4: patient.cardLast4 ?? "",
+          }).catch(() => {});
+          await logSubscriptionEvent(
+            "Subscription auto-charge captured and refill fulfilled",
+            sub.id,
+            reviewOrder.id,
+            patient.id,
+            { amount, dispatched: fulfillment.dispatched }
+          );
+          results.push({
+            subscriptionId: sub.id,
+            action: "auto_charged",
+            orderId: reviewOrder.id,
+            dispatched: fulfillment.dispatched,
+          });
+        } catch (chargeErr) {
+          const errorMessage = (chargeErr as Error).message;
+          await dbServer.orderDb.update(reviewOrder.id, { paymentStatus: "failed" }).catch(() => {});
+          const { token } = createPaymentLinkToken(reviewOrder.id);
+          const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
+          await spruceServer.sendMessage(patient, "subscription_payment_failed", {
+            orderId: reviewOrder.id,
+            patientName: patient.firstName,
+            payUrl,
+          }).catch(() => {});
+          await sendAdminNotification("subscription_charge_alert", {
+            orderId: reviewOrder.id,
+            patientId: patient.id,
+            patientName,
+            reason: `Automatic week-seven charge failed: ${errorMessage}`,
+          }).catch(() => {});
+          await dbServer.subscriptionDb.update(sub.id, {
+            nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
+            lastOrderId: reviewOrder.id,
+          });
+          await logSubscriptionEvent(
+            "Subscription auto-charge failed; pay-link sent",
+            sub.id,
+            reviewOrder.id,
+            patient.id,
+            { amount },
+            "error",
+            errorMessage
+          );
+          results.push({
+            subscriptionId: sub.id,
+            action: "charge_failed",
+            orderId: reviewOrder.id,
+          });
+        }
+        continue;
+      }
+
+      const { token } = createPaymentLinkToken(reviewOrder.id);
+      const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
+      await spruceServer.sendMessage(patient, "subscription_pay_link", {
+        orderId: reviewOrder.id,
+        patientName: patient.firstName,
+        amount: formatCurrency(amount),
+        payUrl,
+      }).catch(() => {});
+      await sendAdminNotification("subscription_charge_alert", {
         orderId: reviewOrder.id,
         patientId: patient.id,
         patientName,
-        reason: `${product.name}${dose ? ` ${dose.strength ?? dose.label}` : ""}${hasCardOnFile ? " — card on file" : " — no card (pay-link)"}.`,
+        reason: hasCardOnFile
+          ? "Automatic subscription charging is disabled; a payment link was sent."
+          : "No saved card is available; a payment link was sent.",
       }).catch(() => {});
-      // Nudge again in a few days until an admin reviews & sends it.
       await dbServer.subscriptionDb.update(sub.id, {
         nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
         lastOrderId: reviewOrder.id,
       });
       await logSubscriptionEvent(
-        isNewReview ? "Refill created, held for dose review" : "Refill review re-nudged",
-        sub.id, reviewOrder.id, patient.id, { hasCardOnFile }
+        isNewReview ? "Subscription pay-link sent" : "Subscription pay-link re-sent",
+        sub.id,
+        reviewOrder.id,
+        patient.id,
+        { hasCardOnFile, autocharge }
       );
-      results.push({ subscriptionId: sub.id, action: isNewReview ? "review_created" : "review_nudged", orderId: reviewOrder.id });
+      results.push({
+        subscriptionId: sub.id,
+        action: isNewReview ? "pay_link_sent" : "pay_link_resent",
+        orderId: reviewOrder.id,
+      });
     } catch (err) {
       await logSubscriptionEvent(
         "Subscription billing error",
