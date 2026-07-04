@@ -20,6 +20,8 @@ import type { Subscription } from "@/types";
 
 export const dynamic = "force-dynamic";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Admin/provider subscription management:
  *   { action: "cancel"|"pause"|"resume", subscriptionId }
@@ -46,15 +48,86 @@ export async function POST(req: NextRequest) {
       .catch(() => {});
 
   try {
-    if (action === "cancel" || action === "pause" || action === "resume") {
+    if (["cancel", "pause", "resume", "reactivate", "skip"].includes(action)) {
       const sub = await dbServer.subscriptionDb.getById(String(body.subscriptionId ?? "")).catch(() => null);
       if (!sub) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
-      const status = action === "cancel" ? "cancelled" : action === "pause" ? "paused" : "active";
-      const updated = await dbServer.subscriptionDb.update(sub.id, {
-        status,
-        ...(action === "cancel" ? { cancelledAt: now, cancelReason: `Cancelled by ${actor}` } : {}),
-      });
+
+      const patient = await dbServer.patientDb.getById(sub.patientId).catch(() => null);
+      const interval = sub.intervalDays || DEFAULT_INTERVAL_DAYS;
+      const lead = sub.leadDays || DEFAULT_LEAD_DAYS;
+      const fmtDate = (iso?: string | null) =>
+        iso ? new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "";
+
+      let update: Partial<Subscription> = {};
+      if (action === "cancel") {
+        update = { status: "cancelled", cancelledAt: now, cancelReason: `Cancelled by ${actor}` };
+      } else if (action === "pause") {
+        update = { status: "paused" };
+      } else if (action === "resume") {
+        update = { status: "active" };
+      } else if (action === "reactivate") {
+        // Restart a cancelled/paused sub on a fresh cycle from now.
+        const cycle = computeInitialCycle(now, interval, lead);
+        update = { status: "active", coversThrough: cycle.coversThrough, nextRunAt: cycle.nextRunAt };
+      } else if (action === "skip") {
+        // Skip this round: push the next charge (and coverage) out by one interval.
+        const baseRun = sub.nextRunAt ? new Date(sub.nextRunAt).getTime() : Date.parse(now);
+        const baseCovers = sub.coversThrough ? new Date(sub.coversThrough).getTime() : Date.parse(now);
+        update = {
+          nextRunAt: new Date(baseRun + interval * DAY_MS).toISOString(),
+          coversThrough: new Date(baseCovers + interval * DAY_MS).toISOString(),
+        };
+      }
+
+      const updated = await dbServer.subscriptionDb.update(sub.id, update);
       await logAction(`Subscription ${action} (admin)`, sub.patientId, { subscriptionId: sub.id });
+
+      if (patient) {
+        if (action === "cancel") {
+          await spruceServer.sendMessage(patient, "subscription_cancelled", {}).catch(() => {});
+        } else if (action === "reactivate") {
+          await spruceServer.sendMessage(patient, "subscription_reactivated", { nextRunDate: fmtDate(updated?.nextRunAt) }).catch(() => {});
+        } else if (action === "skip") {
+          await spruceServer.sendMessage(patient, "subscription_skipped", { nextRunDate: fmtDate(updated?.nextRunAt) }).catch(() => {});
+        }
+      }
+
+      return NextResponse.json({ success: true, subscription: updated });
+    }
+
+    if (action === "schedule_charge_only") {
+      const sub = await dbServer.subscriptionDb.getById(String(body.subscriptionId ?? "")).catch(() => null);
+      if (!sub) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+
+      let overrideAmount: number | null = null;
+      if (body.overrideAmount !== undefined && body.overrideAmount !== null && String(body.overrideAmount).trim() !== "") {
+        overrideAmount = Number(body.overrideAmount);
+        if (!Number.isFinite(overrideAmount) || overrideAmount <= 0) {
+          return NextResponse.json({ error: "Override amount must be a positive number." }, { status: 400 });
+        }
+      }
+      const note = typeof body.note === "string" ? body.note.trim() : "";
+      let nextRunAt: string | undefined;
+      if (typeof body.nextRunAt === "string" && body.nextRunAt.trim()) {
+        const parsed = new Date(body.nextRunAt);
+        if (Number.isNaN(parsed.getTime())) {
+          return NextResponse.json({ error: "Invalid charge date." }, { status: 400 });
+        }
+        nextRunAt = parsed.toISOString();
+      }
+
+      const updated = await dbServer.subscriptionDb.setNextChargeAdjustment(sub.id, {
+        skipNextDispatch: true,
+        nextChargeOverride: overrideAmount,
+        nextChargeNote: note || null,
+        nextRunAt,
+      });
+      await logAction("Subscription scheduled charge-only, no dispatch (admin)", sub.patientId, {
+        subscriptionId: sub.id,
+        overrideAmount,
+        nextRunAt: nextRunAt ?? sub.nextRunAt,
+        note,
+      });
       return NextResponse.json({ success: true, subscription: updated });
     }
 

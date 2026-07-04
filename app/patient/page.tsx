@@ -285,17 +285,17 @@ function SubscriptionSection() {
 
   useEffect(() => { void load(); }, []);
 
-  const cancel = async (id: string) => {
-    if (!window.confirm("Cancel your auto-refill subscription? You can re-enroll anytime by placing a new order.")) return;
+  const manage = async (action: "cancel" | "reactivate", id: string) => {
+    if (action === "cancel" && !window.confirm("Cancel your auto-refill subscription? You can restart it anytime.")) return;
     setCancelling(id);
     setError("");
     try {
       const res = await fetch("/api/patient/subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel", subscriptionId: id }),
+        body: JSON.stringify({ action, subscriptionId: id }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not cancel");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Could not ${action}`);
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -328,15 +328,28 @@ function SubscriptionSection() {
                   {sub.status === "paused" && (
                     <Badge className="mt-1 bg-yellow-100 text-yellow-800">Paused</Badge>
                   )}
+                  {sub.status === "cancelled" && (
+                    <Badge className="mt-1 bg-gray-100 text-gray-700">Cancelled</Badge>
+                  )}
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void cancel(sub.id)}
-                  disabled={cancelling === sub.id}
-                >
-                  {cancelling === sub.id ? "Cancelling…" : "Cancel subscription"}
-                </Button>
+                {sub.status === "cancelled" ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void manage("reactivate", sub.id)}
+                    disabled={cancelling === sub.id}
+                  >
+                    {cancelling === sub.id ? "Reactivating…" : "Reactivate"}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void manage("cancel", sub.id)}
+                    disabled={cancelling === sub.id}
+                  >
+                    {cancelling === sub.id ? "Cancelling…" : "Cancel subscription"}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

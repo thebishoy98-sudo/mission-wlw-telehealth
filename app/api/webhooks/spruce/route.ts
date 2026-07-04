@@ -8,7 +8,7 @@ import {
 } from "@/lib/spruce-webhook";
 import { generateId } from "@/lib/utils";
 import { classifySpruceReply } from "@/services/spruce-ai-replies";
-import { sendTextToPhone } from "@/services/spruce.server";
+import { sendTextToPhone, sendMessage as sendSpruceMessage } from "@/services/spruce.server";
 
 type InboundMessage = Extract<ParsedSpruceWebhook, { kind: "inbound_message" }>;
 
@@ -48,6 +48,7 @@ async function processInboundMessage(event: InboundMessage) {
       if (patient) {
         const subscriptions = await dbServer.subscriptionDb.getByPatient(patient.id);
         const now = new Date().toISOString();
+        let cancelledCount = 0;
         for (const subscription of subscriptions) {
           if (subscription.status === "active") {
             await dbServer.subscriptionDb.update(subscription.id, {
@@ -55,6 +56,7 @@ async function processInboundMessage(event: InboundMessage) {
               cancelledAt: now,
               cancelReason: "patient SMS opt-out",
             });
+            cancelledCount += 1;
           }
         }
         await dbServer.integrationLogDb.create({
@@ -65,8 +67,12 @@ async function processInboundMessage(event: InboundMessage) {
           patientId: patient.id,
           orderId: latestOrder?.id,
           status: "success",
-          details: { messageId: event.messageId, phone: event.patientPhone },
+          details: { messageId: event.messageId, phone: event.patientPhone, cancelledCount },
         });
+        // Confirm the cancellation to the patient (only if we actually cancelled one).
+        if (cancelledCount > 0) {
+          await sendSpruceMessage(patient, "subscription_cancelled", {}).catch(() => {});
+        }
       }
       return;
     }

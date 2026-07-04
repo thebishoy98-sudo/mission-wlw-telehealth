@@ -91,8 +91,11 @@ export async function fulfillChargedRefillOrder(params: {
   amount: number;
   chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
   subscription: Subscription;
+  /** When true, charge is captured but the order is NOT dispatched to the pharmacy
+   *  (used for accidental over-shipments already fulfilled). */
+  suppressDispatch?: boolean;
 }): Promise<RefillFulfillmentResult> {
-  const { order, patient, product, amount, chargeResult, subscription } = params;
+  const { order, patient, product, amount, chargeResult, subscription, suppressDispatch } = params;
   const orderId = order.id;
   const now = new Date().toISOString();
   const warnings: string[] = [];
@@ -220,7 +223,20 @@ export async function fulfillChargedRefillOrder(params: {
     paymentBypassed: bypassQuickBooksPayment,
     realPharmacyEnabled: isRealPharmacyEnabled(pharmacyProvider),
   });
-  if (canDispatchPharmacy) {
+  if (suppressDispatch) {
+    // Over-shipment adjustment: card charged, but the supply already shipped, so
+    // we deliberately do NOT create a new pharmacy order.
+    await dbServer.integrationLogDb.create({
+      id: generateId(),
+      timestamp: now,
+      integrationName: "system",
+      action: "Refill charged WITHOUT pharmacy dispatch (over-shipment adjustment)",
+      orderId,
+      patientId: patient.id,
+      status: "success",
+      details: { source: "subscription", subscriptionId: subscription.id, amount },
+    }).catch(() => {});
+  } else if (canDispatchPharmacy) {
     try {
       const dose = product.doses?.find((d) => d.id === order.doseId);
       const normalized = normalizeOrderForPharmacyDispatch(

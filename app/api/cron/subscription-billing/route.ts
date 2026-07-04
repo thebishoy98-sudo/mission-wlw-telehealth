@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as dbServer from "@/lib/db.server";
 import * as spruceServer from "@/services/spruce.server";
+import { sendAdminNotification } from "@/services/admin-notifications";
 import * as qbPayments from "@/services/quickbooks-payments";
 import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
 import { advanceCycle, isAutochargeEnabled } from "@/lib/subscription";
@@ -83,7 +84,10 @@ export async function GET(req: NextRequest) {
       }
 
       const dose = product.doses?.find((d) => d.id === sub.doseId);
-      const amount = getChargeAmount(dose?.price ?? product.startingPrice);
+      // A one-off adjustment (e.g. accidental over-shipment) can override the
+      // charge amount and suppress dispatch for this run only.
+      const suppressDispatch = !!sub.skipNextDispatch;
+      const amount = getChargeAmount(sub.nextChargeOverride ?? dose?.price ?? product.startingPrice);
       if (amount === null) {
         await logSubscriptionEvent("Subscription skipped (no price)", sub.id, undefined, patient.id, { doseId: sub.doseId }, "error");
         results.push({ subscriptionId: sub.id, action: "skipped_no_price" });
@@ -111,6 +115,7 @@ export async function GET(req: NextRequest) {
             amount,
             chargeResult,
             subscription: sub,
+            suppressDispatch,
           });
           const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
           await dbServer.subscriptionDb.update(sub.id, {
@@ -118,17 +123,39 @@ export async function GET(req: NextRequest) {
             lastOrderId: order.id,
             lastChargedAt: now,
           });
-          await spruceServer
-            .sendMessage(patient, "subscription_charged", {
+          // A one-off adjustment applies once — clear it so future runs are normal.
+          if (suppressDispatch) await dbServer.subscriptionDb.clearNextChargeAdjustment(sub.id);
+
+          const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+          if (suppressDispatch) {
+            await spruceServer
+              .sendMessage(patient, "subscription_charged_no_ship", {
+                orderId: order.id,
+                patientName: patient.firstName,
+                amount: formatCurrency(amount),
+                cardLast4: patient.cardLast4 ?? "",
+                note: sub.nextChargeNote ?? "",
+              })
+              .catch(() => {});
+            await sendAdminNotification("subscription_charge_alert", {
               orderId: order.id,
-              patientName: patient.firstName,
-              amount: formatCurrency(amount),
-              cardLast4: patient.cardLast4 ?? "",
-            })
-            .catch(() => {});
+              patientId: patient.id,
+              patientName,
+              reason: `Charged ${formatCurrency(amount)} to card on file, no new shipment (over-shipment correction).${sub.nextChargeNote ? ` Note: ${sub.nextChargeNote}` : ""}`,
+            }).catch(() => {});
+          } else {
+            await spruceServer
+              .sendMessage(patient, "subscription_charged", {
+                orderId: order.id,
+                patientName: patient.firstName,
+                amount: formatCurrency(amount),
+                cardLast4: patient.cardLast4 ?? "",
+              })
+              .catch(() => {});
+          }
           results.push({
             subscriptionId: sub.id,
-            action: "auto_charged",
+            action: suppressDispatch ? "auto_charged_no_dispatch" : "auto_charged",
             orderId: order.id,
             dispatched: fulfillment.dispatched,
             warnings: fulfillment.warnings.length ? fulfillment.warnings : undefined,

@@ -11,6 +11,7 @@ import type { AdminNotificationEvent, AdminNotificationSettings } from "@/types"
 const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
   identity_review_needed: "Identity review is needed",
   reorder_review_needed: "Back-to-back reorder needs review",
+  subscription_charge_alert: "Subscription charge processed (e.g. over-shipment)",
   order_received: "New order is received",
   pharmacy_shipped: "Pharmacy ships an order",
 };
@@ -20,6 +21,7 @@ const defaultSettings: AdminNotificationSettings = {
   events: {
     identity_review_needed: true,
     reorder_review_needed: true,
+    subscription_charge_alert: true,
     order_received: true,
     pharmacy_shipped: true,
   },

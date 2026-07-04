@@ -768,14 +768,18 @@ export const pharmacyOrderDb = {
 export const subscriptionDb = {
   async create(s: Subscription): Promise<Subscription> {
     if (!isDbAvailable()) return s;
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS skip_next_dispatch BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_override NUMERIC(10,2)`.catch(() => {});
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_note TEXT`.catch(() => {});
     await sql`
       INSERT INTO subscriptions (id, patient_id, product_id, dose_id, status, interval_days,
         lead_days, covers_through, next_run_at, last_order_id, last_charged_at, source_order_id,
-        qb_customer_id, created_at, updated_at)
+        qb_customer_id, skip_next_dispatch, next_charge_override, next_charge_note, created_at, updated_at)
       VALUES (${s.id}, ${s.patientId}, ${s.productId}, ${s.doseId}, ${s.status},
         ${s.intervalDays}, ${s.leadDays}, ${s.coversThrough ?? null}, ${s.nextRunAt ?? null},
         ${s.lastOrderId ?? null}, ${s.lastChargedAt ?? null}, ${s.sourceOrderId ?? null},
-        ${s.qbCustomerId ?? null}, ${s.createdAt}, ${s.updatedAt})
+        ${s.qbCustomerId ?? null}, ${s.skipNextDispatch ?? false}, ${s.nextChargeOverride ?? null},
+        ${s.nextChargeNote ?? null}, ${s.createdAt}, ${s.updatedAt})
       ON CONFLICT (id) DO NOTHING
     `;
     return s;
@@ -843,6 +847,41 @@ export const subscriptionDb = {
       WHERE id = ${id}
     `;
     return this.getById(id);
+  },
+
+  /**
+   * Set a one-off next-charge adjustment (charge-only, no dispatch). Written
+   * directly (not COALESCE) so nulls clear the fields. Ensures columns exist.
+   */
+  async setNextChargeAdjustment(
+    id: string,
+    data: { skipNextDispatch?: boolean; nextChargeOverride?: number | null; nextChargeNote?: string | null; nextRunAt?: string | null }
+  ): Promise<Subscription | null> {
+    if (!isDbAvailable()) return null;
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS skip_next_dispatch BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_override NUMERIC(10,2)`.catch(() => {});
+    await sql`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_note TEXT`.catch(() => {});
+    const now = new Date().toISOString();
+    await sql`
+      UPDATE subscriptions SET
+        skip_next_dispatch   = ${data.skipNextDispatch ?? false},
+        next_charge_override = ${data.nextChargeOverride ?? null},
+        next_charge_note     = ${data.nextChargeNote ?? null},
+        next_run_at          = COALESCE(${data.nextRunAt ?? null}, next_run_at),
+        updated_at           = ${now}
+      WHERE id = ${id}
+    `;
+    return this.getById(id);
+  },
+
+  /** Clear the one-off next-charge adjustment after it has been applied. */
+  async clearNextChargeAdjustment(id: string): Promise<void> {
+    if (!isDbAvailable()) return;
+    await sql`
+      UPDATE subscriptions SET
+        skip_next_dispatch = false, next_charge_override = NULL, next_charge_note = NULL, updated_at = ${new Date().toISOString()}
+      WHERE id = ${id}
+    `.catch(() => {});
   },
 };
 
@@ -1283,6 +1322,9 @@ function rowToSubscription(r: any): Subscription {
     lastOrderId: r.last_order_id ?? undefined, lastChargedAt: r.last_charged_at ?? undefined,
     sourceOrderId: r.source_order_id ?? undefined, qbCustomerId: r.qb_customer_id ?? undefined,
     cancelledAt: r.cancelled_at ?? undefined, cancelReason: r.cancel_reason ?? undefined,
+    skipNextDispatch: r.skip_next_dispatch ?? undefined,
+    nextChargeOverride: r.next_charge_override === undefined || r.next_charge_override === null ? undefined : Number(r.next_charge_override),
+    nextChargeNote: r.next_charge_note ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }

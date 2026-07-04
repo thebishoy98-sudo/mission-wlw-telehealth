@@ -202,6 +202,16 @@ export interface Subscription {
   qbCustomerId?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  /**
+   * One-off billing adjustment applied on the NEXT billing run only (then cleared).
+   * Used for accidental over-shipments: charge the card at the 7-week mark but do
+   * NOT dispatch to the pharmacy (patient already has the supply).
+   */
+  skipNextDispatch?: boolean;
+  /** Override the next charge amount (dollars) — e.g. a prorated partial charge. */
+  nextChargeOverride?: number;
+  /** Extra note appended to the patient's next charge SMS (explains the charge). */
+  nextChargeNote?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -488,6 +498,7 @@ export interface DiscountCode {
 export type AdminNotificationEvent =
   | "identity_review_needed"
   | "reorder_review_needed"
+  | "subscription_charge_alert"
   | "order_received"
   | "pharmacy_shipped";
 

@@ -8,6 +8,7 @@ const SETTINGS_KEY = "admin_notification_settings";
 const DEFAULT_EVENTS: Record<AdminNotificationEvent, boolean> = {
   identity_review_needed: true,
   reorder_review_needed: true,
+  subscription_charge_alert: true,
   order_received: true,
   pharmacy_shipped: true,
 };
@@ -64,6 +65,10 @@ function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, 
   if (event === "reorder_review_needed") {
     const detail = data.reason ? ` ${data.reason}` : "";
     return `Mission WLW: Back-to-back reorder needs review${patient}. ${order}.${detail} Approve or reject in admin.`;
+  }
+  if (event === "subscription_charge_alert") {
+    const detail = data.reason ? ` ${data.reason}` : "";
+    return `Mission WLW: Subscription charge processed${patient}.${detail}`;
   }
   if (event === "pharmacy_shipped") {
     const tracking = data.trackingNumber ? ` Tracking: ${data.trackingNumber}.` : "";

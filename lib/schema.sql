@@ -144,6 +144,11 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE INDEX IF NOT EXISTS idx_subscriptions_due ON subscriptions(status, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_patient ON subscriptions(patient_id);
 
+-- One-off next-charge adjustment (accidental over-shipment: charge but don't reship).
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS skip_next_dispatch BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_override NUMERIC(10,2);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_charge_note TEXT;
+
 -- ── PracticeQ-as-PHI-store migration ──────────────────────────────────────────
 -- Patient PHI lives in PracticeQ (HIPAA-compliant, BAA-signed).
 -- Our patients table is now a minimal stub: id + practiceq_client_id only.
