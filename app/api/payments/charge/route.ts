@@ -406,7 +406,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 5. Charge via QuickBooks Payments, or bypass it while end-to-end intake automation is being tested.
-    let chargeResult: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
+    let chargeResult!: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
     // When we save a reusable card, keep its metadata to enroll the recurring plan.
     let enrollmentCardInfo: { qbCustomerId: string; qbCardId: string; cardLast4: string; cardBrand: string } | null = null;
     if (bypassQuickBooksPayment) {
@@ -426,49 +426,62 @@ export async function POST(req: NextRequest) {
         status: "success",
         details: { amount: chargeAmount, mode: "bypass", transactionId: chargeResult.chargeId },
       }).catch(() => {});
-    } else if (token && process.env.QB_CLIENT_ID) {
-      // Store a reusable card on file from this tokenization, then charge it —
-      // this enrolls the patient in the recurring 8-week program (auto-refill).
-      try {
-        const stored = await storeCardAndChargeStored({
-          order,
-          patient,
-          amount: chargeAmount,
-          cardToken: token,
-          cardLast4,
-          cardBrand,
-        });
-        chargeResult = stored.chargeResult;
-        enrollmentCardInfo = {
-          qbCustomerId: stored.qbCustomerId,
-          qbCardId: stored.qbCardId,
-          cardLast4: stored.cardLast4,
-          cardBrand: stored.cardBrand,
-        };
-      } catch (err: any) {
-        return NextResponse.json(
-          { error: err.message ?? "Payment failed" },
-          { status: 402 }
-        );
-      }
     } else {
-      try {
-        chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
-          token,
-          cardNumber,
-          expMonth,
-          expYear,
-          cvc,
-          cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
-          cardLast4,
-          cardBrand,
-          billingAddress: patient.address,
-        });
-      } catch (err: any) {
-        return NextResponse.json(
-          { error: err.message ?? "Payment failed" },
-          { status: 402 }
-        );
+      // Preferred path: when we have a token, try to store a reusable card on file
+      // and charge it (enrolls the recurring plan with auto-charge). If saving the
+      // card fails for ANY reason, fall back to a normal one-time charge so the
+      // payment still succeeds — card-on-file is a nice-to-have, not a blocker.
+      if (token && process.env.QB_CLIENT_ID) {
+        try {
+          const stored = await storeCardAndChargeStored({
+            order,
+            patient,
+            amount: chargeAmount,
+            cardToken: token,
+            cardLast4,
+            cardBrand,
+          });
+          chargeResult = stored.chargeResult;
+          enrollmentCardInfo = {
+            qbCustomerId: stored.qbCustomerId,
+            qbCardId: stored.qbCardId,
+            cardLast4: stored.cardLast4,
+            cardBrand: stored.cardBrand,
+          };
+        } catch (storeErr: any) {
+          await dbServer.integrationLogDb.create({
+            id: generateId(),
+            timestamp: new Date().toISOString(),
+            integrationName: "quickbooks",
+            action: "Card-on-file save failed — falling back to one-time charge",
+            orderId,
+            patientId: patient.id,
+            status: "error",
+            details: { amount: chargeAmount },
+            error: storeErr?.message ?? String(storeErr),
+          }).catch(() => {});
+        }
+      }
+
+      if (!enrollmentCardInfo) {
+        try {
+          chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
+            token,
+            cardNumber,
+            expMonth,
+            expYear,
+            cvc,
+            cardName: cardName ?? `${patient.firstName} ${patient.lastName}`,
+            cardLast4,
+            cardBrand,
+            billingAddress: patient.address,
+          });
+        } catch (err: any) {
+          return NextResponse.json(
+            { error: err.message ?? "Payment failed" },
+            { status: 402 }
+          );
+        }
       }
     }
 
