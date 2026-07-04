@@ -16,6 +16,7 @@ import { advanceCycle, computeInitialCycle, DEFAULT_INTERVAL_DAYS, DEFAULT_LEAD_
 import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
 import * as qbPayments from "@/services/quickbooks-payments";
 import { getChargeAmount } from "@/lib/payment-amount";
+import { calculateSupplementalCharge } from "@/lib/subscription-adjustment";
 import { generateId, formatCurrency } from "@/lib/utils";
 import type { Order, Subscription } from "@/types";
 
@@ -94,6 +95,119 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, subscription: updated });
+    }
+
+    if (action === "update_dose") {
+      const sub = await dbServer.subscriptionDb.getById(String(body.subscriptionId ?? "")).catch(() => null);
+      if (!sub) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+      const product = await dbServer.productDb.getById(sub.productId).catch(() => null);
+      const requestedDoseId = String(body.doseId ?? "");
+      const dose = product?.doses?.find((candidate) => candidate.id === requestedDoseId);
+      if (!dose) return NextResponse.json({ error: "Selected dose is not valid for this product." }, { status: 400 });
+
+      const updated = await dbServer.subscriptionDb.update(sub.id, { doseId: requestedDoseId });
+      await logAction("Subscription dose updated before billing", sub.patientId, {
+        subscriptionId: sub.id,
+        previousDoseId: sub.doseId,
+        doseId: requestedDoseId,
+      });
+      return NextResponse.json({ success: true, subscription: updated });
+    }
+
+    if (action === "charge_dose_adjustment") {
+      const sub = await dbServer.subscriptionDb.getById(String(body.subscriptionId ?? "")).catch(() => null);
+      if (!sub) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+      const [patient, product] = await Promise.all([
+        dbServer.patientDb.getById(sub.patientId).catch(() => null),
+        dbServer.productDb.getById(sub.productId).catch(() => null),
+      ]);
+      if (!patient || !product) return NextResponse.json({ error: "Patient or product not found" }, { status: 404 });
+      if (!patient.qbCardId || !patient.recurringConsentAt) {
+        return NextResponse.json({ error: "Patient does not have an authorized card on file." }, { status: 422 });
+      }
+
+      const requestedDoseId = String(body.doseId ?? "");
+      const currentDose = product.doses?.find((dose) => dose.id === sub.doseId);
+      const requestedDose = product.doses?.find((dose) => dose.id === requestedDoseId);
+      if (!currentDose || !requestedDose) {
+        return NextResponse.json({ error: "Current or selected dose is not valid for this product." }, { status: 400 });
+      }
+      const currentPrice = Number(currentDose.price ?? product.startingPrice);
+      const requestedPrice = Number(requestedDose.price ?? product.startingPrice);
+      const overrideProvided = body.overrideAmount !== undefined && String(body.overrideAmount).trim() !== "";
+      const adjustment = calculateSupplementalCharge({
+        previousCharge: currentPrice,
+        newDosePrice: requestedPrice,
+        overrideAmount: overrideProvided ? Number(body.overrideAmount) : undefined,
+        overrideReason: typeof body.overrideReason === "string" ? body.overrideReason : undefined,
+      });
+      const amount = getChargeAmount(adjustment.amount);
+      if (amount === null) return NextResponse.json({ error: "Could not determine the adjustment amount." }, { status: 422 });
+
+      const previousOrder = sub.lastOrderId
+        ? await dbServer.orderDb.getById(sub.lastOrderId).catch(() => null)
+        : null;
+      let order = await createRefillOrder({ ...sub, doseId: requestedDoseId }, patient, previousOrder);
+      if (order.doseId !== requestedDoseId) {
+        await dbServer.orderDb.update(order.id, { doseId: requestedDoseId }).catch(() => {});
+        order = { ...order, doseId: requestedDoseId };
+      }
+
+      try {
+        const chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
+          customerId: sub.qbCustomerId ?? "",
+          cardId: patient.qbCardId,
+          cardLast4: patient.cardLast4,
+          cardBrand: patient.cardBrand,
+          requestId: order.id,
+        });
+        const fulfillment = await fulfillChargedRefillOrder({
+          order,
+          patient,
+          product,
+          amount,
+          chargeResult,
+          subscription: { ...sub, doseId: requestedDoseId },
+        });
+        await dbServer.subscriptionDb.update(sub.id, {
+          doseId: requestedDoseId,
+          lastOrderId: order.id,
+          lastChargedAt: now,
+        });
+        await spruceServer.sendMessage(patient, "subscription_charged", {
+          orderId: order.id,
+          patientName: patient.firstName,
+          amount: formatCurrency(amount),
+          cardLast4: patient.cardLast4 ?? "",
+        }).catch(() => {});
+        await logAction("Supplemental dose increase charged and dispatched", sub.patientId, {
+          subscriptionId: sub.id,
+          orderId: order.id,
+          previousDoseId: sub.doseId,
+          doseId: requestedDoseId,
+          calculatedDifference: adjustment.calculatedDifference,
+          amount,
+          overrideReason: typeof body.overrideReason === "string" ? body.overrideReason.trim() : "",
+          dispatched: fulfillment.dispatched,
+        });
+        return NextResponse.json({
+          success: true,
+          mode: "supplemental_charged",
+          amount,
+          calculatedDifference: adjustment.calculatedDifference,
+          orderId: order.id,
+          dispatched: fulfillment.dispatched,
+          warnings: fulfillment.warnings,
+        });
+      } catch (error) {
+        await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
+        await logAction("Supplemental dose charge failed", sub.patientId, {
+          subscriptionId: sub.id,
+          orderId: order.id,
+          error: (error as Error).message,
+        });
+        return NextResponse.json({ error: (error as Error).message }, { status: 402 });
+      }
     }
 
     if (action === "send_refill") {
@@ -335,10 +449,11 @@ export async function GET(req: NextRequest) {
           productName: product?.name ?? sub.productId,
           doseId: sub.doseId,
           doseLabel: dose ? [dose.label, dose.strength].filter(Boolean).join(" — ") : sub.doseId,
-          doses: (product?.doses ?? []).map((d) => ({
-            id: d.id,
-            label: [d.label, d.strength].filter(Boolean).join(" — "),
-          })),
+              doses: (product?.doses ?? []).map((d) => ({
+                id: d.id,
+                label: [d.label, d.strength].filter(Boolean).join(" — "),
+                price: Number(d.price ?? product?.startingPrice ?? 0),
+              })),
           intervalDays: sub.intervalDays,
           coversThrough: sub.coversThrough ?? null,
           nextRunAt: sub.nextRunAt ?? null,

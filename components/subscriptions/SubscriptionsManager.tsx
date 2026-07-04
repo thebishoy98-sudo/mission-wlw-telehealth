@@ -18,7 +18,7 @@ type RefillOrder = {
   acknowledgedBy: string | null;
 };
 
-type DoseOption = { id: string; label: string };
+type DoseOption = { id: string; label: string; price: number };
 
 type SubscriptionRow = {
   id: string;
@@ -68,6 +68,10 @@ export function SubscriptionsManager({
   // 7-week dose-review state, keyed to the subscription being sent.
   const [reviewDose, setReviewDose] = useState<Record<string, string>>({});
   const [reviewSaving, setReviewSaving] = useState("");
+  const [supplementId, setSupplementId] = useState("");
+  const [supplementOverride, setSupplementOverride] = useState("");
+  const [supplementReason, setSupplementReason] = useState("");
+  const [supplementSaving, setSupplementSaving] = useState(false);
 
   const reload = async () => {
     setLoading(true);
@@ -178,29 +182,70 @@ export function SubscriptionsManager({
     }
   };
 
-  const sendRefill = async (sub: SubscriptionRow) => {
+  const saveDose = async (sub: SubscriptionRow) => {
     const doseId = reviewDose[sub.id] ?? sub.doseId;
-    const doseChanged = doseId !== sub.doseId;
-    if (!window.confirm(
-      doseChanged
-        ? "Approve this refill at the NEW dose and send it now? The card on file will be charged (or a pay-link sent)."
-        : "Approve and send this refill now? The card on file will be charged (or a pay-link sent)."
-    )) return;
+    if (doseId === sub.doseId) return;
     setReviewSaving(sub.id);
     setError("");
     try {
       const res = await fetch("/api/provider/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_refill", subscriptionId: sub.id, doseId }),
+        body: JSON.stringify({ action: "update_dose", subscriptionId: sub.id, doseId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      if (!res.ok) throw new Error(data.error ?? "Dose update failed");
       await reload();
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setReviewSaving("");
+    }
+  };
+
+  const openSupplement = (sub: SubscriptionRow) => {
+    if (supplementId === sub.id) {
+      setSupplementId("");
+      return;
+    }
+    setSupplementId(sub.id);
+    setSupplementOverride("");
+    setSupplementReason("");
+    const currentIndex = sub.doses.findIndex((dose) => dose.id === sub.doseId);
+    const nextDose = sub.doses[currentIndex + 1];
+    if (nextDose) {
+      setReviewDose((previous) => ({ ...previous, [sub.id]: nextDose.id }));
+    }
+  };
+
+  const chargeSupplement = async (sub: SubscriptionRow) => {
+    const doseId = reviewDose[sub.id] ?? sub.doseId;
+    if (doseId === sub.doseId) return;
+    if (!window.confirm(
+      "This will charge the saved card and dispatch supplemental medication at the selected dose. Continue?"
+    )) return;
+    setSupplementSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/provider/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "charge_dose_adjustment",
+          subscriptionId: sub.id,
+          doseId,
+          overrideAmount: supplementOverride.trim() || undefined,
+          overrideReason: supplementReason.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Supplemental charge failed");
+      setSupplementId("");
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSupplementSaving(false);
     }
   };
 
@@ -290,33 +335,8 @@ export function SubscriptionsManager({
             <Card key={sub.id}>
               <CardContent className="p-5">
                 {sub.dueForReview && (
-                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-sm font-semibold text-amber-900">⏰ Due for dose review (7-week mark)</p>
-                    <p className="mt-1 text-xs text-amber-800">
-                      Confirm or raise the dose, then send. This charges the card on file (or texts a
-                      pay-link if none). Nothing shipped until you send it.
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-end gap-2">
-                      <label className="text-xs font-medium text-gray-700">
-                        Dose for this refill
-                        <select
-                          value={reviewDose[sub.id] ?? sub.doseId}
-                          onChange={(e) => setReviewDose((prev) => ({ ...prev, [sub.id]: e.target.value }))}
-                          className="mt-1 block rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest-700"
-                        >
-                          {sub.doses.length ? (
-                            sub.doses.map((d) => (
-                              <option key={d.id} value={d.id}>{d.label}</option>
-                            ))
-                          ) : (
-                            <option value={sub.doseId}>{sub.doseLabel}</option>
-                          )}
-                        </select>
-                      </label>
-                      <Button onClick={() => void sendRefill(sub)} disabled={reviewSaving === sub.id}>
-                        {reviewSaving === sub.id ? "Sending…" : "Approve & send refill"}
-                      </Button>
-                    </div>
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    Week-seven billing is due. The saved card and current refill dose are processed automatically.
                   </div>
                 )}
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -335,6 +355,31 @@ export function SubscriptionsManager({
                     <p className="mt-1 text-sm text-gray-600">
                       {sub.productName} — {sub.doseLabel}
                     </p>
+                    {sub.status === "active" && (
+                      <div className="mt-3 flex flex-wrap items-end gap-2">
+                        <label className="text-xs font-medium text-gray-700">
+                          Automatic refill dose
+                          <select
+                            value={reviewDose[sub.id] ?? sub.doseId}
+                            onChange={(e) => setReviewDose((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                            className="mt-1 block rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest-700"
+                          >
+                            {sub.doses.map((dose) => (
+                              <option key={dose.id} value={dose.id}>
+                                {dose.label} — ${dose.price.toFixed(2)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <Button
+                          variant="outline"
+                          onClick={() => void saveDose(sub)}
+                          disabled={reviewSaving === sub.id || (reviewDose[sub.id] ?? sub.doseId) === sub.doseId}
+                        >
+                          {reviewSaving === sub.id ? "Saving…" : "Save dose"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right text-xs text-gray-500">
                     <p>Next billing: <span className="font-medium text-gray-800">{sub.nextRunAt ? formatDateTime(sub.nextRunAt) : "—"}</span></p>
@@ -357,6 +402,14 @@ export function SubscriptionsManager({
                             className={`${btn} ${adjustId === sub.id ? "border-forest-400 bg-forest-50 text-forest-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
                           >
                             Charge-only refill
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openSupplement(sub)}
+                            disabled={!sub.hasCardOnFile || !sub.lastChargedAt}
+                            className={`${btn} ${supplementId === sub.id ? "border-forest-400 bg-forest-50 text-forest-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+                          >
+                            Increase dose / add medication
                           </button>
                           <button
                             type="button"
@@ -401,6 +454,63 @@ export function SubscriptionsManager({
                     </div>
                   </div>
                 </div>
+
+                {supplementId === sub.id && (() => {
+                  const currentDose = sub.doses.find((dose) => dose.id === sub.doseId);
+                  const selectedDose = sub.doses.find((dose) => dose.id === (reviewDose[sub.id] ?? sub.doseId));
+                  const difference = Math.max(0, (selectedDose?.price ?? 0) - (currentDose?.price ?? 0));
+                  const overrideNeedsReason = !!supplementOverride.trim() && !supplementReason.trim();
+                  return (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-sm font-semibold text-gray-900">Increase dose / add medication</p>
+                      <p className="mt-1 text-xs text-gray-700">
+                        Price difference: <span className="font-semibold">${difference.toFixed(2)}</span>. Confirming will
+                        charge the saved card and dispatch supplemental medication automatically.
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <label className="text-xs font-medium text-gray-700">
+                          New dose
+                          <select
+                            value={reviewDose[sub.id] ?? sub.doseId}
+                            onChange={(e) => setReviewDose((previous) => ({ ...previous, [sub.id]: e.target.value }))}
+                            className="mt-1 block rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                          >
+                            {sub.doses.map((dose) => (
+                              <option key={dose.id} value={dose.id}>{dose.label} — ${dose.price.toFixed(2)}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs font-medium text-gray-700">
+                          Override amount (optional)
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={supplementOverride}
+                            onChange={(e) => setSupplementOverride(e.target.value)}
+                            className="mt-1 block w-36 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                          />
+                        </label>
+                        <label className="min-w-[14rem] flex-1 text-xs font-medium text-gray-700">
+                          Override reason
+                          <input
+                            type="text"
+                            value={supplementReason}
+                            onChange={(e) => setSupplementReason(e.target.value)}
+                            placeholder="Required when overriding the difference"
+                            className="mt-1 block w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                          />
+                        </label>
+                        <Button
+                          onClick={() => void chargeSupplement(sub)}
+                          disabled={supplementSaving || difference <= 0 || overrideNeedsReason}
+                        >
+                          {supplementSaving ? "Charging…" : "Charge difference & dispatch"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {adjustId === sub.id && (
                   <div className="mt-4 rounded-xl border border-forest-100 bg-forest-50/60 p-3">
