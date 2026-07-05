@@ -472,10 +472,46 @@ CREATE TABLE IF NOT EXISTS affiliates (
   id         TEXT PRIMARY KEY,
   code       TEXT NOT NULL UNIQUE,
   name       TEXT NOT NULL,
+  patient_id TEXT REFERENCES patients(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by TEXT NOT NULL DEFAULT 'admin'
 );
+ALTER TABLE affiliates ADD COLUMN IF NOT EXISTS patient_id TEXT REFERENCES patients(id);
 CREATE INDEX IF NOT EXISTS idx_affiliates_code ON affiliates(code);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliates_patient_referral_owner
+  ON affiliates(patient_id)
+  WHERE created_by = 'patient-referral' AND patient_id IS NOT NULL;
+
+-- Patient referrals: a friend receives one first-order discount and the
+-- referring patient receives one matching credit after successful capture.
+CREATE TABLE IF NOT EXISTS referral_redemptions (
+  id                    TEXT PRIMARY KEY,
+  affiliate_id          TEXT NOT NULL REFERENCES affiliates(id),
+  referrer_patient_id   TEXT NOT NULL REFERENCES patients(id),
+  referred_patient_id   TEXT NOT NULL UNIQUE REFERENCES patients(id),
+  referred_order_id     TEXT NOT NULL UNIQUE REFERENCES orders(id),
+  discount_amount       NUMERIC(10,2) NOT NULL CHECK (discount_amount > 0),
+  credit_amount         NUMERIC(10,2) NOT NULL CHECK (credit_amount > 0),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS referral_credit_ledger (
+  id                    TEXT PRIMARY KEY,
+  patient_id            TEXT NOT NULL REFERENCES patients(id),
+  order_id              TEXT REFERENCES orders(id),
+  redemption_id         TEXT REFERENCES referral_redemptions(id),
+  transaction_type      TEXT NOT NULL CHECK (transaction_type IN ('earned','spent','reversed')),
+  amount                NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_credit_one_earning
+  ON referral_credit_ledger(redemption_id)
+  WHERE transaction_type = 'earned';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_credit_one_spend_per_order
+  ON referral_credit_ledger(order_id)
+  WHERE transaction_type = 'spent';
+CREATE INDEX IF NOT EXISTS idx_referral_credit_patient
+  ON referral_credit_ledger(patient_id, created_at);
 
 -- Track affiliate ref on orders and partial intakes
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref_code TEXT;
