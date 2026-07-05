@@ -25,6 +25,8 @@ import { createPaymentLinkToken, buildPaymentLinkUrl } from "@/lib/payment-link"
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { formatCurrency, generateId } from "@/lib/utils";
 import type { Order } from "@/types";
+import { calculateReferralPricing } from "@/lib/referral-pricing";
+import { getReferralBalance, recordReferralCreditSpend } from "@/lib/referral-credit.server";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DUNNING_RETRY_DAYS = 3;
@@ -154,21 +156,35 @@ export async function GET(req: NextRequest) {
       }
       const isNewReview = !reviewOrder;
       if (!reviewOrder) reviewOrder = await createRefillOrder(sub, patient, lastOrder);
+      const availableReferralCredit = await getReferralBalance(patient.id);
+      const referralPricing = calculateReferralPricing({
+        baseAmount: amount,
+        availableCredit: availableReferralCredit,
+      });
+      const billingAmount = referralPricing.chargeAmount;
 
       if (hasCardOnFile && autocharge) {
         try {
-          const chargeResult = await qbPayments.chargeStoredCard(reviewOrder.id, patient.id, amount, {
+          const chargeResult = await qbPayments.chargeStoredCard(reviewOrder.id, patient.id, billingAmount, {
             customerId: sub.qbCustomerId ?? "",
             cardId: patient.qbCardId!,
             cardLast4: patient.cardLast4,
             cardBrand: patient.cardBrand,
             requestId: reviewOrder.id,
           });
+          if (referralPricing.creditApplied > 0) {
+            const spent = await recordReferralCreditSpend({
+              patientId: patient.id,
+              orderId: reviewOrder.id,
+              amount: referralPricing.creditApplied,
+            });
+            if (!spent) throw new Error("Referral credit could not be recorded after payment capture.");
+          }
           const fulfillment = await fulfillChargedRefillOrder({
             order: reviewOrder,
             patient,
             product,
-            amount,
+            amount: billingAmount,
             chargeResult,
             subscription: sub,
           });
@@ -181,7 +197,7 @@ export async function GET(req: NextRequest) {
           await spruceServer.sendMessage(patient, "subscription_charged", {
             orderId: reviewOrder.id,
             patientName: patient.firstName,
-            amount: formatCurrency(amount),
+            amount: formatCurrency(billingAmount),
             cardLast4: patient.cardLast4 ?? "",
           }).catch(() => {});
           await logSubscriptionEvent(
@@ -189,7 +205,11 @@ export async function GET(req: NextRequest) {
             sub.id,
             reviewOrder.id,
             patient.id,
-            { amount, dispatched: fulfillment.dispatched }
+            {
+              amount: billingAmount,
+              referralCreditApplied: referralPricing.creditApplied,
+              dispatched: fulfillment.dispatched,
+            }
           );
           results.push({
             subscriptionId: sub.id,
@@ -222,7 +242,7 @@ export async function GET(req: NextRequest) {
             sub.id,
             reviewOrder.id,
             patient.id,
-            { amount },
+            { amount: billingAmount, referralCreditAvailable: availableReferralCredit },
             "error",
             errorMessage
           );
@@ -240,7 +260,7 @@ export async function GET(req: NextRequest) {
       await spruceServer.sendMessage(patient, "subscription_pay_link", {
         orderId: reviewOrder.id,
         patientName: patient.firstName,
-        amount: formatCurrency(amount),
+        amount: formatCurrency(billingAmount),
         payUrl,
       }).catch(() => {});
       await sendAdminNotification("subscription_charge_alert", {
@@ -260,7 +280,7 @@ export async function GET(req: NextRequest) {
         sub.id,
         reviewOrder.id,
         patient.id,
-        { hasCardOnFile, autocharge }
+        { hasCardOnFile, autocharge, amount: billingAmount, referralCreditAvailable: availableReferralCredit }
       );
       results.push({
         subscriptionId: sub.id,

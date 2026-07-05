@@ -3,6 +3,7 @@ import * as qbPayments from "@/services/quickbooks-payments";
 import * as spruceServer from "@/services/spruce.server";
 import { sendAdminNotification } from "@/services/admin-notifications";
 import { createRefillOrder, fulfillChargedRefillOrder } from "@/lib/order-fulfillment";
+import { getReferralBalance, recordReferralCreditSpend } from "@/lib/referral-credit.server";
 
 jest.mock("next/server", () => ({
   NextResponse: {
@@ -49,6 +50,11 @@ jest.mock("@/services/admin-notifications", () => ({
 jest.mock("@/lib/order-fulfillment", () => ({
   createRefillOrder: jest.fn(),
   fulfillChargedRefillOrder: jest.fn(),
+}));
+
+jest.mock("@/lib/referral-credit.server", () => ({
+  getReferralBalance: jest.fn(),
+  recordReferralCreditSpend: jest.fn(),
 }));
 
 jest.mock("@/lib/payment-link", () => ({
@@ -153,6 +159,8 @@ describe("GET /api/cron/subscription-billing", () => {
     });
     (spruceServer.sendMessage as jest.Mock).mockResolvedValue({});
     (sendAdminNotification as jest.Mock).mockResolvedValue({});
+    (getReferralBalance as jest.Mock).mockResolvedValue(0);
+    (recordReferralCreditSpend as jest.Mock).mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -214,5 +222,40 @@ describe("GET /api/cron/subscription-billing", () => {
       "subscription_charge_alert",
       expect.objectContaining({ orderId: refillOrder.id, reason: expect.stringContaining("Card declined") })
     );
+  });
+
+  it("automatically applies earned referral credit to the week-seven charge", async () => {
+    (getReferralBalance as jest.Mock).mockResolvedValue(50);
+
+    await GET(request());
+
+    expect(qbPayments.chargeStoredCard).toHaveBeenCalledWith(
+      refillOrder.id,
+      patient.id,
+      349,
+      expect.objectContaining({ requestId: refillOrder.id })
+    );
+    expect(fulfillChargedRefillOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 349 })
+    );
+    expect(recordReferralCreditSpend).toHaveBeenCalledWith({
+      patientId: patient.id,
+      orderId: refillOrder.id,
+      amount: 50,
+    });
+    expect(spruceServer.sendMessage).toHaveBeenCalledWith(
+      patient,
+      "subscription_charged",
+      expect.objectContaining({ amount: "$349.00" })
+    );
+  });
+
+  it("does not spend referral credit when the stored-card charge fails", async () => {
+    (getReferralBalance as jest.Mock).mockResolvedValue(50);
+    (qbPayments.chargeStoredCard as jest.Mock).mockRejectedValue(new Error("Card declined"));
+
+    await GET(request());
+
+    expect(recordReferralCreditSpend).not.toHaveBeenCalled();
   });
 });

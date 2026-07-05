@@ -52,6 +52,15 @@ describe("payment link retry contract", () => {
     expect(retryRoute).not.toContain("body.amount");
   });
 
+  it("retry API quotes and spends referral credit only after capture", () => {
+    expect(retryRoute).toContain("getReferralBalance");
+    expect(retryRoute).toContain("calculateReferralPricing");
+    const paymentWrite = retryRoute.indexOf("dbServer.paymentDb.create(paymentRecord)");
+    const creditWrite = retryRoute.indexOf("recordReferralCreditSpend(");
+    expect(creditWrite).toBeGreaterThan(paymentWrite);
+    expect(retryRoute).toContain("creditApplied:");
+  });
+
   it("retry API reuses existing identity/consent data and gates dispatch on identity", () => {
     expect(retryRoute).toContain("resolveReusableCheckoutIdentity");
     expect(retryRoute).toContain("getIdentityGate");

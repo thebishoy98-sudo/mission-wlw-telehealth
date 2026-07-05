@@ -42,6 +42,8 @@ import { getPublicBaseUrl } from "@/lib/public-url";
 import { logPhiAccess, logPhiDisclosure, actorFromHeaders } from "@/lib/phi-audit";
 import { generateId } from "@/lib/utils";
 import type { Order, Payment } from "@/types";
+import { calculateReferralPricing } from "@/lib/referral-pricing";
+import { getReferralBalance, recordReferralCreditSpend } from "@/lib/referral-credit.server";
 
 const hasCanonicalDb = () => !!(process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL);
 
@@ -81,6 +83,10 @@ export async function GET(req: NextRequest) {
 
   const { order, patient, product, dose, payment, amount } = context;
   const eligibility = assessPaymentRetryEligibility({ order, payment });
+  const availableCredit = patient ? await getReferralBalance(patient.id) : 0;
+  const pricing = amount === null
+    ? null
+    : calculateReferralPricing({ baseAmount: amount, availableCredit });
 
   return NextResponse.json({
     orderId: order.id,
@@ -89,7 +95,8 @@ export async function GET(req: NextRequest) {
     cardholderName: [patient?.firstName, patient?.lastName].filter(Boolean).join(" "),
     productName: product?.name ?? "Treatment",
     doseLabel: dose ? [dose.label, dose.strength].filter(Boolean).join(" - ") : "",
-    amount,
+    amount: pricing?.chargeAmount ?? amount,
+    creditApplied: pricing?.creditApplied ?? 0,
     eligible: eligibility.eligible,
     reason: eligibility.eligible ? undefined : eligibility.reason,
   });
@@ -151,6 +158,9 @@ export async function POST(req: NextRequest) {
 
     // Charge QuickBooks once (or simulate in bypass/test mode).
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
+    const availableCredit = bypassQuickBooksPayment ? 0 : await getReferralBalance(patient.id);
+    const pricing = calculateReferralPricing({ baseAmount: amount, availableCredit });
+    const chargeAmount = pricing.chargeAmount;
     // Opt-in recurring enrollment: save the card on file + auto-bill every cycle.
     const wantsEnroll =
       body.enrollSubscription === true &&
@@ -173,7 +183,7 @@ export async function POST(req: NextRequest) {
         const stored = await storeCardAndChargeStored({
           order,
           patient,
-          amount,
+          amount: chargeAmount,
           cardToken: String(body.cardToken),
           cardLast4: body.cardLast4,
           cardBrand: body.cardBrand,
@@ -195,14 +205,14 @@ export async function POST(req: NextRequest) {
           orderId,
           patientId: patient.id,
           status: "error",
-          details: { amount, source: "payment_link_enroll" },
+          details: { amount: chargeAmount, source: "payment_link_enroll" },
           error: err.message ?? "Payment failed",
         }).catch(() => {});
         return NextResponse.json({ error: err.message ?? "Payment failed" }, { status: 402 });
       }
     } else {
       try {
-        chargeResult = await qbPayments.chargeCard(orderId, patient.id, amount, {
+        chargeResult = await qbPayments.chargeCard(orderId, patient.id, chargeAmount, {
           token: body.cardToken || undefined,
           cardNumber: body.cardNumber,
           expMonth: body.expMonth,
@@ -223,7 +233,7 @@ export async function POST(req: NextRequest) {
           orderId,
           patientId: patient.id,
           status: "error",
-          details: { amount, source: "payment_link" },
+          details: { amount: chargeAmount, source: "payment_link" },
           error: err.message ?? "Payment failed",
         }).catch(() => {});
         return NextResponse.json({ error: err.message ?? "Payment failed" }, { status: 402 });
@@ -235,7 +245,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const paymentUpdate = {
       status: "completed" as const,
-      amount,
+      amount: chargeAmount,
       cardLast4: chargeResult.cardLast4,
       cardBrand: chargeResult.cardBrand,
       transactionId: chargeResult.chargeId,
@@ -250,7 +260,7 @@ export async function POST(req: NextRequest) {
         id: generateId(),
         orderId,
         patientId: patient.id,
-        amount,
+        amount: chargeAmount,
         currency: "USD",
         status: "completed",
         paymentMethod: "credit_card",
@@ -261,6 +271,16 @@ export async function POST(req: NextRequest) {
         processedAt: now,
       };
       await dbServer.paymentDb.create(paymentRecord);
+    }
+    if (pricing.creditApplied > 0) {
+      const spent = await recordReferralCreditSpend({
+        patientId: patient.id,
+        orderId,
+        amount: pricing.creditApplied,
+      });
+      if (!spent) {
+        throw new Error("Referral credit could not be recorded after payment capture.");
+      }
     }
 
     // Reuse identity from this order or the patient's other verified orders.
@@ -307,7 +327,12 @@ export async function POST(req: NextRequest) {
       orderId,
       patientId: patient.id,
       status: "success",
-      details: { amount, transactionId: chargeResult.chargeId, source: "payment_link" },
+      details: {
+        amount: chargeAmount,
+        referralCreditApplied: pricing.creditApplied,
+        transactionId: chargeResult.chargeId,
+        source: "payment_link",
+      },
     }).catch(() => {});
 
     const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
@@ -439,7 +464,8 @@ export async function POST(req: NextRequest) {
       success: true,
       orderId,
       chargeId: chargeResult.chargeId,
-      chargedAmount: amount,
+      chargedAmount: chargeAmount,
+      creditApplied: pricing.creditApplied,
       subscriptionId,
       enrolled: !!subscriptionId,
       identityStatus,
