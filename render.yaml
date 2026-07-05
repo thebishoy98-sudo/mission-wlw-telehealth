@@ -193,16 +193,19 @@ services:
       - key: APPSHEET_API_KEY
         sync: false
 
-  # ── Cron jobs (replaces vercel.json crons) ───────────────────────────────
+  # ── Cron jobs ────────────────────────────────────────────────────────────
+  # A single hourly "tick" dispatcher runs all daily/hourly jobs (see
+  # app/api/cron/tick) so we pay for one cron instead of ~10. pharmacy-tracking
+  # stays separate because it needs 15-minute granularity.
   - type: cron
-    name: mission-wlw-cron-identity-reminders
+    name: mission-wlw-cron-tick
     runtime: node
-    schedule: "0 13 * * *"   # daily at 1pm UTC
+    schedule: "0 * * * *"   # hourly
     buildCommand: echo "cron has no build step (uses Node built-ins only)"
     startCommand: >
       node -e "
         require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/identity-reminders',
+          process.env.APP_BASE_URL + '/api/cron/tick',
           { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
           (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
         ).on('error', () => { process.exitCode = 1; });
@@ -229,194 +232,11 @@ services:
       - key: CRON_SECRET
         sync: false
 
-  - type: cron
-    name: mission-wlw-cron-refill-reminders
-    runtime: node
-    schedule: "0 14 * * *"   # daily at 2pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/refill-reminders',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-reorder-enroll-reminders
-    runtime: node
-    schedule: "15 14 * * *"   # daily at 2:15pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/reorder-enroll-reminders',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-delivery-checkins
-    runtime: node
-    schedule: "0 15 * * *"   # daily at 3pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/delivery-checkins',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-winback
-    runtime: node
-    schedule: "0 16 * * *"   # daily at 4pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/winback',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-intake-abandonment
-    runtime: node
-    schedule: "0 * * * *"   # hourly
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/intake-abandonment',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-weekly-checkins
-    runtime: node
-    schedule: "30 14 * * *"  # daily at 2:30pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/weekly-checkins',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-dose-escalation
-    runtime: node
-    schedule: "0 17 * * *"   # daily at 5pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/dose-escalation',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-retatrutide-blast
-    runtime: node
-    schedule: "0 18 * * *"   # daily at 6pm UTC (idempotent — each patient receives it at most once)
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/retatrutide-blast',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
-    name: mission-wlw-cron-subscription-billing
-    runtime: node
-    schedule: "0 19 * * *"   # daily at 7pm UTC
-    buildCommand: echo "cron has no build step (uses Node built-ins only)"
-    startCommand: >
-      node -e "
-        require('https').get(
-          process.env.APP_BASE_URL + '/api/cron/subscription-billing',
-          { headers: { Authorization: 'Bearer ' + process.env.CRON_SECRET } },
-          (r) => { process.exitCode = r.statusCode >= 400 ? 1 : 0; }
-        ).on('error', () => { process.exitCode = 1; });
-      "
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: APP_BASE_URL
-        sync: false
-      - key: CRON_SECRET
-        sync: false
+  # All daily/hourly jobs (identity-reminders, refill-reminders,
+  # reorder-enroll-reminders, delivery-checkins, winback, intake-abandonment,
+  # weekly-checkins, dose-escalation, retatrutide-blast, subscription-billing)
+  # are now dispatched by the single hourly mission-wlw-cron-tick above. Their
+  # /api/cron/* endpoints still exist and are called by the tick dispatcher.
 
   - type: web
     name: mission-wlw-practiceq-remote
