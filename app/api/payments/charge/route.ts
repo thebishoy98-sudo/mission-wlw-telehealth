@@ -77,6 +77,15 @@ import { assertIdentityStorageReady, buildIdentityUploads } from "@/services/ide
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { Payment } from "@/types";
 import { consumePromoCode, validatePromoCode } from "@/lib/promo-code.server";
+import { calculateReferralPricing } from "@/lib/referral-pricing";
+import type { ReferralPricing } from "@/lib/referral-pricing";
+import {
+  getReferralBalance,
+  getReferralOffer,
+  recordReferralCreditSpend,
+  recordReferralReward,
+} from "@/lib/referral-credit.server";
+import type { ReferralOffer } from "@/lib/referral-credit.server";
 
 class PaymentPersistenceError extends Error {
   status: number;
@@ -123,7 +132,10 @@ export async function POST(req: NextRequest) {
         ? orderData.reorderSourceOrderId
         : "";
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
-    let baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
+    const baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
+    let promoDiscountAmount = 0;
+    let candidatePromoCode = "";
+    let candidatePromoId = "";
     let appliedDiscountAmount = 0;
     let validatedDiscountCode = "";
     let validatedPromoId = "";
@@ -131,20 +143,23 @@ export async function POST(req: NextRequest) {
     if (incomingDiscountCode && baseChargeAmount !== null) {
       const promo = await validatePromoCode(incomingDiscountCode, baseChargeAmount);
       if (!promo.valid) return NextResponse.json({ error: promo.error }, { status: 400 });
-      appliedDiscountAmount = promo.discountAmount;
-      baseChargeAmount = Math.max(bypassQuickBooksPayment ? 0.01 : 0.50, (baseChargeAmount ?? 0) - appliedDiscountAmount);
-      validatedDiscountCode = promo.code;
-      validatedPromoId = promo.id;
+      promoDiscountAmount = promo.discountAmount;
+      candidatePromoCode = promo.code;
+      candidatePromoId = promo.id;
     }
 
-    const chargeAmount = baseChargeAmount;
-
-    if (!orderId || chargeAmount === null) {
+    if (!orderId || baseChargeAmount === null) {
       return NextResponse.json(
         { error: "Missing required fields: orderId, amount" },
         { status: 400 }
       );
     }
+    let chargeAmount = baseChargeAmount;
+    let referralOffer: ReferralOffer | null = null;
+    let pricing: ReferralPricing = calculateReferralPricing({
+      baseAmount: baseChargeAmount,
+      minimumCharge: bypassQuickBooksPayment ? 0.01 : 0.5,
+    });
 
     // 1. Load order — try server DB first, fall back to localStorage, then inline data
     let order =
@@ -371,6 +386,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
+    if (!bypassQuickBooksPayment) {
+      referralOffer = !isReorder && !order.isRefill
+        ? await getReferralOffer(order.refCode ?? orderData?.refCode, patient.id, orderId)
+        : null;
+      const availableCredit = await getReferralBalance(patient.id);
+      pricing = calculateReferralPricing({
+        baseAmount: baseChargeAmount,
+        promoDiscount: promoDiscountAmount,
+        referralDiscount: referralOffer?.discountAmount ?? 0,
+        availableCredit,
+      });
+      chargeAmount = pricing.chargeAmount;
+      appliedDiscountAmount = pricing.discountAmount;
+      if (pricing.discountSource === "promo") {
+        validatedDiscountCode = candidatePromoCode;
+        validatedPromoId = candidatePromoId;
+      } else if (pricing.discountSource === "referral") {
+        validatedDiscountCode = referralOffer?.code ?? "";
+      }
+    }
+
     const auditCtx = actorFromHeaders(req.headers);
     const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
 
@@ -513,6 +549,31 @@ export async function POST(req: NextRequest) {
       afterPayment: true,
     });
     if (validatedPromoId) await consumePromoCode(validatedPromoId);
+    if (pricing.discountSource === "referral" && referralOffer) {
+      await requirePaymentPersistence(
+        "referral reward",
+        () => recordReferralReward({
+          affiliateId: referralOffer!.affiliateId,
+          referrerPatientId: referralOffer!.referrerPatientId,
+          referredPatientId: patient.id,
+          referredOrderId: orderId,
+          discountAmount: pricing.discountAmount,
+          creditAmount: referralOffer!.creditAmount,
+        }),
+        { requireResult: true, afterPayment: true }
+      );
+    }
+    if (pricing.creditApplied > 0) {
+      await requirePaymentPersistence(
+        "referral credit spend",
+        () => recordReferralCreditSpend({
+          patientId: patient.id,
+          orderId,
+          amount: pricing.creditApplied,
+        }),
+        { requireResult: true, afterPayment: true }
+      );
+    }
 
     // 7. Verify identity when patient submitted usable media. Returning patients with
     // a prior successful order reuse identity server-side so checkout cannot fall
@@ -996,6 +1057,9 @@ export async function POST(req: NextRequest) {
       orderId,
       chargeId: chargeResult.chargeId,
       chargedAmount: chargeAmount,
+      referralDiscount: pricing.discountSource === "referral" ? pricing.discountAmount : 0,
+      promoDiscount: pricing.discountSource === "promo" ? pricing.discountAmount : 0,
+      creditApplied: pricing.creditApplied,
       identityStatus,
       orderStatus: canDispatchPharmacy && !errors.some((error) => error.startsWith("Pharmacy:"))
         ? "sent_to_pharmacy"
