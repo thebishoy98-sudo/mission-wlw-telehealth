@@ -123,7 +123,8 @@ export default function Confirmation() {
           </div>
         </div>
 
-        {/* Referral card */}
+        {/* Referral card — only shown after the server persists a real patient-owned code. */}
+        {referralLink && (
         <div className="bg-gradient-to-br from-forest-50 to-emerald-50 border border-forest-200 rounded-xl p-5 text-left mb-6">
           <div className="flex items-start gap-3">
             <span className="text-xl shrink-0">&#127873;</span>
@@ -132,8 +133,7 @@ export default function Confirmation() {
               <p className="text-xs text-gray-500 mb-3">
                 Share your link with a friend. They get $50 off their first order and you get $50 toward your next supply.
               </p>
-              {referralLink ? (
-                <div className="flex gap-2">
+              <div className="flex gap-2">
                   <input
                     readOnly
                     value={referralLink}
@@ -150,13 +150,11 @@ export default function Confirmation() {
                   >
                     {referralCopied ? "Copied!" : "Copy"}
                   </button>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400 italic">Generating your referral link...</p>
-              )}
+              </div>
             </div>
           </div>
         </div>
+        )}
 
         <div className="bg-forest-50 border border-forest-100 rounded-xl p-5 text-left mb-8">
           <p className="text-sm font-semibold text-gray-800 mb-3">What happens next?</p>

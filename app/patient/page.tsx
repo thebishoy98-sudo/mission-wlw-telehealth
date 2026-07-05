@@ -246,7 +246,7 @@ function PatientPortalContent() {
 
         {/* Referral section */}
         {user?.patientId && (
-          <ReferralSection patientId={user.patientId} />
+          <ReferralSection />
         )}
 
       </div>
@@ -359,15 +359,27 @@ function SubscriptionSection() {
   );
 }
 
-function ReferralSection({ patientId }: { patientId: string }) {
+function ReferralSection() {
   const [copied, setCopied] = useState(false);
-  const code = `patient_${patientId.slice(-8)}`;
-  const link = typeof window !== "undefined"
-    ? `${window.location.origin}?ref=${code}`
-    : `?ref=${code}`;
+  const [referral, setReferral] = useState<{ link: string; balance: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/patient/referral", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!cancelled && data?.link) {
+          setReferral({ link: data.link, balance: Number(data.balance) || 0 });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!referral) return null;
 
   const copy = () => {
-    navigator.clipboard.writeText(link).then(() => {
+    navigator.clipboard.writeText(referral.link).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -379,10 +391,15 @@ function ReferralSection({ patientId }: { patientId: string }) {
       <Card>
         <CardContent className="p-5">
           <p className="text-sm text-gray-600 mb-4">
-            Share your personal referral link. Friends who sign up using your link get a welcome discount on their first order.
+            Share your personal link. Your friend gets $50 off their first order and you earn $50 after their payment succeeds.
           </p>
+          <div className="mb-4 rounded-xl bg-forest-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-forest-700">Available referral credit</p>
+            <p className="mt-1 text-xl font-bold text-forest-900">{formatCurrency(referral.balance)}</p>
+            <p className="mt-1 text-xs text-gray-500">Automatically applied to your next order or refill.</p>
+          </div>
           <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
-            <span className="flex-1 text-xs font-mono text-gray-700 truncate">{link}</span>
+            <span className="flex-1 text-xs font-mono text-gray-700 truncate">{referral.link}</span>
             <button
               onClick={copy}
               className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-forest-800 hover:text-forest-700 transition-colors"

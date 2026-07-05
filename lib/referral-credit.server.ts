@@ -20,6 +20,12 @@ export interface ReferralRewardInput {
   creditAmount: number;
 }
 
+export interface PatientReferral {
+  affiliateId: string;
+  code: string;
+  patientId: string;
+}
+
 let schemaReady = false;
 
 export async function ensureReferralCreditSchema(): Promise<void> {
@@ -114,6 +120,63 @@ export async function getReferralOffer(
     discountAmount: PATIENT_REFERRAL_AMOUNT,
     creditAmount: PATIENT_REFERRAL_AMOUNT,
   };
+}
+
+export async function getPatientReferral(patientId: string): Promise<PatientReferral | null> {
+  if (!patientId) return null;
+  await ensureReferralCreditSchema();
+  const { rows } = await sql`
+    SELECT id, code, patient_id
+    FROM affiliates
+    WHERE patient_id = ${patientId}
+      AND created_by = 'patient-referral'
+    LIMIT 1
+  `;
+  const referral = rows[0];
+  return referral
+    ? {
+        affiliateId: String(referral.id),
+        code: String(referral.code),
+        patientId: String(referral.patient_id),
+      }
+    : null;
+}
+
+function referralSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 20) || "friend";
+}
+
+export async function createOrGetPatientReferral(input: {
+  patientId: string;
+  displayName: string;
+  orderId: string;
+}): Promise<PatientReferral> {
+  const existing = await getPatientReferral(input.patientId);
+  if (existing) return existing;
+
+  const code = `ref-${referralSlug(input.displayName)}-${input.orderId.slice(-5)}`;
+  await sql`
+    UPDATE affiliates
+    SET patient_id = ${input.patientId}
+    WHERE LOWER(code) = LOWER(${code})
+      AND created_by = 'patient-referral'
+      AND patient_id IS NULL
+  `;
+  await sql`
+    INSERT INTO affiliates (id, code, name, patient_id, created_by)
+    VALUES (
+      ${generateId()}, ${code}, ${`${input.displayName} (Referral)`},
+      ${input.patientId}, 'patient-referral'
+    )
+    ON CONFLICT DO NOTHING
+  `;
+  const created = await getPatientReferral(input.patientId);
+  if (!created) throw new Error("Could not create patient referral.");
+  return created;
 }
 
 export async function getReferralBalance(patientId: string): Promise<number> {

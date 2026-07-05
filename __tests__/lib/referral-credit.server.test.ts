@@ -5,8 +5,10 @@ jest.mock("@/lib/db.server", () => ({
 }));
 
 import {
+  createOrGetPatientReferral,
   getReferralBalance,
   getReferralOffer,
+  getPatientReferral,
   recordReferralReward,
   recordReferralCreditSpend,
 } from "@/lib/referral-credit.server";
@@ -29,6 +31,11 @@ describe("referral credit database service", () => {
             created_by: "patient-referral",
             prior_paid_orders: "0",
           }],
+        });
+      }
+      if (query.includes("FROM affiliates") && query.includes("patient_id =")) {
+        return Promise.resolve({
+          rows: [{ id: "affiliate-1", code: "ref-owner-123", patient_id: "owner-1" }],
         });
       }
       if (query.includes("AS balance")) return Promise.resolve({ rows: [{ balance: "75.50" }] });
@@ -76,6 +83,26 @@ describe("referral credit database service", () => {
 
   it("returns the real ledger balance", async () => {
     await expect(getReferralBalance("owner-1")).resolves.toBe(75.5);
+  });
+
+  it("returns the persisted patient referral instead of generating a browser code", async () => {
+    await expect(getPatientReferral("owner-1")).resolves.toEqual({
+      affiliateId: "affiliate-1",
+      code: "ref-owner-123",
+      patientId: "owner-1",
+    });
+  });
+
+  it("reuses a patient's existing referral code", async () => {
+    await expect(createOrGetPatientReferral({
+      patientId: "owner-1",
+      displayName: "Owner Person",
+      orderId: "paid-order-123",
+    })).resolves.toEqual({
+      affiliateId: "affiliate-1",
+      code: "ref-owner-123",
+      patientId: "owner-1",
+    });
   });
 
   it("records one atomic redemption and earned-credit event", async () => {
