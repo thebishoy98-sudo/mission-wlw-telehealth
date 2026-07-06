@@ -6,7 +6,7 @@
  */
 import * as lifefile from "@/services/lifefile";
 import * as db from "@/lib/db";
-import { retatrutideProduct, semaglutideProduct } from "@/data/products";
+import { bpc157Product, motCProduct, retatrutideProduct, semaglutideProduct } from "@/data/products";
 import type { Product } from "@/types";
 
 const basePatient = {
@@ -152,6 +152,53 @@ describe("lifefile generic path — Semaglutide", () => {
     const pharmacyOrder = await lifefile.createPharmacyOrder(order);
     const memo = pharmacyOrder.payload.order.general.memo as string;
     expect(memo).toMatch(/SEMAGLUTIDE/);
+  });
+});
+
+describe("lifefile product-specific path — BPC-157", () => {
+  beforeEach(() => seedWith(bpc157Product, "bpc_157_500mcg_2_week"));
+
+  it("sends oral BPC-157 without injection supplies", async () => {
+    const order = db.orderDb.getById("o_gen")!;
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+    const rxs = pharmacyOrder.payload.order.rxs as Record<string, unknown>[];
+
+    expect(rxs).toHaveLength(1);
+    expect(rxs[0]).toEqual(
+      expect.objectContaining({
+        drugName: "BPC-157",
+        drugStrength: "500mcg oral pill",
+        drugForm: "CAPSULE",
+        quantity: 28,
+        quantityUnits: "capsules",
+        directions: "Take 1 capsule by mouth twice daily for 14 days for acute pain.",
+        daysSupply: 14,
+      })
+    );
+  });
+});
+
+describe("lifefile product-specific path — Mot-C", () => {
+  beforeEach(() => seedWith(motCProduct, "mot_c_50mg_25_day"));
+
+  it("sends Mot-C as one 5mL vial with every-other-day injection directions", async () => {
+    const order = db.orderDb.getById("o_gen")!;
+    const pharmacyOrder = await lifefile.createPharmacyOrder(order);
+    const rxs = pharmacyOrder.payload.order.rxs as Record<string, unknown>[];
+    const drug = rxs[0];
+
+    expect(rxs).toHaveLength(3);
+    expect(drug).toEqual(
+      expect.objectContaining({
+        drugName: "MOT-C",
+        drugStrength: "50mg/5mL vial",
+        drugForm: "INJECTABLE",
+        quantity: 1,
+        quantityUnits: "each",
+        directions: "Inject 0.5mL subcutaneously every other day for 25 days.",
+        daysSupply: 25,
+      })
+    );
   });
 });
 

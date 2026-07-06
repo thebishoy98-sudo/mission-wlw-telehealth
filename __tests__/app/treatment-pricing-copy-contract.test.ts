@@ -17,11 +17,11 @@ describe("treatment pricing copy", () => {
   });
 
   it("advertises public Retatrutide pricing as half-price 4-week treatment", () => {
-    expect(pricingCardsSource).toContain("fromTreatment: 162.5");
+    expect(pricingCardsSource).toContain("fromTreatment: 227.5");
     expect(pricingCardsSource).not.toContain("fromMonthly: 250");
     expect(pricingCardsSource).not.toContain("/ month");
-    expect(paymentSource).toContain("From $162.50 per 4-week treatment.");
-    expect(faqSource).toContain("Retatrutide starts at $162.50");
+    expect(paymentSource).toContain("From $227.50 per 4-week treatment.");
+    expect(faqSource).toContain("Retatrutide starts at $227.50");
     expect(faqSource).not.toContain("$499 and above for Retatrutide");
   });
 

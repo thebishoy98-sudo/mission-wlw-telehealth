@@ -136,6 +136,11 @@ function isTirzepatide(product: Types.Product): boolean {
   return slug.includes("tirzepatide") || product.name.toLowerCase().includes("tirzepatide");
 }
 
+function isOralCapsuleDose(dose: Types.DoseOption): boolean {
+  const form = dose.drugForm?.toUpperCase();
+  return form === "CAPSULE" || form === "TABLET";
+}
+
 function parseWeeklyDoseMg(dose: Types.DoseOption): number {
   if (typeof dose.weeklyDoseMg === "number" && dose.weeklyDoseMg > 0) return dose.weeklyDoseMg;
   const match = `${dose.strength} ${dose.label}`.match(/(\d+(?:\.\d+)?)\s*mg/i);
@@ -215,10 +220,33 @@ function buildPharmacyRxs(
   // by drug name/strength — avoids tirzepatide sandbox ID being sent for
   // retatrutide/semaglutide which would cause a catalog mismatch rejection.
   const daysSupply =
-    typeof dose.durationWeeks === "number" && dose.durationWeeks > 0
-      ? dose.durationWeeks * 7
-      : 56; // default to 8-week supply
+    typeof dose.daysSupply === "number" && dose.daysSupply > 0
+      ? dose.daysSupply
+      : typeof dose.durationWeeks === "number" && dose.durationWeeks > 0
+        ? dose.durationWeeks * 7
+        : 56; // default to 8-week supply
   const vialQty = typeof dose.quantity === "number" && dose.quantity > 0 ? dose.quantity : 1;
+  const quantityUnits = dose.quantityUnits || "each";
+  const drugForm = dose.drugForm || "INJECTABLE";
+
+  if (isOralCapsuleDose(dose)) {
+    return [
+      {
+        rxType: "new",
+        drugName: (product.name ?? "").toUpperCase().slice(0, 254),
+        drugStrength: (dose.strength ?? dose.label ?? "").slice(0, 254),
+        drugForm,
+        quantity: String(vialQty),
+        quantityUnits,
+        directions: dose.prescriptionLabel || "Take by mouth as directed by prescriber.",
+        refills: 0,
+        dateWritten,
+        daysSupply,
+        scheduleCode: "L",
+      },
+    ];
+  }
+
   // Supply qty: 10 syringes + 10 swabs per vial (1-1 ratio same as tirzepatide)
   const supplyQty = String(vialQty * 10);
   return [
@@ -226,9 +254,9 @@ function buildPharmacyRxs(
       rxType: "new",
       drugName: (product.name ?? "").toUpperCase().slice(0, 254),
       drugStrength: (dose.strength ?? dose.label ?? "").slice(0, 254),
-      drugForm: "INJECTABLE",
+      drugForm,
       quantity: String(vialQty),
-      quantityUnits: "each",
+      quantityUnits,
       directions: dose.prescriptionLabel || `Inject as directed by prescriber. Use ${dose.strength ?? "prescribed dose"} once weekly subcutaneously.`,
       refills: 0,
       dateWritten,

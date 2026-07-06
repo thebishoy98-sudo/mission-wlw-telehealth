@@ -54,10 +54,13 @@ export interface DoseOption {
   label: string;
   strength: string;
   quantity: number;
+  quantityUnits?: string;
   price: number;
   durationWeeks?: number;
+  daysSupply?: number;
   weeklyDoseMg?: number;
   injectionUnits?: number;
+  drugForm?: string;
   prescriptionLabel?: string;
   patientDescription?: string;
 }

@@ -79,7 +79,7 @@ export const retatrutideProduct: Product = {
   description: "8-week compounded Retatrutide prescription with supplies included.",
   longDescription:
     "A provider-reviewed 8-week compounded Retatrutide prescription. A next-generation GLP-1/GIP/glucagon triple agonist for enhanced weight loss.",
-  startingPrice: 325,
+  startingPrice: 455,
   image: "/retatrutide-vial.jpg",
   doses: [
     {
@@ -87,7 +87,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 16mg",
       strength: "16mg/1mL vial",
       quantity: 1,
-      price: 325,
+      price: 455,
       durationWeeks: 8,
       weeklyDoseMg: 2,
       injectionUnits: 12.5,
@@ -99,7 +99,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 32mg",
       strength: "32mg/2mL vial",
       quantity: 1,
-      price: 455,
+      price: 655,
       durationWeeks: 8,
       weeklyDoseMg: 4,
       injectionUnits: 25,
@@ -111,7 +111,7 @@ export const retatrutideProduct: Product = {
       label: "Retatrutide 48mg",
       strength: "48mg/3mL vial",
       quantity: 1,
-      price: 525,
+      price: 855,
       durationWeeks: 8,
       weeklyDoseMg: 6,
       injectionUnits: 37.5,
@@ -121,6 +121,66 @@ export const retatrutideProduct: Product = {
   ],
   eligibilityNote:
     "Final dose and eligibility are determined by a licensed provider after review.",
+  isActive: true,
+  faqs: [],
+  createdAt,
+};
+
+export const bpc157Product: Product = {
+  id: "product_bpc_157",
+  name: "BPC-157",
+  slug: "bpc-157",
+  description: "2-week BPC-157 oral acute pain protocol.",
+  longDescription:
+    "Provider-reviewed BPC-157 500mcg oral pill protocol for acute pain support.",
+  startingPrice: 249,
+  image: "/retatrutide-vial.jpg",
+  doses: [
+    {
+      id: "bpc_157_500mcg_2_week",
+      label: "BPC-157 500mcg Oral Pill",
+      strength: "500mcg oral pill",
+      quantity: 28,
+      quantityUnits: "capsules",
+      price: 249,
+      daysSupply: 14,
+      drugForm: "CAPSULE",
+      prescriptionLabel: "Take 1 capsule by mouth twice daily for 14 days for acute pain.",
+      patientDescription: "2-Week Acute Pain Supply",
+    },
+  ],
+  eligibilityNote:
+    "Final eligibility and directions are determined by a licensed provider after review.",
+  isActive: true,
+  faqs: [],
+  createdAt,
+};
+
+export const motCProduct: Product = {
+  id: "product_mot_c",
+  name: "Mot-C",
+  slug: "mot-c",
+  description: "25-day Mot-C subcutaneous injection protocol.",
+  longDescription:
+    "Provider-reviewed 5mL Mot-C / 50mg vial protocol for subcutaneous injection every other day.",
+  startingPrice: 280,
+  image: "/retatrutide-vial.jpg",
+  doses: [
+    {
+      id: "mot_c_50mg_25_day",
+      label: "Mot-C 50mg",
+      strength: "50mg/5mL vial",
+      quantity: 1,
+      quantityUnits: "each",
+      price: 280,
+      daysSupply: 25,
+      drugForm: "INJECTABLE",
+      prescriptionLabel: "Inject 0.5mL subcutaneously every other day for 25 days.",
+      patientDescription: "25-Day Supply",
+    },
+  ],
+  eligibilityNote:
+    "Final eligibility and directions are determined by a licensed provider after review.",
   isActive: true,
   faqs: [],
   createdAt,
@@ -171,11 +231,19 @@ export const semaglutideProduct: Product = {
   createdAt,
 };
 
-export const canonicalProducts: Product[] = [tirzepatideProduct, retatrutideProduct, semaglutideProduct];
+export const canonicalProducts: Product[] = [
+  tirzepatideProduct,
+  retatrutideProduct,
+  bpc157Product,
+  motCProduct,
+  semaglutideProduct,
+];
 
 const CANONICAL_BY_SLUG: Record<string, Product> = {
   tirzepatide: tirzepatideProduct,
   retatrutide: retatrutideProduct,
+  "bpc-157": bpc157Product,
+  "mot-c": motCProduct,
   semaglutide: semaglutideProduct,
 };
 

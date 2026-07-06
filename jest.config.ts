@@ -8,8 +8,8 @@ const config: Config = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   testMatch: ["**/__tests__/**/*.test.ts"],
-  testPathIgnorePatterns: ["<rootDir>/.next/", "<rootDir>/node_modules/"],
-  modulePathIgnorePatterns: ["<rootDir>/.next/"],
+  testPathIgnorePatterns: ["<rootDir>/.next/", "<rootDir>/node_modules/", "<rootDir>/.worktrees/"],
+  modulePathIgnorePatterns: ["<rootDir>/.next/", "<rootDir>/.worktrees/"],
   collectCoverageFrom: [
     "lib/eligibility.ts",
     "lib/db.ts",

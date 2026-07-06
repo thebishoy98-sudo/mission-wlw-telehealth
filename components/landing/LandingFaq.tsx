@@ -17,7 +17,7 @@ const FAQS = [
   },
   {
     q: "Is this covered by insurance?",
-    a: "Our GLP-1 programs are self-pay. Programs start from $149.50 for a 4-week treatment. Retatrutide starts at $162.50 for a 4-week treatment. All supplies are included and there are no hidden fees.",
+    a: "Our GLP-1 programs are self-pay. Programs start from $149.50 for a 4-week treatment. Retatrutide starts at $227.50 for a 4-week treatment. All supplies are included and there are no hidden fees.",
   },
   {
     q: "Do I need to come in person?",

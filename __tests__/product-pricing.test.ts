@@ -15,11 +15,25 @@ describe("production product pricing", () => {
         }),
         expect.objectContaining({
           slug: "retatrutide",
-          startingPrice: 325,
+          startingPrice: 455,
           doses: expect.arrayContaining([
-            expect.objectContaining({ id: "retatrutide_16mg_8_week", price: 325 }),
-            expect.objectContaining({ id: "retatrutide_32mg_8_week", price: 455 }),
-            expect.objectContaining({ id: "retatrutide_48mg_8_week", price: 525 }),
+            expect.objectContaining({ id: "retatrutide_16mg_8_week", price: 455 }),
+            expect.objectContaining({ id: "retatrutide_32mg_8_week", price: 655 }),
+            expect.objectContaining({ id: "retatrutide_48mg_8_week", price: 855 }),
+          ]),
+        }),
+        expect.objectContaining({
+          slug: "bpc-157",
+          startingPrice: 249,
+          doses: expect.arrayContaining([
+            expect.objectContaining({ id: "bpc_157_500mcg_2_week", price: 249 }),
+          ]),
+        }),
+        expect.objectContaining({
+          slug: "mot-c",
+          startingPrice: 280,
+          doses: expect.arrayContaining([
+            expect.objectContaining({ id: "mot_c_50mg_25_day", price: 280 }),
           ]),
         }),
         expect.objectContaining({

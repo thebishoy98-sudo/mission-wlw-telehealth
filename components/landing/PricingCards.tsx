@@ -11,7 +11,7 @@ const PRODUCTS = [
     tagline: "Triple GLP-1 Agonist",
     img: "/retatrutide-vial.jpg",
     badge: "First to Market",
-    fromTreatment: 162.5,
+    fromTreatment: 227.5,
     highlight: true,
     bullets: [
       "Newest triple-agonist GLP-1",
