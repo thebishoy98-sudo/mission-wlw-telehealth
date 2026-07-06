@@ -134,7 +134,7 @@ export const bpc157Product: Product = {
   longDescription:
     "Provider-reviewed BPC-157 500mcg oral pill protocol for acute pain support.",
   startingPrice: 249,
-  image: "/retatrutide-vial.jpg",
+  image: "/bpc-157-product.png",
   doses: [
     {
       id: "bpc_157_500mcg_2_week",
@@ -164,7 +164,7 @@ export const motCProduct: Product = {
   longDescription:
     "Provider-reviewed 5mL Mot-C / 50mg vial protocol for subcutaneous injection every other day.",
   startingPrice: 280,
-  image: "/retatrutide-vial.jpg",
+  image: "/mot-c-vial.png",
   doses: [
     {
       id: "mot_c_50mg_25_day",

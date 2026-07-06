@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import path from "path";
 import {
   canonicalProducts,
   bpc157Product,
@@ -41,6 +43,13 @@ describe("canonical products", () => {
     expect(bpc157Product.id).toBe("product_bpc_157");
     expect(motCProduct.id).toBe("product_mot_c");
     expect(semaglutideProduct.id).toBe("product_semaglutide");
+  });
+
+  it("new peptide products use dedicated catalog images", () => {
+    expect(bpc157Product.image).toBe("/bpc-157-product.png");
+    expect(motCProduct.image).toBe("/mot-c-vial.png");
+    expect(existsSync(path.join(process.cwd(), "public", "bpc-157-product.png"))).toBe(true);
+    expect(existsSync(path.join(process.cwd(), "public", "mot-c-vial.png"))).toBe(true);
   });
 
   it("normalizeCustomerProducts includes semaglutide when DB is empty", () => {
