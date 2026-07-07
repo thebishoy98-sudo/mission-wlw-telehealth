@@ -80,7 +80,7 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
       idImageData,
       identityVideoFrameData,
       identityVideoData,
-      complete: !!idImageData && !!identityVideoFrameData && !!identityVideoData,
+      complete: !!idImageData && !!identityVideoFrameData,
     });
   }, [idImageData, identityVideoFrameData, identityVideoData, onChange]);
 
@@ -185,8 +185,8 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
         reader.onload = () => {
           const dataUrl = String(reader.result ?? "");
           if (dataUrl.length > MAX_VIDEO_DATA_URL_BYTES) {
-            resetVideoCapture();
-            setCaptureError("The video file is too large. Please re-record in steady light and keep the phone still.");
+            setIdentityVideoData("");
+            setCaptureError("The video file is too large, but we captured a still frame. You can submit now or re-record.");
             return;
           }
           setIdentityVideoData(dataUrl);
@@ -222,7 +222,8 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-forest-800" />
             <p className="text-sm text-forest-900">
-              Take a clear ID photo, then record a short video mentioning your name, date of birth, and current weight.
+              Take a clear ID photo, then record a short video. Say your full name, date of birth, and current weight.
+              If the video preview does not play after recording, submit anyway; we also capture a still frame as backup.
             </p>
           </div>
         </div>
@@ -285,7 +286,8 @@ export function IdentityCapture({ onChange, showIntro = true }: IdentityCaptureP
         <div>
           <h2 className="font-semibold text-gray-900">15-Second Verification Video</h2>
           <p className="text-xs text-gray-500 mt-1">
-            Please upload a quick video mentioning your name, date of birth, and current weight if interested in weight loss.
+            Record yourself saying your full name, date of birth, and current weight. Keep your face centered in good light.
+            If your browser cannot attach the full video, we will submit the captured video frame as a fallback.
           </p>
         </div>
         <video ref={videoRef} playsInline muted className={`w-full rounded-lg bg-gray-100 ${recording ? "block" : "hidden"}`} />

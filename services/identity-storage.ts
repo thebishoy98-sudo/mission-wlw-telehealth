@@ -36,6 +36,10 @@ type LoadedIdentityMedia = {
 const MAX_IDENTITY_MEDIA_BYTES = 50 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "video/webm", "video/mp4"]);
 
+function isBase64DataUrl(value: string | null | undefined) {
+  return /^data:[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+(?:;[^,]*)*;base64,/i.test(value?.trim() ?? "");
+}
+
 export async function buildIdentityUploads({
   orderId,
   idImageData,
@@ -50,7 +54,7 @@ export async function buildIdentityUploads({
     filename: documentFile.filename,
     dataUrl: idImageData,
   });
-  const normalizedVideoData = identityVideoData?.trim() ? identityVideoData : null;
+  const normalizedVideoData = isBase64DataUrl(identityVideoData) ? identityVideoData!.trim() : null;
   const videoData = normalizedVideoData ?? selfieFrameData;
   const selfieFile = dataUrlToFileMetadata(videoData, normalizedVideoData ? "identity-video" : "identity-frame");
   const selfieUpload = await storeIdentityMedia({

@@ -98,7 +98,7 @@ describe("lifefile generic path — Retatrutide", () => {
     [
       "retatrutide_16mg_8_week",
       "16mg/1mL vial",
-      "Take 12.5 units (2mg) subcutaneous injection once a week for eight weeks.",
+      "Take 12.5 units sub Q injection (2mg) once a week for 8 weeks.",
     ],
     [
       "retatrutide_32mg_8_week",

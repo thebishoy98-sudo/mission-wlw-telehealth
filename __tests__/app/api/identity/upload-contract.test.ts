@@ -8,6 +8,7 @@ describe("identity upload route contract", () => {
     "utf8"
   );
   const pageSource = fs.readFileSync(path.join(process.cwd(), "app/verify-identity/[token]/page.tsx"), "utf8");
+  const captureSource = fs.readFileSync(path.join(process.cwd(), "components/identity/IdentityCapture.tsx"), "utf8");
 
   it("validates identity upload tokens before patients record media", () => {
     expect(source).toContain("export async function GET");
@@ -15,6 +16,18 @@ describe("identity upload route contract", () => {
     expect(source).toContain("uploadNeeded");
     expect(pageSource).toContain("/api/identity/upload?token=");
     expect(pageSource).toContain("Verification link not found");
+  });
+
+  it("keeps valid links resubmittable even after manual approval", () => {
+    expect(source).toContain("uploadNeeded: true");
+    expect(source).not.toContain("setLinkStatus(payload.uploadNeeded === false ? \"received\" : \"ready\")");
+    expect(pageSource).toContain("You can resubmit verification if support asked for a clearer ID or video.");
+  });
+
+  it("submits a captured frame fallback when full video data is unusable", () => {
+    expect(captureSource).toContain("complete: !!idImageData && !!identityVideoFrameData");
+    expect(captureSource).toContain("we captured a still frame");
+    expect(pageSource).toContain("identityVideoDataForUpload");
   });
 
   it("resumes the PracticeQ completion workflow after delayed verified identity", () => {

@@ -122,6 +122,21 @@ describe("identity-storage", () => {
     expect(result.uploads[1].base64Data).toBe("data:image/jpeg;base64,aGVsbG8=");
   });
 
+  it("falls back to the selfie frame when browser video data is not a data URL", async () => {
+    configurePracticeQStorage();
+
+    const result = await buildIdentityUploads({
+      orderId: "order_1",
+      idImageData: "data:image/jpeg;base64,aGVsbG8=",
+      selfieFrameData: "data:image/jpeg;base64,aGVsbG8=",
+      identityVideoData: "blob:https://missionwlw.com/video-preview",
+    });
+
+    expect(result.uploads[1].filename).toBe("identity-frame.jpg");
+    expect(result.uploads[1].mimeType).toBe("image/jpeg");
+    expect(result.uploads[1].base64Data).toBe("data:image/jpeg;base64,aGVsbG8=");
+  });
+
   it("accepts browser video data URLs that include codec parameters", async () => {
     configureS3Storage();
 

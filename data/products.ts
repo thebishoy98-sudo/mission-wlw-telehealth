@@ -91,7 +91,7 @@ export const retatrutideProduct: Product = {
       durationWeeks: 8,
       weeklyDoseMg: 2,
       injectionUnits: 12.5,
-      prescriptionLabel: "Take 12.5 units (2mg) subcutaneous injection once a week for eight weeks.",
+      prescriptionLabel: "Take 12.5 units sub Q injection (2mg) once a week for 8 weeks.",
       patientDescription: "8-Week Prescription",
     },
     {

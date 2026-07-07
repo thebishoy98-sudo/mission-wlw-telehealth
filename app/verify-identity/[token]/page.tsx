@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { IdentityCapture, MAX_VIDEO_DATA_URL_BYTES, type IdentityCaptureValue } from "@/components/identity/IdentityCapture";
 import { Button } from "@/components/ui/Button";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 const errorMessage = (value: unknown, fallback: string) => {
   if (typeof value === "string") return value;
@@ -23,7 +23,7 @@ const parseJson = (value: string) => {
 export default function VerifyIdentityPage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
-  const [linkStatus, setLinkStatus] = useState<"checking" | "ready" | "received" | "invalid">("checking");
+  const [linkStatus, setLinkStatus] = useState<"checking" | "ready" | "invalid">("checking");
   const [identity, setIdentity] = useState<IdentityCaptureValue>({
     idImageData: "",
     identityVideoFrameData: "",
@@ -49,7 +49,7 @@ export default function VerifyIdentityPage() {
           setError(errorMessage(payload.error, "Verification link not found."));
           return;
         }
-        setLinkStatus(payload.uploadNeeded === false ? "received" : "ready");
+        setLinkStatus("ready");
       } catch {
         if (!active) return;
         setLinkStatus("invalid");
@@ -74,10 +74,8 @@ export default function VerifyIdentityPage() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25000);
     try {
-      if (identity.identityVideoData.length > MAX_VIDEO_DATA_URL_BYTES) {
-        setError("The video is too large. Please re-record and try again.");
-        return;
-      }
+      const identityVideoDataForUpload =
+        identity.identityVideoData.length > MAX_VIDEO_DATA_URL_BYTES ? "" : identity.identityVideoData;
       const response = await fetch("/api/identity/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,7 +84,7 @@ export default function VerifyIdentityPage() {
           token: params.token,
           idImageData: identity.idImageData,
           selfieFrameData: identity.identityVideoFrameData,
-          identityVideoData: identity.identityVideoData,
+          identityVideoData: identityVideoDataForUpload,
         }),
       });
       const responseText = await response.text();
@@ -123,18 +121,6 @@ export default function VerifyIdentityPage() {
       );
     }
 
-    if (linkStatus === "received") {
-      return (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-          <span className="inline-flex items-center gap-2 font-semibold">
-            <CheckCircle className="h-4 w-4" />
-            Identity verification is already received.
-          </span>
-          <p className="mt-2 text-green-700">Our team will review it before pharmacy dispatch.</p>
-        </div>
-      );
-    }
-
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         <span className="inline-flex items-center gap-2">
@@ -153,6 +139,7 @@ export default function VerifyIdentityPage() {
             <h1 className="text-2xl font-bold text-gray-900">Identity Verification</h1>
             <p className="text-sm text-gray-600 mt-2">
               Complete identity verification before the provider can release your order to pharmacy.
+              You can resubmit verification if support asked for a clearer ID or video.
             </p>
           </div>
 
