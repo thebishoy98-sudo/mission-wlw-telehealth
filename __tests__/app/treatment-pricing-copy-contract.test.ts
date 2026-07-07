@@ -25,6 +25,13 @@ describe("treatment pricing copy", () => {
     expect(faqSource).not.toContain("$499 and above for Retatrutide");
   });
 
+  it("shows peptide support products on the landing pricing section", () => {
+    expect(pricingCardsSource).toContain('id: "product_bpc_157"');
+    expect(pricingCardsSource).toContain('img: "/bpc-157-product.png"');
+    expect(pricingCardsSource).toContain('id: "product_mot_c"');
+    expect(pricingCardsSource).toContain('img: "/mot-c-vial.png"');
+  });
+
   it("does not advertise monthly landing prices for 4-week treatment programs", () => {
     expect(heroSource).toContain("From $149.50 / 4-week treatment");
     expect(stickyCtaSource).toContain("From $149.50 / 4-week treatment");

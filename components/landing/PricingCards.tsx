@@ -12,6 +12,7 @@ const PRODUCTS = [
     img: "/retatrutide-vial.jpg",
     badge: "First to Market",
     fromTreatment: 227.5,
+    priceSuffix: "/ 4-week treatment",
     highlight: true,
     bullets: [
       "Newest triple-agonist GLP-1",
@@ -27,6 +28,7 @@ const PRODUCTS = [
     img: "/tirzepatide-vial.jpg",
     badge: "Most Popular",
     fromTreatment: 174.5,
+    priceSuffix: "/ 4-week treatment",
     highlight: false,
     bullets: [
       "Proven weight loss results",
@@ -42,12 +44,45 @@ const PRODUCTS = [
     img: "/semaglutide-vial.jpg",
     badge: "Available",
     fromTreatment: 149.5,
+    priceSuffix: "/ 4-week treatment",
     highlight: false,
     bullets: [
       "Well-established GLP-1 therapy",
       "Syringes & supplies included",
       "Free overnight shipping",
       "Provider-reviewed prescription",
+    ],
+  },
+  {
+    id: "product_bpc_157",
+    label: "BPC-157",
+    tagline: "Peptide Support",
+    img: "/bpc-157-product.png",
+    badge: "Acute Pain",
+    fromTreatment: 249,
+    priceSuffix: "/ 2-week supply",
+    highlight: false,
+    bullets: [
+      "500mcg oral capsules",
+      "2-week acute pain supply",
+      "Provider-reviewed protocol",
+      "Ships from US-based pharmacy",
+    ],
+  },
+  {
+    id: "product_mot_c",
+    label: "Mot-C",
+    tagline: "Peptide Injection",
+    img: "/mot-c-vial.png",
+    badge: "25-Day Supply",
+    fromTreatment: 280,
+    priceSuffix: "/ 25-day supply",
+    highlight: false,
+    bullets: [
+      "50mg / 5mL vial",
+      "Subcutaneous injection protocol",
+      "Provider-reviewed protocol",
+      "Ships from US-based pharmacy",
     ],
   },
 ];
@@ -141,11 +176,11 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
             Pricing
           </span>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-forest-800 tracking-tight mb-4">
-            GLP-1 Weight Loss Programs
+            Treatment Programs
           </h2>
           <p className="text-gray-600 max-w-xl mx-auto text-base sm:text-lg">
-            4-week treatment pricing with all supplies included. Your provider selects the right
-            medication and dose during your consultation.
+            Program pricing with required supplies included. Your provider selects the right
+            medication, dose, and protocol during your consultation.
           </p>
         </FadeUp>
 
@@ -204,7 +239,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
                   >
                     <span className="text-3xl font-bold">from ${p.fromTreatment.toFixed(2)}</span>
                     <span className={`text-sm ${p.highlight ? "text-white/60" : "text-gray-400"}`}>
-                      / 4-week treatment
+                      {p.priceSuffix}
                     </span>
                   </div>
                 </div>
