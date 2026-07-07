@@ -33,10 +33,12 @@ const US_STATES = [
   ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"],
 ];
 
-const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; highlight: boolean }> = {
-  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", highlight: true },
-  product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", highlight: false },
-  product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", highlight: false },
+const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; highlight: boolean; priceDivisor: number; priceSuffix: string }> = {
+  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", highlight: true, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
+  product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", highlight: false, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
+  product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", highlight: false, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
+  product_bpc_157: { img: "/bpc-157-product.png", tagline: "Peptide Support", badge: "Acute Pain", highlight: false, priceDivisor: 1, priceSuffix: "/ 2-week supply" },
+  product_mot_c: { img: "/mot-c-vial.png", tagline: "Peptide Injection", badge: "25-Day Supply", highlight: false, priceDivisor: 1, priceSuffix: "/ 25-day supply" },
 };
 
 const STEPS = [
@@ -229,7 +231,15 @@ export default function PatientInfo() {
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {products.map((p, i) => {
-                const meta = PRODUCT_META[p.id] ?? { img: "", tagline: "", badge: "", highlight: false };
+                const meta = PRODUCT_META[p.id] ?? {
+                  img: p.image,
+                  tagline: "",
+                  badge: "Available",
+                  highlight: false,
+                  priceDivisor: 1,
+                  priceSuffix: "",
+                };
+                const displayPrice = p.startingPrice / meta.priceDivisor;
                 const selected = formData.productId === p.id;
                 return (
                   <motion.button
@@ -267,8 +277,8 @@ export default function PatientInfo() {
                       {meta.badge}
                     </span>
                     <p className={`text-xl font-bold leading-none ${selected && meta.highlight ? "text-white" : "text-forest-800"}`}>
-                      {formatCurrency(p.startingPrice / 2)}
-                      <span className={`block text-xs font-normal mt-1 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>/ 4-week treatment</span>
+                      {formatCurrency(displayPrice)}
+                      <span className={`block text-xs font-normal mt-1 ${selected && meta.highlight ? "text-white/55" : "text-gray-400"}`}>{meta.priceSuffix}</span>
                     </p>
                   </motion.button>
                 );
