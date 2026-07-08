@@ -396,6 +396,7 @@ export async function POST(req: NextRequest) {
         promoDiscount: promoDiscountAmount,
         referralDiscount: referralOffer?.discountAmount ?? 0,
         availableCredit,
+        minimumCharge: promoDiscountAmount >= baseChargeAmount ? 0 : 0.5,
       });
       chargeAmount = pricing.chargeAmount;
       appliedDiscountAmount = pricing.discountAmount;
@@ -406,6 +407,7 @@ export async function POST(req: NextRequest) {
         validatedDiscountCode = referralOffer?.code ?? "";
       }
     }
+    const isCompedCheckout = pricing.discountSource === "promo" && chargeAmount === 0;
 
     const auditCtx = actorFromHeaders(req.headers);
     const submittedIdentityMedia = !!identityUploads?.licenseImageData && !!identityUploads?.selfieFrameData;
@@ -433,7 +435,24 @@ export async function POST(req: NextRequest) {
     let chargeResult!: { chargeId: string; status: string; cardLast4: string; cardBrand: string };
     // When we save a reusable card, keep its metadata to enroll the recurring plan.
     let enrollmentCardInfo: { qbCustomerId: string; qbCardId: string; cardLast4: string; cardBrand: string } | null = null;
-    if (bypassQuickBooksPayment) {
+    if (isCompedCheckout) {
+      chargeResult = {
+        chargeId: `promo_comp_${generateId()}`,
+        status: "CAPTURED",
+        cardLast4: "0000",
+        cardBrand: "promo",
+      };
+      await dbServer.integrationLogDb.create({
+        id: generateId(),
+        timestamp: new Date().toISOString(),
+        integrationName: "quickbooks",
+        action: "QuickBooks payment skipped for fully discounted promo order",
+        orderId,
+        patientId: patient.id,
+        status: "success",
+        details: { amount: chargeAmount, mode: "promo_comp", transactionId: chargeResult.chargeId },
+      }).catch(() => {});
+    } else if (bypassQuickBooksPayment) {
       chargeResult = {
         chargeId: `test_bypass_${generateId()}`,
         status: "CAPTURED",
@@ -535,7 +554,7 @@ export async function POST(req: NextRequest) {
       amount: chargeAmount,
       currency: "USD",
       status: "completed",
-      paymentMethod: "credit_card",
+      paymentMethod: isCompedCheckout ? "promo_comp" : "credit_card",
       cardLast4: chargeResult.cardLast4,
       cardBrand: chargeResult.cardBrand,
       transactionId: chargeResult.chargeId,
@@ -777,7 +796,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 8. QuickBooks accounting — customer record + invoice (payment already in QB Payments)
-    if (bypassQuickBooksPayment) {
+    if (bypassQuickBooksPayment || isCompedCheckout) {
       db.orderDb.update(orderId, { quickbooksStatus: "skipped" });
       await dbServer.orderDb.update(orderId, { quickbooksStatus: "skipped" }).catch(() => {});
       await dbServer.integrationLogDb.create({
@@ -788,7 +807,7 @@ export async function POST(req: NextRequest) {
         orderId,
         patientId: patient.id,
         status: "success",
-        details: { amount: payment.amount, transactionId: payment.transactionId, mode: "bypass" },
+        details: { amount: payment.amount, transactionId: payment.transactionId, mode: isCompedCheckout ? "promo_comp" : "bypass" },
       }).catch(() => {});
     } else {
       try {
@@ -991,7 +1010,7 @@ export async function POST(req: NextRequest) {
     // 12b. Auto-enroll every buyer into the recurring 8-week program. When we saved
     // a reusable card, refills can auto-charge; otherwise the refill review sends a
     // pay-link. Either way the refill is HELD for a dose review at the 7-week mark.
-    if (!bypassQuickBooksPayment && !order.isRefill) {
+    if (!isCompedCheckout && !bypassQuickBooksPayment && !order.isRefill) {
       try {
         if (enrollmentCardInfo) {
           await recordEnrollment({

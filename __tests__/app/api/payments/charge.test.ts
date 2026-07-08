@@ -87,4 +87,12 @@ describe("payment card-on-file checkout contract", () => {
     expect(savedCardBlock).toContain("falling back to one-time charge");
     expect(savedCardBlock).toContain("return NextResponse.json");
   });
+
+  it("skips QuickBooks card charging for validated full-discount promo orders", () => {
+    expect(chargeRoute).toContain("const isCompedCheckout = pricing.discountSource === \"promo\" && chargeAmount === 0");
+    expect(chargeRoute).toContain("if (isCompedCheckout)");
+    expect(chargeRoute).toContain("chargeId: `promo_comp_${generateId()}`");
+    expect(chargeRoute).toContain('paymentMethod: isCompedCheckout ? "promo_comp" : "credit_card"');
+    expect(chargeRoute).toContain("if (!isCompedCheckout && !bypassQuickBooksPayment && !order.isRefill)");
+  });
 });

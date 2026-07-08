@@ -57,6 +57,21 @@ describe("calculateReferralPricing", () => {
     });
   });
 
+  it("allows a full promo discount to produce a comped zero-dollar checkout", () => {
+    expect(calculateReferralPricing({
+      baseAmount: 455,
+      promoDiscount: 455,
+      referralDiscount: 0,
+      availableCredit: 0,
+      minimumCharge: 0,
+    })).toEqual({
+      discountSource: "promo",
+      discountAmount: 455,
+      creditApplied: 0,
+      chargeAmount: 0,
+    });
+  });
+
   it("ignores invalid discounts and balances", () => {
     expect(calculateReferralPricing({
       baseAmount: 100,

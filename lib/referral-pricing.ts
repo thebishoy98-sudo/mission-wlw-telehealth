@@ -21,6 +21,12 @@ function validMoney(value: number | undefined): number {
     : 0;
 }
 
+function validMinimumCharge(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.round((value + Number.EPSILON) * 100) / 100
+    : 0.5;
+}
+
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -30,11 +36,14 @@ export function calculateReferralPricing(input: ReferralPricingInput): ReferralP
   const promoDiscount = Math.min(baseAmount, validMoney(input.promoDiscount));
   const referralDiscount = Math.min(baseAmount, validMoney(input.referralDiscount));
   const availableCredit = validMoney(input.availableCredit);
-  const minimumCharge = validMoney(input.minimumCharge) || 0.5;
+  const minimumCharge = validMinimumCharge(input.minimumCharge);
 
   let discountSource: ReferralDiscountSource = null;
   let discountAmount = 0;
-  if (referralDiscount > 0 && referralDiscount >= promoDiscount) {
+  if (promoDiscount > 0 && promoDiscount >= baseAmount) {
+    discountSource = "promo";
+    discountAmount = promoDiscount;
+  } else if (referralDiscount > 0 && referralDiscount >= promoDiscount) {
     discountSource = "referral";
     discountAmount = referralDiscount;
   } else if (promoDiscount > 0) {

@@ -102,6 +102,7 @@ export default function Payment() {
   const productTotal = dose?.price || product?.startingPrice || 0;
   const baseTotal = chargeAmountOverride ?? productTotal;
   const total = Math.max(0, baseTotal - discountAmount);
+  const isCompedCheckout = appliedCode && total <= 0;
   const productReady = !!product && !!dose && baseTotal > 0;
 
   useEffect(() => {
@@ -194,15 +195,15 @@ export default function Payment() {
     e.preventDefault();
     const digits = cardNumber.replace(/\s/g, "");
     if (!productReady) return;
-    if (!paymentsDisabled && (digits.length < 15 || !cardExpiry || cardCvc.length < 3)) return;
+    if (!paymentsDisabled && !isCompedCheckout && (digits.length < 15 || !cardExpiry || cardCvc.length < 3)) return;
     setPaymentError("");
     setDiscountError("");
     setProcessing(true);
 
-    setProcessingStep(paymentsDisabled ? "Submitting order..." : "Securing payment details...");
+    setProcessingStep(paymentsDisabled || isCompedCheckout ? "Submitting order..." : "Securing payment details...");
     let quickBooksToken = "";
     try {
-      if (quickBooksPaymentsEnabled) {
+      if (quickBooksPaymentsEnabled && !isCompedCheckout) {
         const [expMonth, expYearInput] = cardExpiry.split("/").map((s) => s.trim());
         quickBooksToken = await tokenizeQuickBooksCard({
           number: digits,
@@ -256,7 +257,7 @@ export default function Payment() {
 
     // Payment record will be created by the charge API after real charge succeeds
     const cardDigits = cardNumber.replace(/\s/g, "");
-    const cardLast4 = paymentsDisabled ? "0000" : cardDigits.slice(-4);
+    const cardLast4 = paymentsDisabled || isCompedCheckout ? "0000" : cardDigits.slice(-4);
     const [expMonth, expYear] = cardExpiry.split("/").map((s) => s.trim());
 
     // Save questionnaire answers
@@ -329,13 +330,13 @@ export default function Payment() {
         reorderSourceOrderId: intakeState.reorderSourceOrderId,
         discountCode: appliedCode || undefined,
         token: quickBooksToken || undefined,
-        cardNumber: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardDigits,
-        expMonth: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : expMonth,
-        expYear: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : (expYear?.length === 2 ? `20${expYear}` : expYear),
-        cvc: paymentsDisabled || quickBooksPaymentsEnabled ? undefined : cardCvc,
+        cardNumber: paymentsDisabled || isCompedCheckout || quickBooksPaymentsEnabled ? undefined : cardDigits,
+        expMonth: paymentsDisabled || isCompedCheckout || quickBooksPaymentsEnabled ? undefined : expMonth,
+        expYear: paymentsDisabled || isCompedCheckout || quickBooksPaymentsEnabled ? undefined : (expYear?.length === 2 ? `20${expYear}` : expYear),
+        cvc: paymentsDisabled || isCompedCheckout || quickBooksPaymentsEnabled ? undefined : cardCvc,
         cardName: `${intakeState.firstName} ${intakeState.lastName}`,
         cardLast4,
-        cardBrand: paymentsDisabled ? "bypass" : detectCardBrand(cardNumber),
+        cardBrand: paymentsDisabled ? "bypass" : isCompedCheckout ? "promo" : detectCardBrand(cardNumber),
         amount: baseTotal,
         identityUploads: {
           licenseImageData: intakeState.licenseImageData,
@@ -534,13 +535,15 @@ export default function Payment() {
           <h2 className="text-xl font-bold text-gray-900">Payment</h2>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Lock className="w-3 h-3" />
-            <span>{paymentsDisabled ? "Payment disabled" : "Secure payment"}</span>
+            <span>{paymentsDisabled ? "Payment disabled" : isCompedCheckout ? "No card required" : "Secure payment"}</span>
           </div>
         </div>
 
-        {paymentsDisabled ? (
+        {paymentsDisabled || isCompedCheckout ? (
           <div className="rounded-xl border border-forest-200 bg-forest-50 p-4 text-sm text-gray-700">
-            Payment collection is disabled for this sandbox order. No card will be charged.
+            {isCompedCheckout
+              ? "No card is required for this fully discounted order."
+              : "Payment collection is disabled for this sandbox order. No card will be charged."}
           </div>
         ) : (
           <div className="space-y-4">
@@ -608,7 +611,7 @@ export default function Payment() {
           </div>
         )}
 
-        {paymentsDisabled && paymentError && (
+        {(paymentsDisabled || isCompedCheckout) && paymentError && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
             {paymentError}
           </div>
@@ -629,7 +632,7 @@ export default function Payment() {
         </div>
       )}
 
-      {!paymentsDisabled && (
+      {!paymentsDisabled && !isCompedCheckout && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs leading-5 text-gray-600">
           <strong className="text-gray-800">Auto-refill enrollment:</strong> {RECURRING_CONSENT_TEXT}
         </div>
@@ -649,8 +652,8 @@ export default function Payment() {
         >
           Back
         </Button>
-        <Button fullWidth type="submit" disabled={processing || !productReady || (!paymentsDisabled && (cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3))}>
-          {processing ? "Processing..." : paymentsDisabled ? "Submit order" : `Pay ${productReady ? formatCurrency(total) : "-"}`}
+        <Button fullWidth type="submit" disabled={processing || !productReady || (!paymentsDisabled && !isCompedCheckout && (cardNumber.replace(/\s/g, "").length < 15 || !cardExpiry || cardCvc.length < 3))}>
+          {processing ? "Processing..." : paymentsDisabled ? "Submit order" : isCompedCheckout ? "Submit free order" : `Pay ${productReady ? formatCurrency(total) : "-"}`}
         </Button>
       </div>
 

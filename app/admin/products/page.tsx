@@ -10,18 +10,21 @@ import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { Toast } from "@/components/ui/Toast";
 
+const emptyFormData = {
+  name: "",
+  description: "",
+  startingPrice: 0,
+  eligibilityNote: "",
+  doses: [] as Types.DoseOption[],
+};
+
 export default function ProductsManagement() {
   const [products, setProducts] = useState<Types.Product[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string>("");
   const [formError, setFormError] = useState<string>("");
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    startingPrice: 0,
-    eligibilityNote: "",
-  });
+  const [formData, setFormData] = useState(emptyFormData);
 
   useEffect(() => {
     void loadProducts();
@@ -52,6 +55,7 @@ export default function ProductsManagement() {
         description: formData.description,
         startingPrice: formData.startingPrice,
         eligibilityNote: formData.eligibilityNote,
+        doses: formData.doses,
       }),
     });
 
@@ -64,8 +68,17 @@ export default function ProductsManagement() {
     await loadProducts();
     setShowForm(false);
     setEditingId(null);
-    setFormData({ name: "", description: "", startingPrice: 0, eligibilityNote: "" });
+    setFormData(emptyFormData);
     setToast(editingId ? "Product updated." : "Product created.");
+  };
+
+  const updateDose = (index: number, changes: Partial<Types.DoseOption>) => {
+    setFormData((prev) => ({
+      ...prev,
+      doses: prev.doses.map((dose, doseIndex) =>
+        doseIndex === index ? { ...dose, ...changes } : dose
+      ),
+    }));
   };
 
   const handleEdit = (product: Types.Product) => {
@@ -74,6 +87,7 @@ export default function ProductsManagement() {
       description: product.description,
       startingPrice: product.startingPrice,
       eligibilityNote: product.eligibilityNote,
+      doses: product.doses ?? [],
     });
     setEditingId(product.id);
     setShowForm(true);
@@ -148,6 +162,43 @@ export default function ProductsManagement() {
                   }))
                 }
               />
+              {formData.doses.length > 0 && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900">Dose pharmacy details</h4>
+                    <p className="text-xs text-gray-500">
+                      These fields are sent to the pharmacy as vial strength and directions.
+                    </p>
+                  </div>
+                  {formData.doses.map((dose, index) => (
+                    <div key={dose.id} className="space-y-3 rounded-md border border-gray-200 bg-white p-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Input
+                          label="Dose Label"
+                          value={dose.label}
+                          onChange={(e) => updateDose(index, { label: e.target.value })}
+                        />
+                        <Input
+                          label="Price"
+                          type="number"
+                          value={dose.price}
+                          onChange={(e) => updateDose(index, { price: Number(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <Input
+                        label="Pharmacy Vial / Strength"
+                        value={dose.strength}
+                        onChange={(e) => updateDose(index, { strength: e.target.value })}
+                      />
+                      <Textarea
+                        label="Pharmacy Instructions"
+                        value={dose.prescriptionLabel ?? ""}
+                        onChange={(e) => updateDose(index, { prescriptionLabel: e.target.value })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               {formError && <p className="text-sm text-red-500">{formError}</p>}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button fullWidth onClick={handleSave}>
@@ -159,12 +210,7 @@ export default function ProductsManagement() {
                   onClick={() => {
                     setShowForm(false);
                     setEditingId(null);
-                    setFormData({
-                      name: "",
-                      description: "",
-                      startingPrice: 0,
-                      eligibilityNote: "",
-                    });
+                    setFormData(emptyFormData);
                   }}
                 >
                   Cancel

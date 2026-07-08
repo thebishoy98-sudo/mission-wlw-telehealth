@@ -283,7 +283,7 @@ export interface Payment {
   amount: number;
   currency: "USD";
   status: PaymentStatus;
-  paymentMethod: "credit_card" | "debit_card";
+  paymentMethod: "credit_card" | "debit_card" | "promo_comp";
   cardLast4: string;
   cardBrand: string;
   transactionId: string;

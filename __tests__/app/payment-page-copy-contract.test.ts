@@ -5,7 +5,7 @@ describe("payment page launch copy", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/start/payment/page.tsx"), "utf8");
 
   it("does not show test-mode copy to patients when payment is enabled", () => {
-    expect(source).toContain("paymentsDisabled ? \"Payment disabled\" : \"Secure payment\"");
+    expect(source).toContain("paymentsDisabled ? \"Payment disabled\" : isCompedCheckout ? \"No card required\" : \"Secure payment\"");
     expect(source).not.toContain(">Test payment mode<");
   });
 
@@ -14,7 +14,7 @@ describe("payment page launch copy", () => {
     expect(source).toContain("if (!productReady) return");
     expect(source).toContain("if (!paymentsDisabled &&");
     expect(source).toContain("paymentsDisabled ? \"Submit order\"");
-    expect(source).toContain("!paymentsDisabled && (");
+    expect(source).toContain("!paymentsDisabled && !isCompedCheckout && (");
   });
 
   it("does not call the configured charge override a test charge in the patient checkout", () => {
@@ -32,5 +32,13 @@ describe("payment page launch copy", () => {
     expect(source).toContain("Optional discount code");
     expect(source).toContain("discountCode: appliedCode || undefined");
     expect(source).not.toContain("Discount code is required");
+  });
+
+  it("lets a full discount submit a free order without card fields", () => {
+    expect(source).toContain("const isCompedCheckout = appliedCode && total <= 0");
+    expect(source).toContain("!paymentsDisabled && !isCompedCheckout &&");
+    expect(source).toContain("paymentsDisabled || isCompedCheckout");
+    expect(source).toContain("Submit free order");
+    expect(source).toContain("No card is required for this fully discounted order.");
   });
 });
