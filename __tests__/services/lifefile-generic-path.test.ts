@@ -97,17 +97,17 @@ describe("lifefile generic path — Retatrutide", () => {
   it.each([
     [
       "retatrutide_16mg_8_week",
-      "16mg/1mL vial",
-      "Take 12.5 units sub Q injection (2mg) once a week for 8 weeks.",
+      "RETA 16mg: 1mL Vial",
+      "Take 12.5 units (2mg) subcutaneous injection once a week for eight weeks.",
     ],
     [
       "retatrutide_32mg_8_week",
-      "32mg/2mL vial",
+      "RETA 32mg: 2mL Vial",
       "Take 25 units (4mg) subcutaneous injection once a week for eight weeks.",
     ],
     [
       "retatrutide_48mg_8_week",
-      "48mg/3mL vial",
+      "RETA 48mg: 3mL Vial",
       "Take 37.5 units (6mg) subcutaneous injection once a week for eight weeks.",
     ],
   ])("sends exact RETA vial strength and SIG for %s", async (doseId, expectedStrength, expectedDirections) => {
