@@ -38,6 +38,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
     ],
     admin: [
       { label: "Dashboard", href: "/admin" },
+      { label: "Analytics", href: "/admin/analytics" },
       { label: "Orders", href: "/admin/orders" },
       { label: "Subscriptions", href: "/admin/subscriptions" },
       { label: "Abandoned", href: "/admin/abandoned-checkouts" },

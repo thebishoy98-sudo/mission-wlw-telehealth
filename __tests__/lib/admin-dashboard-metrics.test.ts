@@ -6,7 +6,12 @@ import {
 } from "@/lib/admin-dashboard-metrics";
 import type { Order, Payment, Patient } from "@/types";
 
-const order = (id: string, patientId: string, paymentStatus: Order["paymentStatus"]): Order => ({
+const order = (
+  id: string,
+  patientId: string,
+  paymentStatus: Order["paymentStatus"],
+  overrides: Partial<Order> = {}
+): Order => ({
   id,
   patientId,
   productId: "product_tirzepatide",
@@ -18,6 +23,7 @@ const order = (id: string, patientId: string, paymentStatus: Order["paymentStatu
   quickbooksStatus: "pending",
   createdAt: "2026-06-10T00:00:00.000Z",
   updatedAt: "2026-06-10T00:00:00.000Z",
+  ...overrides,
 });
 
 const payment = (orderId: string, status: Payment["status"], amount: number): Payment => ({
@@ -135,6 +141,36 @@ describe("admin dashboard metrics", () => {
       { count: 1, name: "Tirzepatide", revenue: 349 },
       { count: 1, name: "Retatrutide", revenue: 325 },
     ]);
+  });
+
+  it("splits monthly revenue into new-order vs subscription-renewal and counts new customers by first paid order", () => {
+    const orders = [
+      // Patient A: first order in June (new), then a July subscription renewal.
+      order("order_a_new", "patient_a", "completed", { createdAt: "2026-06-05T00:00:00.000Z" }),
+      order("order_a_renewal", "patient_a", "completed", {
+        createdAt: "2026-07-05T00:00:00.000Z",
+        isRefill: true,
+        subscriptionId: "sub_a",
+      }),
+      // Patient B: brand-new customer, first order in July.
+      order("order_b_new", "patient_b", "completed", { createdAt: "2026-07-15T00:00:00.000Z" }),
+    ];
+
+    const analytics = buildAdminAnalytics({
+      orders,
+      payments: [
+        payment("order_a_new", "completed", 300),
+        payment("order_a_renewal", "completed", 300),
+        payment("order_b_new", "completed", 400),
+      ],
+      now: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    const june = analytics.monthly.find((month) => month.key === "2026-06");
+    const july = analytics.monthly.find((month) => month.key === "2026-07");
+
+    expect(june).toMatchObject({ revenue: 300, newRevenue: 300, subscriptionRevenue: 0, newCustomers: 1 });
+    expect(july).toMatchObject({ revenue: 700, newRevenue: 400, subscriptionRevenue: 300, newCustomers: 1 });
   });
 
   it("excludes failed payment-link retry attempts until the retry completes", () => {

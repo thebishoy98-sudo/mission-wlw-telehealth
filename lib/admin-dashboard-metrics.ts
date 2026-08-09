@@ -87,9 +87,27 @@ export function buildAdminAnalytics({
     monthKeys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
   }
 
-  const monthlyMap: Record<string, { orders: number; patients: Set<string>; revenue: number }> = {};
+  const monthlyMap: Record<
+    string,
+    { orders: number; patients: Set<string>; revenue: number; newRevenue: number; subscriptionRevenue: number }
+  > = {};
   for (const key of monthKeys) {
-    monthlyMap[key] = { orders: 0, patients: new Set(), revenue: 0 };
+    monthlyMap[key] = { orders: 0, patients: new Set(), revenue: 0, newRevenue: 0, subscriptionRevenue: 0 };
+  }
+
+  // First-ever paid order per patient = when that patient became a paying customer.
+  const firstPaidOrderAt = new Map<string, number>();
+  for (const order of paidOrders) {
+    const time = new Date(order.createdAt).getTime();
+    const existing = firstPaidOrderAt.get(order.patientId);
+    if (existing === undefined || time < existing) firstPaidOrderAt.set(order.patientId, time);
+  }
+  const newCustomersByMonth: Record<string, number> = {};
+  for (const key of monthKeys) newCustomersByMonth[key] = 0;
+  for (const time of firstPaidOrderAt.values()) {
+    const date = new Date(time);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    if (key in newCustomersByMonth) newCustomersByMonth[key]++;
   }
 
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -119,7 +137,12 @@ export function buildAdminAnalytics({
     month.orders++;
     month.patients.add(order.patientId);
     const payment = paymentByOrder.get(order.id);
-    if (isCompletedPayment(payment)) month.revenue += paymentAmount(payment);
+    if (isCompletedPayment(payment)) {
+      const amount = paymentAmount(payment);
+      month.revenue += amount;
+      if (order.isRefill) month.subscriptionRevenue += amount;
+      else month.newRevenue += amount;
+    }
   }
 
   const productMix: Record<string, { count: number; name: string; revenue: number }> = {};
@@ -149,6 +172,9 @@ export function buildAdminAnalytics({
         orders: monthlyMap[key].orders,
         patients: monthlyMap[key].patients.size,
         revenue: monthlyMap[key].revenue,
+        newRevenue: monthlyMap[key].newRevenue,
+        subscriptionRevenue: monthlyMap[key].subscriptionRevenue,
+        newCustomers: newCustomersByMonth[key],
       };
     }),
     productMix: Object.values(productMix).sort((a, b) => b.count - a.count),
