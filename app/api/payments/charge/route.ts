@@ -391,6 +391,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
+    if (baseChargeAmount === null) {
+      return NextResponse.json({ error: "Order amount could not be determined." }, { status: 422 });
+    }
+
     if (!bypassQuickBooksPayment) {
       referralOffer = !isReorder && !order.isRefill
         ? await getReferralOffer(order.refCode ?? orderData?.refCode, patient.id, orderId)
