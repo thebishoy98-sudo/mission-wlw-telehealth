@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         ? orderData.reorderSourceOrderId
         : "";
     const bypassQuickBooksPayment = shouldBypassQuickBooksPayment();
-    const baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
+    let baseChargeAmount = bypassQuickBooksPayment ? 0.01 : getChargeAmount(amount);
     let promoDiscountAmount = 0;
     let candidatePromoCode = "";
     let candidatePromoId = "";
@@ -183,6 +183,11 @@ export async function POST(req: NextRequest) {
       }
     }
     const persistedDose = resolvePersistedDose(persistedProduct, productData ?? null, orderData?.doseId);
+    // The selected dose is the source of truth. Never charge a stale amount
+    // left in the browser after a dose dropdown change.
+    if (!bypassQuickBooksPayment && persistedDose?.price != null) {
+      baseChargeAmount = getChargeAmount(persistedDose.price);
+    }
 
     // Patient must exist before the order because orders.patient_id has an FK. Repeated
     // checkout retries may reuse the same email with a new browser-generated patient id.

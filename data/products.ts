@@ -275,6 +275,8 @@ export function normalizeProducts(products: Product[]): Product[] {
 
 function isCustomerVisibleProduct(product: Product): boolean {
   const text = `${product.name} ${product.slug}`.toLowerCase();
+  // Retatrutide is no longer available for new or repeat customer orders.
+  if (product.id === "product_retatrutide" || product.slug === "retatrutide" || /retatrutide/.test(text)) return false;
   if (/\b(demo|test|prod|sample|placeholder)\b/.test(text)) return false;
   return product.isActive !== false;
 }

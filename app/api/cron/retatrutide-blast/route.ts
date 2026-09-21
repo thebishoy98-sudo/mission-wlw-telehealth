@@ -1,7 +1,8 @@
 /**
- * Cron: Retatrutide Launch Blast
+ * Cron: Retatrutide migration notice
  *
- * One-time marketing SMS to active patients NOT already on Retatrutide.
+ * Notify active Retatrutide patients that the product is unavailable and they
+ * will be moved to Tirzepatide at the corresponding dose.
  * Idempotent — skips patients who already received the blast (logged).
  * Protected via CRON_SECRET.
  */
@@ -25,12 +26,13 @@ export async function GET(req: NextRequest) {
     const { rows } = await sql`
       SELECT DISTINCT ON (o.patient_id)
         o.patient_id,
+        o.dose_id,
         p.phone,
         p.first_name
       FROM orders o
       JOIN patients p ON o.patient_id = p.id
       WHERE o.status NOT IN ('cancelled', 'draft', 'refunded')
-        AND o.product_id != 'product_retatrutide'
+        AND o.product_id = 'product_retatrutide'
         AND p.phone IS NOT NULL
       ORDER BY o.patient_id, o.created_at DESC
     `;
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
         SELECT 1 FROM integration_logs
         WHERE action = 'SMS sent'
           AND patient_id = ${row.patient_id}
-          AND details->>'templateKey' = 'retatrutide_launch'
+          AND details->>'templateKey' = 'retatrutide_unavailable'
         LIMIT 1
       `.catch(() => ({ rows: [] as unknown[] }));
 
@@ -52,9 +54,9 @@ export async function GET(req: NextRequest) {
 
       try {
         const patient = { id: row.patient_id, phone: row.phone, firstName: row.first_name } as any;
-        await spruceServer.sendMessage(patient, "retatrutide_launch", {
+        await spruceServer.sendMessage(patient, "retatrutide_unavailable", {
           patientName: row.first_name,
-          ctaUrl: `${baseUrl}?ref=blast_reta`,
+          doseLabel: String(row.dose_id ?? "your current dose"),
         });
         results.push({ patientId: row.patient_id, status: "sent" });
       } catch (err: any) {

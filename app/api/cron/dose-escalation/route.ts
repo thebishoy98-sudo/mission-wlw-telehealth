@@ -28,8 +28,8 @@ export async function GET(req: NextRequest) {
       SELECT
         o.id,
         o.patient_id,
-        o.product_id,
         o.dose_id,
+        o.product_id,
         po.shipped_at,
         p.phone,
         p.first_name
@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
         await spruceServer.sendMessage(patient, "dose_escalation_nudge", {
           orderId: row.id,
           patientName: row.first_name,
+          doseLabel: String(row.dose_id ?? "your current dose"),
           reorderUrl: `${baseUrl}/patient/reorder?patientId=${encodeURIComponent(row.patient_id)}`,
         });
         results.push({ orderId: row.id, patientId: row.patient_id, status: "sent" });
