@@ -220,6 +220,13 @@ export async function GET(req: NextRequest) {
         } catch (chargeErr) {
           const errorMessage = (chargeErr as Error).message;
           await dbServer.orderDb.update(reviewOrder.id, { paymentStatus: "failed" }).catch(() => {});
+          const { rows: failedAttempts } = await dbServer.sql`
+            SELECT COUNT(*)::int AS count FROM integration_logs
+            WHERE order_id = ${reviewOrder.id}
+              AND action = 'Subscription auto-charge failed'
+          `.catch(() => ({ rows: [{ count: 0 }] }));
+          const attemptCount = Number(failedAttempts[0]?.count ?? 0) + 1;
+          const attemptsExhausted = attemptCount >= 3;
           const { token } = createPaymentLinkToken(reviewOrder.id);
           const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
           await spruceServer.sendMessage(patient, "subscription_payment_failed", {
@@ -234,7 +241,9 @@ export async function GET(req: NextRequest) {
             reason: `Automatic week-seven charge failed: ${errorMessage}`,
           }).catch(() => {});
           await dbServer.subscriptionDb.update(sub.id, {
-            nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
+            // A declined card gets at most three automatic attempts. The
+            // patient can still pay the link sent above or contact support.
+            nextRunAt: new Date(Date.parse(now) + (attemptsExhausted ? 3650 : DUNNING_RETRY_DAYS) * DAY_MS).toISOString(),
             lastOrderId: reviewOrder.id,
           });
           await logSubscriptionEvent(
@@ -242,7 +251,7 @@ export async function GET(req: NextRequest) {
             sub.id,
             reviewOrder.id,
             patient.id,
-            { amount: billingAmount, referralCreditAvailable: availableReferralCredit },
+            { amount: billingAmount, referralCreditAvailable: availableReferralCredit, attemptCount, attemptsExhausted },
             "error",
             errorMessage
           );

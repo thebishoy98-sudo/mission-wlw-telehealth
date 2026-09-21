@@ -1493,9 +1493,7 @@ function pqHeaders() {
 const pqBase = () => serviceConfig.practiceq.baseUrl.replace(/\/$/, "");
 
 async function fetchPracticeQWithRetry(input: string, init?: RequestInit): Promise<Response> {
-  // Do not repeat a failed request automatically. In particular, retries can
-  // cause an upstream operation to be interpreted as a second charge/order.
-  const attempts = Math.max(1, Number(process.env.PRACTICEQ_API_RETRY_ATTEMPTS ?? 1));
+  const attempts = Math.max(1, Number(process.env.PRACTICEQ_API_RETRY_ATTEMPTS ?? 3));
   let response: Response | null = null;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
