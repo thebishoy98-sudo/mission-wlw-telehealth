@@ -449,6 +449,7 @@ export async function GET(req: NextRequest) {
           productName: product?.name ?? sub.productId,
           doseId: sub.doseId,
           doseLabel: dose ? [dose.label, dose.strength].filter(Boolean).join(" — ") : sub.doseId,
+          dosePrice: Number(dose?.price ?? product?.startingPrice ?? 0),
               doses: (product?.doses ?? []).map((d) => ({
                 id: d.id,
                 label: [d.label, d.strength].filter(Boolean).join(" — "),

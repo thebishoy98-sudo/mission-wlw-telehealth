@@ -39,6 +39,7 @@ export async function GET(req: Request) {
         status: sub.status,
         productName: product?.name ?? "Treatment",
         doseLabel: dose ? [dose.label, dose.strength].filter(Boolean).join(" — ") : "",
+        dosePrice: dose?.price ?? product?.startingPrice ?? 0,
         intervalWeeks: Math.round(sub.intervalDays / 7),
         nextRunAt: sub.nextRunAt ?? null,
         coversThrough: sub.coversThrough ?? null,

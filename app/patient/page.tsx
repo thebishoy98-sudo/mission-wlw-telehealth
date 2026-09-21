@@ -259,6 +259,7 @@ type PatientSubscription = {
   status: string;
   productName: string;
   doseLabel: string;
+  dosePrice: number;
   intervalWeeks: number;
   nextRunAt: string | null;
   coversThrough: string | null;
@@ -320,7 +321,7 @@ function SubscriptionSection() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{sub.productName}</p>
-                  {sub.doseLabel && <p className="text-sm text-gray-500">{sub.doseLabel}</p>}
+                  {sub.doseLabel && <p className="text-sm text-gray-500">{sub.doseLabel} — {formatCurrency(sub.dosePrice)}</p>}
                   <p className="mt-1 text-xs text-gray-500">
                     Ships automatically every {sub.intervalWeeks} weeks.
                     {sub.nextRunAt ? ` Next order: ${formatDateTime(sub.nextRunAt)}.` : ""}

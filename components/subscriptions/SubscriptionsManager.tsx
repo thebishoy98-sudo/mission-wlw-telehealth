@@ -28,6 +28,7 @@ type SubscriptionRow = {
   productName: string;
   doseId: string;
   doseLabel: string;
+  dosePrice: number;
   doses: DoseOption[];
   intervalDays: number;
   coversThrough: string | null;
@@ -353,7 +354,7 @@ export function SubscriptionsManager({
                       )}
                     </div>
                     <p className="mt-1 text-sm text-gray-600">
-                      {sub.productName} — {sub.doseLabel}
+                      {sub.productName} — {sub.doseLabel} (${sub.dosePrice.toFixed(2)})
                     </p>
                     {sub.status === "active" && (
                       <div className="mt-3 flex flex-wrap items-end gap-2">
