@@ -41,6 +41,7 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
       { label: "Analytics", href: "/admin/analytics" },
       { label: "Orders", href: "/admin/orders" },
       { label: "Subscriptions", href: "/admin/subscriptions" },
+      { label: "Treatment changes", href: "/admin/treatment-changes" },
       { label: "Abandoned", href: "/admin/abandoned-checkouts" },
       { label: "Products", href: "/admin/products" },
       { label: "Notifications", href: "/admin/notifications" },

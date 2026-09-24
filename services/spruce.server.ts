@@ -40,7 +40,7 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
   intake_abandonment_24h: "{{firstName}}, your Mission WLW consultation is still waiting. GLP-1 therapy has helped thousands lose 20–40% of body weight. Ready to start? {{ctaUrl}}",
   retatrutide_launch: "{{patientName}}, exciting news! Mission WLW now offers Retatrutide — the newest triple-agonist GLP-1 showing up to 24% body weight loss in clinical trials. Be among the first: {{ctaUrl}}",
   dose_escalation_nudge: "Hey {{patientName}}, you've been making great progress! Your next treatment dose is {{doseLabel}}. Ready to continue? Reorder here: {{reorderUrl}}",
-  retatrutide_unavailable: "Hi {{patientName}}, Retatrutide is no longer available. We will move you to Tirzepatide at the same dose ({{doseLabel}}) for your next treatment. Our care team will contact you with next steps.",
+  retatrutide_unavailable: "Hi {{patientName}}, Retatrutide is no longer available. Our care team will review a possible switch to Tirzepatide with your prescribing provider and confirm your new prescription and price before proceeding.",
   weekly_checkin_week2: "Hey {{patientName}}, it's been 2 weeks on your new medication — how are you feeling? Most patients notice appetite changes around now. Any questions for your provider? Just reply.",
   weekly_checkin_week4: "{{patientName}}, you're almost halfway through your first cycle! Any questions for your provider? We're here to help — just reply to this text.",
   weekly_checkin_week6: "{{patientName}}, you're nearing the end of your first cycle — amazing work! Now's a great time to plan your refill so there's no gap in treatment. Reply or visit: {{ctaUrl}}",

@@ -28,6 +28,8 @@ import type { Order } from "@/types";
 import { calculateReferralPricing } from "@/lib/referral-pricing";
 import { getReferralBalance, recordReferralCreditSpend } from "@/lib/referral-credit.server";
 
+import { reserveSubscriptionAttempt } from "@/lib/subscription-billing-attempt";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DUNNING_RETRY_DAYS = 3;
 
@@ -84,6 +86,12 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      if (product.slug === "retatrutide" || sub.productId === "product_retatrutide") {
+        await dbServer.subscriptionDb.update(sub.id, { status: "paused" });
+        results.push({ subscriptionId: sub.id, action: "paused_pending_treatment_change" });
+        continue;
+      }
+
       const dose = product.doses?.find((d) => d.id === sub.doseId);
       // A one-off adjustment (e.g. accidental over-shipment) can override the
       // charge amount and suppress dispatch for this run only.
@@ -100,23 +108,37 @@ export async function GET(req: NextRequest) {
       const hasCardOnFile = Boolean(patient.qbCardId && patient.recurringConsentAt);
 
       const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+      let attemptCount = 0;
+      if (hasCardOnFile && autocharge) {
+        const reservation = await reserveSubscriptionAttempt(sub.id);
+        if (!reservation.allowed) {
+          if (reservation.exhausted) await dbServer.subscriptionDb.update(sub.id, { status: "paused" });
+          results.push({ subscriptionId: sub.id, action: reservation.exhausted ? "paused_attempt_limit" : "skipped_already_claimed" });
+          continue;
+        }
+        attemptCount = reservation.attempt;
+      }
+
 
       // ── One-off admin-scheduled charge-only adjustment (over-shipment) ────────
       // Explicitly authorized by an admin: charge the card on file, do NOT ship.
       if (suppressDispatch && hasCardOnFile && autocharge) {
         const order = await createRefillOrder(sub, patient, lastOrder);
+        let captured = false;
         try {
+          if ((await dbServer.subscriptionDb.getById(sub.id))?.status !== "active") continue;
           const chargeResult = await qbPayments.chargeStoredCard(order.id, patient.id, amount, {
             customerId: sub.qbCustomerId ?? "",
             cardId: patient.qbCardId!,
             cardLast4: patient.cardLast4,
             cardBrand: patient.cardBrand,
           });
+          captured = true;
           await fulfillChargedRefillOrder({
             order, patient, product, amount, chargeResult, subscription: sub, suppressDispatch: true,
           });
           const cycle = advanceCycle(sub.coversThrough, now, sub.intervalDays, sub.leadDays);
-          await dbServer.subscriptionDb.update(sub.id, { ...cycle, lastOrderId: order.id, lastChargedAt: now });
+          await dbServer.subscriptionDb.update(sub.id, { ...cycle, lastOrderId: order.id, lastChargedAt: new Date().toISOString() });
           await dbServer.subscriptionDb.clearNextChargeAdjustment(sub.id);
           await spruceServer
             .sendMessage(patient, "subscription_charged_no_ship", {
@@ -135,10 +157,17 @@ export async function GET(req: NextRequest) {
           }).catch(() => {});
           results.push({ subscriptionId: sub.id, action: "auto_charged_no_dispatch", orderId: order.id });
         } catch (chargeErr) {
+          if (captured) {
+            await dbServer.subscriptionDb.update(sub.id, { status: "paused", lastChargedAt: new Date().toISOString() });
+            await logSubscriptionEvent("Captured payment needs reconciliation", sub.id, undefined, patient.id, {}, "error", (chargeErr as Error).message);
+            results.push({ subscriptionId: sub.id, action: "paused_after_capture_error" });
+            continue;
+          }
           await dbServer.orderDb.update(order.id, { paymentStatus: "failed" }).catch(() => {});
           await logSubscriptionEvent(
-            "Subscription charge-only failed", sub.id, order.id, patient.id, { amount }, "error", (chargeErr as Error).message
+            "Subscription charge-only failed", sub.id, order.id, patient.id, { amount, billingAttemptReserved: true, attemptCount }, "error", (chargeErr as Error).message
           );
+          if (attemptCount >= 3) await dbServer.subscriptionDb.update(sub.id, { status: "paused" });
           results.push({ subscriptionId: sub.id, action: "charge_only_failed", orderId: order.id });
         }
         continue;
@@ -164,7 +193,9 @@ export async function GET(req: NextRequest) {
       const billingAmount = referralPricing.chargeAmount;
 
       if (hasCardOnFile && autocharge) {
+        let captured = false;
         try {
+          if ((await dbServer.subscriptionDb.getById(sub.id))?.status !== "active") continue;
           const chargeResult = await qbPayments.chargeStoredCard(reviewOrder.id, patient.id, billingAmount, {
             customerId: sub.qbCustomerId ?? "",
             cardId: patient.qbCardId!,
@@ -172,6 +203,7 @@ export async function GET(req: NextRequest) {
             cardBrand: patient.cardBrand,
             requestId: reviewOrder.id,
           });
+          captured = true;
           if (referralPricing.creditApplied > 0) {
             const spent = await recordReferralCreditSpend({
               patientId: patient.id,
@@ -192,7 +224,7 @@ export async function GET(req: NextRequest) {
           await dbServer.subscriptionDb.update(sub.id, {
             ...cycle,
             lastOrderId: reviewOrder.id,
-            lastChargedAt: now,
+            lastChargedAt: new Date().toISOString(),
           });
           await spruceServer.sendMessage(patient, "subscription_charged", {
             orderId: reviewOrder.id,
@@ -218,14 +250,14 @@ export async function GET(req: NextRequest) {
             dispatched: fulfillment.dispatched,
           });
         } catch (chargeErr) {
+          if (captured) {
+            await dbServer.subscriptionDb.update(sub.id, { status: "paused", lastChargedAt: new Date().toISOString() });
+            await logSubscriptionEvent("Captured payment needs reconciliation", sub.id, undefined, patient.id, {}, "error", (chargeErr as Error).message);
+            results.push({ subscriptionId: sub.id, action: "paused_after_capture_error" });
+            continue;
+          }
           const errorMessage = (chargeErr as Error).message;
           await dbServer.orderDb.update(reviewOrder.id, { paymentStatus: "failed" }).catch(() => {});
-          const { rows: failedAttempts } = await dbServer.sql`
-            SELECT COUNT(*)::int AS count FROM integration_logs
-            WHERE order_id = ${reviewOrder.id}
-              AND action = 'Subscription auto-charge failed'
-          `.catch(() => ({ rows: [{ count: 0 }] }));
-          const attemptCount = Number(failedAttempts[0]?.count ?? 0) + 1;
           const attemptsExhausted = attemptCount >= 3;
           const { token } = createPaymentLinkToken(reviewOrder.id);
           const payUrl = buildPaymentLinkUrl(getPublicBaseUrl(req), token);
@@ -243,7 +275,8 @@ export async function GET(req: NextRequest) {
           await dbServer.subscriptionDb.update(sub.id, {
             // A declined card gets at most three automatic attempts. The
             // patient can still pay the link sent above or contact support.
-            nextRunAt: new Date(Date.parse(now) + (attemptsExhausted ? 3650 : DUNNING_RETRY_DAYS) * DAY_MS).toISOString(),
+            status: attemptsExhausted ? "paused" : "active",
+            nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
             lastOrderId: reviewOrder.id,
           });
           await logSubscriptionEvent(
@@ -251,7 +284,7 @@ export async function GET(req: NextRequest) {
             sub.id,
             reviewOrder.id,
             patient.id,
-            { amount: billingAmount, referralCreditAvailable: availableReferralCredit, attemptCount, attemptsExhausted },
+            { amount: billingAmount, referralCreditAvailable: availableReferralCredit, attemptCount, attemptsExhausted, billingAttemptReserved: true },
             "error",
             errorMessage
           );
