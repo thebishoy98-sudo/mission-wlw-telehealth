@@ -275,7 +275,7 @@ export async function GET(req: NextRequest) {
           await dbServer.subscriptionDb.update(sub.id, {
             // A declined card gets at most three automatic attempts. The
             // patient can still pay the link sent above or contact support.
-            status: attemptsExhausted ? "paused" : "active",
+            ...(attemptsExhausted ? { status: "paused" as const } : {}),
             nextRunAt: new Date(Date.parse(now) + DUNNING_RETRY_DAYS * DAY_MS).toISOString(),
             lastOrderId: reviewOrder.id,
           });
