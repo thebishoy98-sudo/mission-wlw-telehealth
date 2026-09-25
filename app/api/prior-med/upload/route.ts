@@ -17,6 +17,7 @@ import { assertIdentityStorageReady, buildPriorPrescriptionUpload } from "@/serv
 import { sendAdminNotification } from "@/services/admin-notifications";
 import * as spruceServer from "@/services/spruce.server";
 import { actorFromHeaders, logPhiDisclosure } from "@/lib/phi-audit";
+import { analyzePriorPrescription, prescriptionAnalysisSummary } from "@/services/prior-prescription-analysis";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token")?.trim();
@@ -54,6 +55,9 @@ export async function POST(req: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+    if (!["pending_upload", "rejected"].includes(order.priorMedStatus ?? "")) {
+      return NextResponse.json({ error: "This prescription is already submitted or reviewed." }, { status: 409 });
+    }
 
     try {
       assertIdentityStorageReady();
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     db.uploadDb.create(upload);
-    await dbServer.uploadDb.create(upload).catch(() => {});
+    await dbServer.uploadDb.create(upload);
 
     const now = new Date().toISOString();
     const update = {
@@ -77,13 +81,33 @@ export async function POST(req: NextRequest) {
       priorMedReason: "Patient uploaded prior GLP-1 prescription — awaiting admin approval.",
     };
     db.orderDb.update(order.id, update);
-    await dbServer.orderDb.update(order.id, update).catch(() => {});
+    await dbServer.orderDb.update(order.id, update);
 
     const patient =
       (await dbServer.patientDb.getById(order.patientId).catch(() => null)) ??
       db.patientDb.getById(order.patientId);
 
     const patientName = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim() : "";
+    if (process.env.ANTHROPIC_API_KEY) {
+      const audit = actorFromHeaders(req.headers);
+      logPhiDisclosure(order.patientId, order.id, "anthropic", audit.actor ?? "patient-upload");
+    }
+    const analysis = await analyzePriorPrescription(imageData, patientName);
+    const summary = prescriptionAnalysisSummary(analysis);
+    // Never replace a human decision made while the model was running, or
+    // attach results from an older upload to a newer prescription.
+    await dbServer.sql`
+      UPDATE orders SET prior_med_reason = ${summary}, updated_at = NOW()
+      WHERE id = ${order.id} AND prior_med_status = 'submitted'
+        AND ${upload.id} = (SELECT id FROM uploads WHERE order_id = ${order.id}
+          AND type = 'prior_prescription' ORDER BY uploaded_at DESC, id DESC LIMIT 1)
+    `;
+    await dbServer.integrationLogDb.create({
+      id: `log_priormed_analysis_${upload.id}`, timestamp: new Date().toISOString(),
+      integrationName: "anthropic", action: "Prior prescription document analysis",
+      orderId: order.id, patientId: order.patientId, status: "success",
+      details: { uploadId: upload.id, ...analysis, requiresHumanReview: true },
+    });
     await sendAdminNotification("order_received", {
       orderId: order.id,
       patientId: order.patientId,

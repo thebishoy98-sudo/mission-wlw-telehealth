@@ -849,6 +849,7 @@ export default function OrdersManagement() {
                   <Card>
                     <CardContent className="p-6">
                       <h3 className="font-bold text-gray-900 mb-4">Prior GLP-1 Proof</h3>
+                      <p className="mb-3 text-sm text-gray-500">Claude extracts document details to assist review. Confidence describes text extraction, not prescription validity or suitability. Review the original prescription before approving.</p>
                       <div className="mb-4 space-y-2 text-sm">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-gray-700">Status:</span>
