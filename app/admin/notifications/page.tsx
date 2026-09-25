@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/Input";
 import type { AdminNotificationEvent, AdminNotificationSettings } from "@/types";
 
 const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
+  prior_prescription_review_needed: "Previous prescription uploaded - review needed",
+  pharmacy_submitted: "Order sent to pharmacy",
   identity_review_needed: "Identity review is needed",
   reorder_review_needed: "Back-to-back reorder needs review",
   subscription_charge_alert: "Subscription charge processed (e.g. over-shipment)",
@@ -20,6 +22,8 @@ const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
 const defaultSettings: AdminNotificationSettings = {
   phones: [],
   events: {
+    prior_prescription_review_needed: true,
+    pharmacy_submitted: true,
     identity_review_needed: true,
     reorder_review_needed: true,
     subscription_charge_alert: true,

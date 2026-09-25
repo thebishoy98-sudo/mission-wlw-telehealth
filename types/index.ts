@@ -499,6 +499,8 @@ export interface DiscountCode {
 }
 
 export type AdminNotificationEvent =
+  | "prior_prescription_review_needed"
+  | "pharmacy_submitted"
   | "identity_review_needed"
   | "reorder_review_needed"
   | "subscription_charge_alert"

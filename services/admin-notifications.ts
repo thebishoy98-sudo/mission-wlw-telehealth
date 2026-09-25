@@ -6,6 +6,8 @@ import type { AdminNotificationEvent, AdminNotificationSettings } from "@/types"
 const SETTINGS_KEY = "admin_notification_settings";
 
 const DEFAULT_EVENTS: Record<AdminNotificationEvent, boolean> = {
+  prior_prescription_review_needed: true,
+  pharmacy_submitted: true,
   identity_review_needed: true,
   reorder_review_needed: true,
   subscription_charge_alert: true,
@@ -60,6 +62,9 @@ export async function saveAdminNotificationSettings(input: unknown): Promise<Adm
 function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, string | undefined>) {
   const order = data.orderId ? `Order ${data.orderId}` : "An order";
   const patient = data.patientName ? ` for ${data.patientName}` : "";
+  if (event === "prior_prescription_review_needed") {
+    return `Mission WLW: Previous prescription uploaded${patient}. ${order}. Review the document and analysis in Admin > Orders before approval.`;
+  }
   if (event === "identity_review_needed") {
     return `Mission WLW: Identity review needed${patient}. ${order}.`;
   }
@@ -75,6 +80,9 @@ function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, 
     const detail = data.reason ? ` ${data.reason}` : "";
     return `Mission WLW: Refill due for dose review${patient}.${detail} Review & send in admin → Subscriptions.`;
   }
+  if (event === "pharmacy_submitted") {
+    return `Mission WLW: Order sent to pharmacy${patient}. ${order}. Review status in Admin > Orders.`;
+  }
   if (event === "pharmacy_shipped") {
     const tracking = data.trackingNumber ? ` Tracking: ${data.trackingNumber}.` : "";
     return `Mission WLW: Pharmacy shipped${patient}. ${order}.${tracking}`;
@@ -87,7 +95,14 @@ export async function sendAdminNotification(
   data: Record<string, string | undefined> = {}
 ) {
   const settings = await getAdminNotificationSettings();
-  if (!settings.events[event] || settings.phones.length === 0) return [];
+  if (!settings.events[event] || settings.phones.length === 0) {
+    await Promise.resolve(dbServer.integrationLogDb.create({
+      id: generateId(), timestamp: new Date().toISOString(), integrationName: "spruce",
+      action: "Admin notification skipped", orderId: data.orderId, patientId: data.patientId,
+      status: "error", details: { event, reason: !settings.events[event] ? "event_disabled" : "no_admin_phone" },
+    })).catch(() => {});
+    return [];
+  }
 
   const text = renderAdminMessage(event, data);
   const log = async (entry: Parameters<typeof dbServer.integrationLogDb.create>[0]) => {
@@ -98,7 +113,7 @@ export async function sendAdminNotification(
     }
   };
   const results = await Promise.all(settings.phones.map(async (phone) => {
-    const idempotencyKey = `admin_${event}_${data.orderId ?? "no_order"}_${phone.replace(/\D/g, "")}`;
+    const idempotencyKey = `admin_${event}_${data.orderId ?? "no_order"}_${data.eventId ? `${data.eventId}_` : ""}${phone.replace(/\D/g, "")}`;
     try {
       const response = await spruceServer.sendTextToPhone(phone, text, idempotencyKey);
       const duplicate = (response as { duplicate?: boolean })?.duplicate;
@@ -115,7 +130,7 @@ export async function sendAdminNotification(
         orderId: data.orderId,
         patientId: data.patientId,
         status: skipped ? "pending" : "success",
-        details: { event, phone },
+        details: { event, phone, eventId: data.eventId },
       });
       return { phone, status: duplicate ? "duplicate" : skipped ? "pending" : "sent" };
     } catch (error) {
@@ -127,7 +142,7 @@ export async function sendAdminNotification(
         orderId: data.orderId,
         patientId: data.patientId,
         status: "error",
-        details: { event, phone },
+        details: { event, phone, eventId: data.eventId },
         error: error instanceof Error ? error.message : String(error),
       });
       return { phone, status: "failed" };

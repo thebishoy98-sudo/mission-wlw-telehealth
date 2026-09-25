@@ -1,8 +1,12 @@
+import { sendAdminNotification } from "@/services/admin-notifications";
 import * as dbServer from "@/lib/db.server";
 import type { Patient } from "@/types";
 import * as spruceServer from "@/services/spruce.server";
 
 export async function sendOrderSentToPharmacyMessage(patient: Patient, orderId: string) {
+  await sendAdminNotification("pharmacy_submitted", {
+    orderId, patientId: patient.id, patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+  }).catch(() => {});
   const existingMessages = await dbServer.spruceMessageDb.getByOrder(orderId).catch(() => []);
   const alreadyRecorded = existingMessages.some((message) =>
     message.templateKey === "order_sent_to_pharmacy" &&

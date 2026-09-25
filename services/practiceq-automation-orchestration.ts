@@ -1,3 +1,5 @@
+import { findEstablishedOrder } from "@/lib/established-patient";
+import { getOrderDispatchGate } from "@/lib/order-gates";
 import type { Order, Patient } from "@/types";
 import * as db from "@/lib/db";
 import * as dbServer from "@/lib/db.server";
@@ -9,6 +11,7 @@ import { createPracticeQAutomationJob } from "@/services/practiceq-automation";
 type QueueSource = "payment_charge" | "identity_upload" | "identity_approval" | "identity_review";
 
 export type PracticeQQueueResult =
+  | { status: "skipped_existing_patient" }
   | { status: "queued"; jobId: string }
   | { status: "requeued"; jobId: string }
   | { status: "already_queued"; jobId: string }
@@ -60,6 +63,17 @@ export async function queuePracticeQAutomationForOrder({
   patient: Patient;
   source: QueueSource;
 }): Promise<PracticeQQueueResult> {
+  const prior = findEstablishedOrder(order, await dbServer.orderDb.getByPatient(order.patientId));
+  if (prior) {
+    await dbServer.orderDb.update(order.id, { practiceQStatus: "skipped" });
+    await dbServer.integrationLogDb.create({
+      id: generateId(), timestamp: new Date().toISOString(), integrationName: "practiceq",
+      action: "PracticeQ skipped for established patient", orderId: order.id, patientId: order.patientId,
+      status: "success", details: { source, priorOrderId: prior.id },
+    });
+    return { status: "skipped_existing_patient" };
+  }
+
   const existingJob = await dbServer.practiceqAutomationJobDb.getByOrder(order.id).catch(() => null);
 
   if (existingJob) {
@@ -111,6 +125,33 @@ export async function resumePracticeQAfterIdentityApproval({
   source: Exclude<QueueSource, "payment_charge">;
   wakeRemoteWorker?: () => Promise<void>;
 }): Promise<PracticeQResumeResult> {
+  // Only a paid, approved repeat order with all current review gates clear
+  // can proceed without another PracticeQ intake.
+  if (order.status === "approved" && order.paymentStatus === "completed" && getOrderDispatchGate(order).canDispatch) {
+    const prior = findEstablishedOrder(order, await dbServer.orderDb.getByPatient(order.patientId));
+    if (prior) {
+      const existing = await dbServer.pharmacyOrderDb.getByOrder(order.id);
+      if (existing && existing.status !== "error") return { status: "already_dispatched" };
+      const resolvedPatient = patient ?? await dbServer.patientDb.getById(order.patientId);
+      if (!resolvedPatient) return { status: "missing_patient" };
+      const product = await dbServer.productDb.getById(order.productId);
+      if (!product || !product.isActive || product.slug === "retatrutide" || !product.doses.some(d => d.id === order.doseId)) return { status: "not_ready" };
+      const pharmacy = await import("@/services/pharmacy");
+      const notifications = await import("@/services/order-notifications");
+      await dbServer.orderDb.update(order.id, { practiceQStatus: "skipped" });
+      const pharmacyOrder = await pharmacy.createPharmacyOrder(order, { patient: resolvedPatient, product });
+      await dbServer.pharmacyOrderDb.create(pharmacyOrder);
+      await dbServer.orderDb.update(order.id, { status: "sent_to_pharmacy", pharmacyStatus: "submitted" });
+      await notifications.sendOrderSentToPharmacyMessage(resolvedPatient, order.id).catch(() => {});
+      await dbServer.integrationLogDb.create({
+        id: generateId(), timestamp: new Date().toISOString(), integrationName: "system",
+        action: "Established patient dispatched without repeat PracticeQ", orderId: order.id, patientId: order.patientId,
+        status: "success", details: { source, priorOrderId: prior.id, pharmacyOrderId: pharmacyOrder.lifeFileOrderId },
+      });
+      return { status: "skipped_existing_patient" };
+    }
+  }
+
   if (!shouldRetryPracticeQCompletionAfterIdentityApproval(order)) {
     return { status: "not_ready" };
   }

@@ -38,6 +38,8 @@ describe("admin notifications", () => {
         reorder_review_needed: true,
         subscription_charge_alert: true,
         subscription_review_needed: true,
+        prior_prescription_review_needed: true,
+        pharmacy_submitted: true,
       },
     });
   });
@@ -88,4 +90,14 @@ describe("admin notifications", () => {
 
     expect(spruceServer.sendTextToPhone).not.toHaveBeenCalled();
   });
+});
+
+
+test("prescription upload alerts have independent, per-upload delivery keys", async () => {
+  (dbServer.appSettingDb.get as jest.Mock).mockResolvedValue({ phones: ["+15551112222"], events: {} });
+  (spruceServer.sendTextToPhone as jest.Mock).mockResolvedValue({});
+  await sendAdminNotification("prior_prescription_review_needed", { orderId: "order_123", eventId: "upload_1" });
+  await sendAdminNotification("prior_prescription_review_needed", { orderId: "order_123", eventId: "upload_2" });
+  expect(spruceServer.sendTextToPhone).toHaveBeenCalledWith("+15551112222", expect.stringContaining("Previous prescription uploaded"), "admin_prior_prescription_review_needed_order_123_upload_1_15551112222");
+  expect(spruceServer.sendTextToPhone).toHaveBeenCalledWith("+15551112222", expect.any(String), "admin_prior_prescription_review_needed_order_123_upload_2_15551112222");
 });

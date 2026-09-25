@@ -88,6 +88,13 @@ export async function POST(req: NextRequest) {
       db.patientDb.getById(order.patientId);
 
     const patientName = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim() : "";
+    await sendAdminNotification("prior_prescription_review_needed", {
+      orderId: order.id,
+      eventId: upload.id,
+      patientId: order.patientId,
+      patientName: patientName || `Order ${order.id.slice(-8)}`,
+    }).catch(() => {});
+
     if (process.env.ANTHROPIC_API_KEY) {
       const audit = actorFromHeaders(req.headers);
       logPhiDisclosure(order.patientId, order.id, "anthropic", audit.actor ?? "patient-upload");
@@ -108,12 +115,6 @@ export async function POST(req: NextRequest) {
       orderId: order.id, patientId: order.patientId, status: "success",
       details: { service: "anthropic", uploadId: upload.id, ...analysis, requiresHumanReview: true },
     });
-    await sendAdminNotification("order_received", {
-      orderId: order.id,
-      patientId: order.patientId,
-      patientName: patientName || `Order ${order.id.slice(-8)}`,
-    }).catch(() => {});
-
     await dbServer.integrationLogDb
       .create({
         id: `log_priormed_${Date.now()}`,

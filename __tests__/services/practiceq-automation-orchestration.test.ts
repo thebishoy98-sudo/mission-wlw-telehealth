@@ -8,6 +8,7 @@ const mockDbServer = {
     update: jest.fn(),
   },
   orderDb: {
+    getByPatient: jest.fn(),
     update: jest.fn(),
   },
   patientDb: {
@@ -101,8 +102,14 @@ const job: PracticeQAutomationJob = {
 };
 
 describe("PracticeQ automation orchestration", () => {
+  it("skips a new PracticeQ job for a paid, previously dispatched patient", async () => {
+    mockDbServer.orderDb.getByPatient.mockResolvedValue([{ ...order, id: "older", createdAt: "2026-01-01", pharmacyStatus: "delivered" }]);
+    expect(await queuePracticeQAutomationForOrder({ order, patient, source: "payment_charge" })).toEqual({ status: "skipped_existing_patient" });
+    expect(mockDbServer.practiceqAutomationJobDb.create).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDbServer.orderDb.getByPatient.mockResolvedValue([]);
     mockDbServer.practiceqAutomationJobDb.getByOrder.mockResolvedValue(null);
     mockDbServer.practiceqAutomationJobDb.getActiveByPatient.mockResolvedValue(null);
     mockDbServer.practiceqAutomationJobDb.create.mockResolvedValue(job);
