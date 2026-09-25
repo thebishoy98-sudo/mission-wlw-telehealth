@@ -104,9 +104,9 @@ export async function POST(req: NextRequest) {
     `;
     await dbServer.integrationLogDb.create({
       id: `log_priormed_analysis_${upload.id}`, timestamp: new Date().toISOString(),
-      integrationName: "anthropic", action: "Prior prescription document analysis",
+      integrationName: "system", action: "Prior prescription document analysis",
       orderId: order.id, patientId: order.patientId, status: "success",
-      details: { uploadId: upload.id, ...analysis, requiresHumanReview: true },
+      details: { service: "anthropic", uploadId: upload.id, ...analysis, requiresHumanReview: true },
     });
     await sendAdminNotification("order_received", {
       orderId: order.id,
