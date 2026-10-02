@@ -47,6 +47,8 @@ export interface Product {
   isActive: boolean;
   faqs?: FAQ[];
   createdAt: string;
+  /** Peptide shop category (e.g. "Recovery & Repair"). Unset for prescription GLP-1 products. */
+  category?: string;
 }
 
 export interface DoseOption {

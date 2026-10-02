@@ -150,10 +150,11 @@ export const bpc157Product: Product = {
     },
   ],
   eligibilityNote:
-    "Final eligibility and directions are determined by a licensed provider after review.",
+    "A research/wellness peptide sold directly — no medical questionnaire or provider review required to order.",
   isActive: true,
   faqs: [],
   createdAt,
+  category: "Recovery & Repair",
 };
 
 export const motCProduct: Product = {
@@ -180,10 +181,11 @@ export const motCProduct: Product = {
     },
   ],
   eligibilityNote:
-    "Final eligibility and directions are determined by a licensed provider after review.",
+    "A research/wellness peptide sold directly — no medical questionnaire or provider review required to order.",
   isActive: true,
   faqs: [],
   createdAt,
+  category: "Energy & Metabolism",
 };
 
 export const semaglutideProduct: Product = {
@@ -262,6 +264,7 @@ export function normalizeProduct(product: Product): Product {
     doses: canonical.doses,
     eligibilityNote: canonical.eligibilityNote,
     faqs: canonical.faqs,
+    category: canonical.category,
   };
 }
 
