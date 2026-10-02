@@ -6,6 +6,7 @@ import { ShoppingCart, Minus, Plus, X } from "lucide-react";
 import * as Types from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { addToCart, getCart, getCartCount, removeFromCart, updateCartQuantity, type CartItem } from "@/lib/cart-store";
+import { ShopTopBar } from "@/components/peptides/ShopTopBar";
 
 const ALL_CATEGORY = "All Peptides";
 
@@ -65,6 +66,8 @@ export default function PeptideShop() {
 
   return (
     <div className="min-h-screen bg-cream-100">
+      <ShopTopBar />
+
       {/* Header */}
       <div className="bg-forest-800 text-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 flex items-center justify-between gap-4">

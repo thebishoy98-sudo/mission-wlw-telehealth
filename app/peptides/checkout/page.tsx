@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils";
 import { clearCart, getCart, type CartItem } from "@/lib/cart-store";
+import { ShopTopBar } from "@/components/peptides/ShopTopBar";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA",
@@ -98,19 +99,24 @@ export default function PeptideCheckout() {
 
   if (!loading && lines.length === 0) {
     return (
-      <div className="min-h-screen bg-cream-100 flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl p-8 text-center max-w-sm">
-          <p className="text-gray-600 mb-4">Your cart is empty.</p>
-          <Link href="/peptides" className="text-forest-800 font-semibold text-sm">
-            Browse peptides &rarr;
-          </Link>
+      <div className="min-h-screen bg-cream-100">
+        <ShopTopBar />
+        <div className="flex items-center justify-center px-4 py-20">
+          <div className="bg-white rounded-2xl p-8 text-center max-w-sm">
+            <p className="text-gray-600 mb-4">Your cart is empty.</p>
+            <Link href="/peptides" className="text-forest-800 font-semibold text-sm">
+              Browse peptides &rarr;
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-cream-100 py-10 px-4">
+    <div className="min-h-screen bg-cream-100">
+      <ShopTopBar />
+      <div className="py-10 px-4">
       <form onSubmit={handleSubmit} className="max-w-3xl mx-auto grid md:grid-cols-[1fr_280px] gap-6">
         <div className="space-y-5">
           <h1 className="text-2xl font-bold text-forest-800">Checkout</h1>
@@ -236,6 +242,7 @@ export default function PeptideCheckout() {
           </p>
         </div>
       </form>
+      </div>
     </div>
   );
 }
