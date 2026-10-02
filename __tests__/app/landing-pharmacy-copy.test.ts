@@ -5,10 +5,6 @@ describe("landing pharmacy copy", () => {
   it("uses US-based pharmacy copy instead of Licensed 503B Pharmacy labels", () => {
     const hero = readFileSync(path.join(process.cwd(), "components", "landing", "Hero.tsx"), "utf8");
     const pricingCards = readFileSync(path.join(process.cwd(), "components", "landing", "PricingCards.tsx"), "utf8");
-    const retatrutideModal = readFileSync(
-      path.join(process.cwd(), "components", "landing", "RetatrutideModal.tsx"),
-      "utf8"
-    );
     const howItWorks = readFileSync(path.join(process.cwd(), "components", "landing", "HowItWorks.tsx"), "utf8");
     const timeline = readFileSync(path.join(process.cwd(), "components", "landing", "Timeline.tsx"), "utf8");
     const lifestyle = readFileSync(path.join(process.cwd(), "components", "landing", "LifestyleSection.tsx"), "utf8");
@@ -19,7 +15,6 @@ describe("landing pharmacy copy", () => {
     const source = [
       hero,
       pricingCards,
-      retatrutideModal,
       howItWorks,
       timeline,
       lifestyle,

@@ -10,7 +10,7 @@ import { WeightLossCalculator } from "@/components/landing/WeightLossCalculator"
 import { LifestyleSection } from "@/components/landing/LifestyleSection";
 import { Timeline } from "@/components/landing/Timeline";
 import { PricingCards } from "@/components/landing/PricingCards";
-import { RetatrutideModal } from "@/components/landing/RetatrutideModal";
+import { PeptideShopTeaser } from "@/components/landing/PeptideShopTeaser";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { StickyCtaBar } from "@/components/landing/StickyCtaBar";
 import { LandingFaq } from "@/components/landing/LandingFaq";
@@ -53,13 +53,13 @@ function LandingPage() {
         <Timeline />
         <Testimonials />
         <PricingCards ctaUrl={ctaUrl} />
+        <PeptideShopTeaser />
         <LandingFaq />
         <LandingFooter ctaUrl={ctaUrl} />
       </main>
 
       <StickyCtaBar ctaUrl={ctaUrl} />
       <AiChat />
-      <RetatrutideModal ctaUrl={ctaUrl} />
     </div>
   );
 }

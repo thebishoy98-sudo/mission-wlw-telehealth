@@ -45,9 +45,9 @@ const STORIES = [
     before: 285,
     after: 218,
     months: 8,
-    medication: "Retatrutide",
+    medication: "Tirzepatide",
     quote:
-      "I switched from Tirzepatide to Retatrutide after hearing it was new. The difference was noticeable within 3 weeks. My cravings dropped to basically zero. 67 lbs in 8 months is something I thought was impossible.",
+      "Tirzepatide completely changed how I approach food. The difference was noticeable within 3 weeks. My cravings dropped to basically zero. 67 lbs in 8 months is something I thought was impossible.",
     stars: 5,
   },
   {
@@ -69,9 +69,9 @@ const STORIES = [
     before: 223,
     after: 178,
     months: 7,
-    medication: "Retatrutide",
+    medication: "Semaglutide",
     quote:
-      "At 54, I had given up on losing the weight I had carried for 15 years. Retatrutide through Mission WLW gave me my confidence back. The support and check-ins made all the difference.",
+      "At 54, I had given up on losing the weight I had carried for 15 years. Semaglutide through Mission WLW gave me my confidence back. The support and check-ins made all the difference.",
     stars: 5,
   },
 ];

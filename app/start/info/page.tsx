@@ -34,7 +34,6 @@ const US_STATES = [
 ];
 
 const PRODUCT_META: Record<string, { img: string; tagline: string; badge: string; highlight: boolean; priceDivisor: number; priceSuffix: string }> = {
-  product_retatrutide: { img: "/retatrutide-vial.jpg", tagline: "Triple GLP-1 Agonist", badge: "First to Market", highlight: true, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
   product_tirzepatide: { img: "/tirzepatide-vial.jpg", tagline: "Dual GLP-1 / GIP Agonist", badge: "Most Popular", highlight: false, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
   product_semaglutide: { img: "/semaglutide-vial.jpg", tagline: "GLP-1 Receptor Agonist", badge: "Available", highlight: false, priceDivisor: 2, priceSuffix: "/ 4-week treatment" },
   product_bpc_157: { img: "/bpc-157-product.png", tagline: "Peptide Support", badge: "Acute Pain", highlight: false, priceDivisor: 1, priceSuffix: "/ 2-week supply" },

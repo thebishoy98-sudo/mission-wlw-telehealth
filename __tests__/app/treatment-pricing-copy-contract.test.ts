@@ -17,13 +17,11 @@ describe("treatment pricing copy", () => {
     expect(startInfoSource).not.toContain(">/mo<");
   });
 
-  it("advertises public Retatrutide pricing as half-price 4-week treatment", () => {
-    expect(pricingCardsSource).toContain("fromTreatment: 227.5");
-    expect(pricingCardsSource).not.toContain("fromMonthly: 250");
-    expect(pricingCardsSource).not.toContain("/ month");
-    expect(paymentSource).toContain("From $227.50 per 4-week treatment.");
-    expect(faqSource).toContain("Retatrutide starts at $227.50");
-    expect(faqSource).not.toContain("$499 and above for Retatrutide");
+  it("does not advertise Retatrutide, which is no longer sold", () => {
+    expect(pricingCardsSource).not.toContain("product_retatrutide");
+    expect(pricingCardsSource).not.toContain("Retatrutide");
+    expect(paymentSource).not.toContain("Retatrutide");
+    expect(faqSource).not.toContain("Retatrutide");
   });
 
   it("shows peptide support products on the landing pricing section", () => {

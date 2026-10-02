@@ -36,7 +36,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             <FadeUp delay={0.15}>
               <p className="text-base sm:text-lg text-gray-600 mb-7 leading-relaxed">
                 Mission Weight Loss and Wellness connects you with board-certified providers who
-                prescribe personalized GLP-1 programs: Retatrutide, Tirzepatide, or Semaglutide.
+                prescribe personalized GLP-1 programs: Tirzepatide or Semaglutide.
                 Medication delivered to your door with no office visits required.
               </p>
             </FadeUp>
@@ -111,14 +111,6 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                   <div className="flex items-center gap-4">
                     <div className="shrink-0 bg-white/10 rounded-xl p-1.5 flex gap-1">
                       <Image
-                        src="/retatrutide-vial.jpg"
-                        alt="Retatrutide vial"
-                        width={28}
-                        height={58}
-                        className="object-contain drop-shadow-lg"
-                        style={{ maxHeight: "58px", width: "auto" }}
-                      />
-                      <Image
                         src="/tirzepatide-vial.jpg"
                         alt="Tirzepatide vial"
                         width={28}
@@ -136,7 +128,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                       />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">3 GLP-1 Programs</div>
+                      <div className="text-sm font-semibold">2 GLP-1 Programs</div>
                       <div className="text-[11px] text-white/55">US-Based Pharmacy</div>
                       <div className="text-[11px] text-rose-300 mt-0.5">From $149.50 / 4-week treatment</div>
                     </div>

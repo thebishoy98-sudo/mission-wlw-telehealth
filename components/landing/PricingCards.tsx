@@ -6,22 +6,6 @@ import { FadeUp } from "./FadeUp";
 
 const PRODUCTS = [
   {
-    id: "product_retatrutide",
-    label: "Retatrutide",
-    tagline: "Triple GLP-1 Agonist",
-    img: "/retatrutide-vial.jpg",
-    badge: "First to Market",
-    fromTreatment: 227.5,
-    priceSuffix: "/ 4-week treatment",
-    highlight: true,
-    bullets: [
-      "Newest triple-agonist GLP-1",
-      "Syringes & supplies included",
-      "Free overnight shipping",
-      "Provider-reviewed prescription",
-    ],
-  },
-  {
     id: "product_tirzepatide",
     label: "Tirzepatide",
     tagline: "Dual GLP-1 / GIP Agonist",
@@ -29,7 +13,7 @@ const PRODUCTS = [
     badge: "Most Popular",
     fromTreatment: 174.5,
     priceSuffix: "/ 4-week treatment",
-    highlight: false,
+    highlight: true,
     bullets: [
       "Proven weight loss results",
       "Syringes & supplies included",
@@ -130,47 +114,6 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
   return (
     <section id="pricing" className="bg-cream-100 py-16 sm:py-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Retatrutide launch banner */}
-        <FadeUp className="mb-10">
-          <div
-            className="relative rounded-2xl overflow-hidden px-5 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row sm:items-center gap-4"
-            style={{ background: "linear-gradient(135deg, #011a38 0%, #022859 60%, #01152e 100%)" }}
-          >
-            <div className="absolute top-0 right-0 w-64 h-full bg-red-400/5 blur-3xl pointer-events-none" />
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="shrink-0 bg-white/8 rounded-xl p-1.5 border border-red-400/20">
-                <Image
-                  src="/retatrutide-vial.jpg"
-                  alt="Retatrutide vial"
-                  width={36}
-                  height={56}
-                  className="object-contain"
-                  style={{ mixBlendMode: "normal" }}
-                />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] bg-red-400 text-forest-900 px-2 py-0.5 rounded-full">
-                    Now Available
-                  </span>
-                </div>
-                <p className="text-white font-bold text-sm sm:text-base">
-                  Retatrutide - Pharmacy-Grade, First to Market
-                </p>
-                <p className="text-white/45 text-xs mt-0.5 leading-relaxed">
-                  Triple-agonist GLP-1 · US-based pharmacy · Ships today
-                </p>
-              </div>
-            </div>
-            <Link
-              href={productCtaUrl(ctaUrl, "product_retatrutide")}
-              className="w-full sm:w-auto text-center shrink-0 bg-red-400 hover:bg-red-300 text-forest-900 font-bold px-5 py-2.5 rounded-full text-sm transition-all active:scale-[.98] shadow-lg shadow-red-400/15"
-            >
-              Order Now
-            </Link>
-          </div>
-        </FadeUp>
-
         <FadeUp className="text-center mb-12 sm:mb-16">
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">
             Pricing
