@@ -10,7 +10,7 @@ const NAV_LINKS = [
   { label: "FAQ", href: "#faq" },
 ];
 
-export function LandingNav({ ctaUrl }: { ctaUrl: string }) {
+export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; homeAnchors?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,7 +33,7 @@ export function LandingNav({ ctaUrl }: { ctaUrl: string }) {
           {NAV_LINKS.map((l) => (
             <a
               key={l.href}
-              href={l.href}
+              href={homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
               className="text-sm text-gray-600 hover:text-forest-800 font-medium transition-colors"
             >
               {l.label}
@@ -76,7 +76,7 @@ export function LandingNav({ ctaUrl }: { ctaUrl: string }) {
           {NAV_LINKS.map((l) => (
             <a
               key={l.href}
-              href={l.href}
+              href={homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
               onClick={() => setOpen(false)}
               className="block text-sm text-gray-700 font-medium py-3 border-b border-gray-50"
             >

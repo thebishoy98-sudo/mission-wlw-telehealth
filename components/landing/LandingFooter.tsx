@@ -23,7 +23,7 @@ const LINKS = {
   ],
 };
 
-export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
+export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string; homeAnchors?: boolean }) {
   return (
     <footer className="bg-forest-800 text-white">
       {/* CTA band */}
@@ -74,7 +74,7 @@ export function LandingFooter({ ctaUrl }: { ctaUrl: string }) {
                 {items.map((l) => (
                   <li key={l.label}>
                     <Link
-                      href={l.href}
+                      href={homeAnchors && l.href === '/start/info' ? ctaUrl : homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
                       className="text-sm text-white/65 hover:text-white transition-colors"
                     >
                       {l.label}
