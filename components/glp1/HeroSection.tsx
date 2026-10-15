@@ -11,7 +11,7 @@ export function HeroSection() {
         <p className="hero-description">{pageContent.heroDescription}</p>
         <div className="hero-actions">
           <AssessmentButton>Start my assessment</AssessmentButton>
-          <span className="secure-note"><span aria-hidden="true">✳</span> No commitment to treatment</span>
+          <span className="secure-note">No commitment to treatment</span>
         </div>
         <div className="hero-trust"><span className="trust-dot" />Personalized care begins with understanding you</div>
       </div>
@@ -24,7 +24,7 @@ export function HeroSection() {
           priority
           alt="Three adult friends smiling together outdoors"
         />
-        <div className="art-caption"><span className="caption-icon">✳</span><span><strong>Care, considered.</strong><small>Guidance for your next step</small></span></div>
+        <div className="art-caption"><span><strong>Care, considered.</strong><small>Guidance for your next step</small></span></div>
       </div>
     </section>
   );
