@@ -10,10 +10,20 @@ The existing production website runs on Render service `mission-wlw-web`, which 
 - Educational copy and sections: `components/glp1/` (copy is in `content.ts`)
 - Scoped prototype styles: `app/glp1/glp1.css`
 - Shared navigation/footer: `components/landing/`
-- Assessment links: `lib/useAssessmentUrl.ts` preserves the existing campaign/referral parameters and routes to `/start/info`.
+- Assessment links: `lib/useAssessmentUrl.ts` preserves campaign/referral parameters. The education funnel explicitly uses `/glp1/assessment`; the existing purchase workflow still starts at `/start/info`.
 - Hero image: `public/images/glp1/friends.jpeg`, sourced from the Pexels photo used in the supplied prototype (photo 7148409).
 
 For local preview run `npm run dev -- --port 3011` and open `http://localhost:3011/glp1`. Run `node scripts/check-glp1.cjs` for responsive layout, FAQ, footer, and assessment attribution checks (requires installed Google Chrome). Set `GLP1_TEST_ORIGIN` to check another host. These checks do not submit patient data.
+
+### Education-first candidate funnel
+
+`/glp1` → `/glp1/assessment` → care-team / provider review → discussion of treatment options → existing patient workflow when appropriate. The education page and assessment do not link to the shop, ask for medication selection, collect payment, or create patient orders. Submitted candidate information is stored server-side in `candidate_assessments` (created idempotently on first use); detailed clinical history remains in the existing provider evaluation workflow. A successful response requires database persistence. Retries and concurrent submissions for a pending phone number do not create duplicate inquiries or duplicate staff alerts.
+
+Staff review candidates at `/provider/candidates`, accessible to signed-in providers and admins from the **Candidates** navigation link. Staff record follow-up notes and arrange clinical evaluation before discussing treatments. Recording a note does not authorize treatment or prescribe medication. Existing purchase, prescription, payment, and fulfillment behavior is unchanged.
+
+Submission sends the `candidate_assessment_received` event through the existing Spruce admin notification service to the phone numbers configured in **Admin → Notifications** (enabled by default, including existing saved settings). The SMS contains only a generic submission alert and a protected inbox link. Actual SMS delivery requires configured recipients and working production Spruce credentials / `USE_REAL_SPRUCE=true`. Delivery issues are visible in the inbox, can be retried there, and are logged through the existing integration log.
+
+Verification: `node scripts/check-candidate-server.cjs` checks validation, persistence failures, deduplication, and notification behavior with mocks; `node scripts/check-candidate-funnel.cjs` checks the responsive form, failure/retry states, attribution, and protected inbox. The browser check intercepts submissions and never creates real candidate records or sends SMS. Jest coverage lives in `__tests__/app/api/candidate-assessment.test.ts` and `__tests__/services/candidate-assessments.test.ts`.
 
 A fully-functional, production-quality demo of a modern medical e-commerce/telehealth platform similar to Hims, Ro, and Henry Meds. Complete with patient intake flow, provider dashboards, admin management, CMS, and mocked third-party integrations.
 

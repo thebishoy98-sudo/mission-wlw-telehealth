@@ -12,9 +12,9 @@ const { chromium } = require('playwright');
       await page.getByRole('heading', { level: 1 }).waitFor();
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error(`Overflow at ${width}`);
       const buttons = page.getByRole('link', { name: /start my assessment/i });
-      if (await buttons.count() !== 2) throw Error('Missing assessment buttons');
+      if (await buttons.count() < 2) throw Error('Missing assessment buttons');
       for (const button of await buttons.all()) {
-        if (await button.getAttribute('href') !== '/start/info?utm_source=qa&ref=partner&aff=affiliate') throw Error('Missing attribution');
+        if (await button.getAttribute('href') !== '/glp1/assessment?utm_source=qa&ref=partner&aff=affiliate') throw Error('Missing attribution');
       }
       if (await page.locator('footer').count() !== 1) throw Error('Duplicate footer');
       const faq = page.getByRole('button', { name: 'How do I know if I may qualify?' });

@@ -23,7 +23,12 @@ const LINKS = {
   ],
 };
 
-export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string; homeAnchors?: boolean }) {
+export function LandingFooter({ ctaUrl, homeAnchors = false, education = false }: { ctaUrl: string; homeAnchors?: boolean; education?: boolean }) {
+  const links = education ? {
+    Education: [{ label: 'About GLP-1', href: '/glp1#about-glp1' }, { label: 'How It Works', href: '/glp1#how-it-works' }, { label: 'FAQ', href: '/glp1#faq' }],
+    Legal: LINKS.Legal,
+    Contact: [{ label: 'Start My Assessment', href: ctaUrl }, { label: 'Patient Login', href: '/login/patient' }],
+  } : LINKS;
   return (
     <footer className="bg-forest-800 text-white">
       {/* CTA band */}
@@ -31,7 +36,7 @@ export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string;
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div>
             <h3 className="text-xl sm:text-2xl font-bold mb-1">Ready to start your journey?</h3>
-            <p className="text-sm text-white/60">Free consultation included this month.</p>
+            <p className="text-sm text-white/60">{education ? 'Start with education and a provider review.' : 'Free consultation included this month.'}</p>
           </div>
           <Link
             href={ctaUrl}
@@ -55,8 +60,7 @@ export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string;
               className="w-10 h-10 object-contain rounded-lg mb-4"
             />
             <p className="text-sm text-white/55 leading-relaxed mb-4">
-              Board-certified providers. FDA-regulated compounded Tirzepatide.
-              Delivered to your door.
+              {education ? 'Education and personalized, medically supervised weight care. Treatment options are discussed after provider review.' : 'Board-certified providers. FDA-regulated compounded Tirzepatide. Delivered to your door.'}
             </p>
             <a
               href="mailto:service@missionwlw.com"
@@ -67,7 +71,7 @@ export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string;
           </div>
 
           {/* Links */}
-          {Object.entries(LINKS).map(([group, items]) => (
+          {Object.entries(links).map(([group, items]) => (
             <div key={group}>
               <h4 className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">{group}</h4>
               <ul className="space-y-2.5">
@@ -88,11 +92,11 @@ export function LandingFooter({ ctaUrl, homeAnchors = false }: { ctaUrl: string;
 
         <div className="border-t border-white/10 mt-12 pt-8 space-y-3">
           <p className="text-[11px] text-white/35 leading-relaxed">
-            <strong className="text-white/50">Important Safety Information:</strong> Tirzepatide is
+            {education ? 'Educational information does not replace medical advice. Completing an assessment does not establish eligibility, guarantee a prescription, or commit you to treatment. A licensed provider must evaluate whether treatment is appropriate.' : <><strong className="text-white/50">Important Safety Information:</strong> Tirzepatide is
             a prescription medication requiring a medical evaluation. Results vary. Compounded
             Tirzepatide is prepared by a US-based pharmacy and is not an FDA-approved drug
             product. Mission Weight Loss and Wellness is a telehealth platform connecting patients
-            with independent licensed providers.
+            with independent licensed providers.</>}
           </p>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-[11px] text-white/30">

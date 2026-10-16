@@ -11,10 +11,10 @@ import { SupervisionSection } from '@/components/glp1/SupervisionSection';
 import { useAssessmentUrl } from '@/lib/useAssessmentUrl';
 
 export function Glp1Page() {
-  const ctaUrl = useAssessmentUrl();
+  const ctaUrl = useAssessmentUrl('/glp1/assessment');
   return (
     <div className="min-h-screen bg-cream-100">
-      <LandingNav ctaUrl={ctaUrl} homeAnchors />
+      <LandingNav ctaUrl={ctaUrl} education />
       <div className="glp1-content">
         <HeroSection />
         <EducationSection />
@@ -24,7 +24,7 @@ export function Glp1Page() {
         <FinalCtaSection />
         <p className="section-wrap pb-10 text-sm text-gray-600">Information on this page is educational and is not a substitute for medical advice, diagnosis, or treatment. Results and experiences vary. Treatment decisions are made with a licensed provider.</p>
       </div>
-      <LandingFooter ctaUrl={ctaUrl} homeAnchors />
+      <LandingFooter ctaUrl={ctaUrl} education />
     </div>
   );
 }

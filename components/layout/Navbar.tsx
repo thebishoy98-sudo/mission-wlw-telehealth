@@ -34,9 +34,11 @@ export function Navbar({ variant = "customer" }: NavbarProps) {
       { label: "Products", href: "/products" },
     ],
     provider: [
+      { label: "Candidates", href: "/provider/candidates" },
       { label: "Dashboard", href: "/provider" },
     ],
     admin: [
+      { label: "Candidates", href: "/provider/candidates" },
       { label: "Dashboard", href: "/admin" },
       { label: "Analytics", href: "/admin/analytics" },
       { label: "Orders", href: "/admin/orders" },

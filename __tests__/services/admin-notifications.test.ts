@@ -32,6 +32,7 @@ describe("admin notifications", () => {
     ).toEqual({
       phones: ["+15551112222", "+15553334444"],
       events: {
+        candidate_assessment_received: true,
         identity_review_needed: true,
         order_received: true,
         pharmacy_shipped: true,

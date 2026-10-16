@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import type { AdminNotificationEvent, AdminNotificationSettings } from "@/types";
 
 const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
+  candidate_assessment_received: 'Candidate assessment submitted - provider review needed',
   prior_prescription_review_needed: "Previous prescription uploaded - review needed",
   pharmacy_submitted: "Order sent to pharmacy",
   identity_review_needed: "Identity review is needed",
@@ -22,6 +23,7 @@ const EVENT_LABELS: Record<AdminNotificationEvent, string> = {
 const defaultSettings: AdminNotificationSettings = {
   phones: [],
   events: {
+    candidate_assessment_received: true,
     prior_prescription_review_needed: true,
     pharmacy_submitted: true,
     identity_review_needed: true,

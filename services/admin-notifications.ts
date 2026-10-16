@@ -6,6 +6,7 @@ import type { AdminNotificationEvent, AdminNotificationSettings } from "@/types"
 const SETTINGS_KEY = "admin_notification_settings";
 
 const DEFAULT_EVENTS: Record<AdminNotificationEvent, boolean> = {
+  candidate_assessment_received: true,
   prior_prescription_review_needed: true,
   pharmacy_submitted: true,
   identity_review_needed: true,
@@ -60,6 +61,9 @@ export async function saveAdminNotificationSettings(input: unknown): Promise<Adm
 }
 
 function renderAdminMessage(event: AdminNotificationEvent, data: Record<string, string | undefined>) {
+  if (event === 'candidate_assessment_received') {
+    return 'Mission WLW: A new candidate assessment was submitted. Sign in to review: https://missionwlw.com/provider/candidates';
+  }
   const order = data.orderId ? `Order ${data.orderId}` : "An order";
   const patient = data.patientName ? ` for ${data.patientName}` : "";
   if (event === "prior_prescription_review_needed") {

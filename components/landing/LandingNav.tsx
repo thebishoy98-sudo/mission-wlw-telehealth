@@ -10,14 +10,19 @@ const NAV_LINKS = [
   { label: "FAQ", href: "#faq" },
 ];
 
-export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; homeAnchors?: boolean }) {
+export function LandingNav({ ctaUrl, homeAnchors = false, education = false }: { ctaUrl: string; homeAnchors?: boolean; education?: boolean }) {
   const [open, setOpen] = useState(false);
+  const links = education ? [
+    { label: 'GLP-1 Education', href: '/glp1#about-glp1' },
+    { label: 'How It Works', href: '/glp1#how-it-works' },
+    { label: 'FAQ', href: '/glp1#faq' },
+  ] : NAV_LINKS;
 
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14 sm:h-16">
         {/* Logo */}
-        <Link href="/" className="flex items-center shrink-0">
+        <Link href={education ? '/glp1' : '/'} className="flex items-center shrink-0">
           <Image
             src="/mission-logo-full.jpeg"
             alt="Mission Weight Loss & Wellness"
@@ -30,7 +35,7 @@ export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; ho
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-7">
-          {NAV_LINKS.map((l) => (
+          {links.map((l) => (
             <a
               key={l.href}
               href={homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
@@ -47,7 +52,7 @@ export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; ho
             href={ctaUrl}
             className="bg-forest-800 hover:bg-forest-700 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition-colors"
           >
-            Get Started
+            {education ? 'Start My Assessment' : 'Get Started'}
           </Link>
         </div>
 
@@ -73,7 +78,7 @@ export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; ho
       {/* Mobile menu */}
       {open && (
         <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-1">
-          {NAV_LINKS.map((l) => (
+          {links.map((l) => (
             <a
               key={l.href}
               href={homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
@@ -87,7 +92,7 @@ export function LandingNav({ ctaUrl, homeAnchors = false }: { ctaUrl: string; ho
             href={ctaUrl}
             className="block text-center bg-forest-800 text-white text-sm font-bold px-4 py-3.5 rounded-full mt-3"
           >
-            Get Started Free
+            {education ? 'Start My Assessment' : 'Get Started Free'}
           </Link>
         </div>
       )}

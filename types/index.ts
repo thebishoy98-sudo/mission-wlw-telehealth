@@ -501,6 +501,7 @@ export interface DiscountCode {
 }
 
 export type AdminNotificationEvent =
+  | "candidate_assessment_received"
   | "prior_prescription_review_needed"
   | "pharmacy_submitted"
   | "identity_review_needed"
