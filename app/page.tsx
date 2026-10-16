@@ -39,7 +39,8 @@ function useCta(base = "/start/info") {
 }
 
 function LandingPage() {
-  const ctaUrl = useCta();
+  const ctaUrl = useCta('/glp1/assessment');
+  const purchaseUrl = useCta();
   return (
     <div className="min-h-screen bg-cream-100">
       <PromoBar ctaUrl={ctaUrl} />
@@ -52,7 +53,7 @@ function LandingPage() {
         <LifestyleSection ctaUrl={ctaUrl} />
         <Timeline />
         <Testimonials />
-        <PricingCards ctaUrl={ctaUrl} />
+        <PricingCards ctaUrl={purchaseUrl} />
         <PeptideShopTeaser />
         <LandingFaq />
         <LandingFooter ctaUrl={ctaUrl} />

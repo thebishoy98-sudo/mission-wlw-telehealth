@@ -78,7 +78,7 @@ export function LandingFooter({ ctaUrl, homeAnchors = false, education = false }
                 {items.map((l) => (
                   <li key={l.label}>
                     <Link
-                      href={homeAnchors && l.href === '/start/info' ? ctaUrl : homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
+                      href={l.href === '/start/info' ? ctaUrl : homeAnchors && l.href.startsWith('#') ? `/${l.href}` : l.href}
                       className="text-sm text-white/65 hover:text-white transition-colors"
                     >
                       {l.label}
