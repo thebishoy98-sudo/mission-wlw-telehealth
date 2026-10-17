@@ -47,13 +47,13 @@ function LandingPage() {
       <LandingNav ctaUrl={ctaUrl} />
       <main>
         <Hero ctaUrl={ctaUrl} />
+        <PricingCards ctaUrl={purchaseUrl} />
         <TrustMarquee />
         <HowItWorks ctaUrl={ctaUrl} />
         <WeightLossCalculator ctaUrl={ctaUrl} />
         <LifestyleSection ctaUrl={ctaUrl} />
         <Timeline />
         <Testimonials />
-        <PricingCards ctaUrl={purchaseUrl} />
         <PeptideShopTeaser />
         <LandingFaq />
         <LandingFooter ctaUrl={ctaUrl} />

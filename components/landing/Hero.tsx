@@ -42,7 +42,7 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
             </FadeUp>
 
             <FadeUp delay={0.22}>
-              <div className="flex flex-col sm:flex-row gap-3 mb-7">
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <Link
                   href={ctaUrl}
                   className="bg-forest-800 hover:bg-forest-700 active:scale-[.98] text-white font-bold px-7 py-4 rounded-full text-center transition-all shadow-lg shadow-forest-800/20 text-sm sm:text-base"
@@ -50,12 +50,15 @@ export function Hero({ ctaUrl }: { ctaUrl: string }) {
                   Start Your Free Assessment
                 </Link>
                 <Link
-                  href="/login/patient"
+                  href="#pricing"
                   className="border-2 border-forest-800 text-forest-800 font-semibold px-7 py-4 rounded-full text-center hover:bg-forest-800/5 transition-colors text-sm sm:text-base"
                 >
-                  Returning Patient
+                  View Programs &amp; Pricing
                 </Link>
               </div>
+              <Link href="/login/patient" className="inline-block text-sm font-semibold text-forest-800 underline underline-offset-4 mb-7">
+                Returning Patient
+              </Link>
             </FadeUp>
 
             <FadeUp delay={0.28}>

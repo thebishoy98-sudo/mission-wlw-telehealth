@@ -112,7 +112,7 @@ export function PricingCards({ ctaUrl }: { ctaUrl: string }) {
   }, []);
 
   return (
-    <section id="pricing" className="bg-cream-100 py-16 sm:py-24">
+    <section id="pricing" className="scroll-mt-20 bg-cream-100 py-16 sm:py-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <FadeUp className="text-center mb-12 sm:mb-16">
           <span className="text-[11px] font-bold uppercase tracking-widest text-forest-700 mb-3 block">

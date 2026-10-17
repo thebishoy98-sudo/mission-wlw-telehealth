@@ -102,7 +102,7 @@ export function LoginForm({ role }: { role: UserRole }) {
 
         <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-5 py-5 sm:px-7">
-            <div className="mb-4 flex items-center gap-2.5">
+            <Link href="/" aria-label="Mission Weight Loss & Wellness home" className="mb-4 flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-gray-100">
                 <Image
                   src="/mission-logo-icon.jpeg"
@@ -113,7 +113,7 @@ export function LoginForm({ role }: { role: UserRole }) {
                 />
               </div>
               <span className="text-base font-bold tracking-tight text-gray-900">Mission WLW</span>
-            </div>
+            </Link>
             <p className="text-xs font-semibold uppercase tracking-wide text-forest-800">{config.eyebrow}</p>
             <h1 className="mt-1 text-2xl font-bold text-gray-900">{config.title}</h1>
             <p className="mt-2 text-sm leading-6 text-gray-600">{config.description}</p>
